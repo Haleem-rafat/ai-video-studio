@@ -4,10 +4,13 @@
   "private": true,
   "description": "Local YouTube video maker: Bonsai 27B writes, macOS voice narrates, HyperFrames renders.",
   "type": "module",
-  "engines": { "node": ">=23.6" },
+  "engines": {
+    "node": ">=23.6"
+  },
   "scripts": {
     "llm": "bash bin/start-llm.sh",
-    "video": "node src/make-video.ts",
+    "video": "node src/cli/video.ts",
+    "topics": "node src/cli/topics.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
