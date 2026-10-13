@@ -25,7 +25,9 @@ export type Scene = {
   visual: Visual;
   /** What the AI background picture shows; empty means no picture. */
   imagePrompt: string;
-  image?: { path: string; prompt: string };
+  /** Bumped by "redraw" to get a different picture for the same prompt. */
+  imageSeed?: number;
+  image?: { path: string; prompt: string; seed?: number };
   audio?: { path: string; text: string; voiceId: string; seconds: number; words: Word[] };
 };
 

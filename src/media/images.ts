@@ -10,7 +10,17 @@ import { inBatches } from "./voice.ts";
 const MODEL_URL = "https://fal.run/fal-ai/flux/schnell";
 
 export function imageIsCurrent(projectDir: string, scene: Scene): boolean {
-  return !scene.imagePrompt || Boolean(scene.image && scene.image.prompt === scene.imagePrompt && existsSync(join(projectDir, scene.image.path)));
+  return (
+    !scene.imagePrompt ||
+    Boolean(scene.image && scene.image.prompt === scene.imagePrompt && (scene.image.seed ?? 0) === (scene.imageSeed ?? 0) && existsSync(join(projectDir, scene.image.path)))
+  );
+}
+
+/** Stable per scene id, so an unchanged prompt redraws the same picture. */
+function seedFor(scene: Scene): number {
+  let hash = 0;
+  for (const char of scene.id) hash = (hash * 31 + char.charCodeAt(0)) % 1_000_000;
+  return hash + (scene.imageSeed ?? 0) * 7919;
 }
 
 export async function drawScene(projectDir: string, scene: Scene, channel: Channel, format: FormatId): Promise<void> {
@@ -23,8 +33,7 @@ export async function drawScene(projectDir: string, scene: Scene, channel: Chann
       image_size: size,
       num_inference_steps: 4,
       num_images: 1,
-      // Fixed per scene so redrawing an unchanged prompt gives the same picture.
-      seed: Number.parseInt(scene.id.replace(/\D/g, ""), 10) + 1000,
+      seed: seedFor(scene),
       enable_safety_checker: true,
     }),
   });
@@ -36,12 +45,13 @@ export async function drawScene(projectDir: string, scene: Scene, channel: Chann
   if (!url) throw new Error(`fal returned no picture for ${scene.id}`);
 
   const picture = await fetch(url);
-  const path = `images/${scene.id}.jpg`;
+  // The seed is in the name so the studio never shows a cached old picture.
+  const path = `images/${scene.id}-${scene.imageSeed ?? 0}.jpg`;
 
   await mkdir(join(projectDir, "images"), { recursive: true });
   await writeFile(join(projectDir, path), Buffer.from(await picture.arrayBuffer()));
 
-  scene.image = { path, prompt: scene.imagePrompt };
+  scene.image = { path, prompt: scene.imagePrompt, seed: scene.imageSeed ?? 0 };
 }
 
 /** Draws every scene whose picture prompt changed; returns how many were drawn. */

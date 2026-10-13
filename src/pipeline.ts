@@ -9,7 +9,7 @@ import { drawProject } from "./media/images.ts";
 import { audioSeconds, voiceProject } from "./media/voice.ts";
 import { loadProject, newProjectId, projectDir, saveProject } from "./project.ts";
 import { buildComposition } from "./render/composition.ts";
-import { toScenes, writeScript } from "./script/write.ts";
+import { reviewScenes, toScenes, writeScript } from "./script/write.ts";
 import type { FormatId, Project } from "./types.ts";
 
 const run = promisify(execFile);
@@ -86,6 +86,26 @@ export async function render(id: string, quality: "draft" | "standard" | "high" 
   project.render = { path: "video.mp4", seconds, renderedAt: new Date().toISOString() };
   await saveProject(project);
   log(`render: ${seconds.toFixed(1)}s video in ${Math.round((Date.now() - started) / 1000)}s`);
+  return project;
+}
+
+/** Bonsai re-checks every claim; changed scenes keep their id so only they get re-voiced. */
+export async function factCheck(id: string, log: Log = console.log): Promise<Project> {
+  const project = await loadProject(id);
+  const channel = loadChannel(project.channel);
+  const drafts = project.scenes.map(({ narration, imagePrompt, visual }) => ({ narration, imagePrompt, visual }));
+  const reviewed = await reviewScenes(channel, project.topic, drafts, "fact-check");
+  let changed = 0;
+
+  project.scenes.forEach((scene, index) => {
+    const next = reviewed[index];
+    if (JSON.stringify([scene.narration, scene.visual, scene.imagePrompt]) === JSON.stringify([next.narration, next.visual, next.imagePrompt])) return;
+    Object.assign(scene, { narration: next.narration.trim(), visual: next.visual, imagePrompt: next.imagePrompt?.trim() ?? scene.imagePrompt });
+    changed++;
+  });
+
+  await saveProject(project);
+  log(`fact-check: ${changed} scene(s) changed`);
   return project;
 }
 

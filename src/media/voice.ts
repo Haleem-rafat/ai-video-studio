@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -72,7 +73,9 @@ export async function voiceScene(projectDir: string, scene: Scene, voiceId: stri
   if (!response.ok) throw new Error(`ElevenLabs ${response.status} on ${scene.id}: ${(await response.text()).slice(0, 300)}`);
 
   const data = (await response.json()) as { audio_base64: string; alignment: Alignment };
-  const path = `audio/${scene.id}.mp3`;
+  // Named by content so the studio never plays a cached old take.
+  const take = createHash("sha1").update(`${voiceId}:${scene.narration}`).digest("hex").slice(0, 8);
+  const path = `audio/${scene.id}-${take}.mp3`;
 
   await mkdir(join(projectDir, "audio"), { recursive: true });
   await writeFile(join(projectDir, path), Buffer.from(data.audio_base64, "base64"));
