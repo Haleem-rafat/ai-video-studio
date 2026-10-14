@@ -30,6 +30,8 @@ export type Channel = {
   mascot: { kind: MascotKind; name: string };
   colors: { background: string; panel: string; text: string; accent: string; muted: string };
   font: string;
+  /** Marks uploads "made for kids" (COPPA): no comments, no personalised ads. */
+  madeForKids?: boolean;
 };
 
 export type Format = {

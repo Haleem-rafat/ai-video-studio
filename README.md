@@ -27,7 +27,24 @@ npm run llm                                              # start Bonsai on :8080
 npm run topics -- --channel money-mechanics --focus "money history"
 npm run video -- --channel dev-pixel --format short --topic "Why switching jobs pays more"
 npm run video -- --project <id>                          # rebuild after editing output/<id>/project.json
+npm run upload -- <id> [<id> ...]                        # upload video.mp4 to YouTube as private
+npm run upload -- <id> --privacy unlisted                # or unlisted / public
 ```
+
+## YouTube uploads
+
+One-time setup:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable **YouTube Data API v3**.
+2. Under *Google Auth Platform*: set up the consent screen (External), and add your Google account as a test user.
+3. Create an OAuth client of type **Desktop app**, download its JSON and save it as `config/youtube/client_secret.json`.
+
+The first upload for each studio channel opens the browser: pick the account/brand channel that channel belongs to.
+The sign-in is saved in `config/youtube/<channel>.token.json` (git-ignored). Run `npm run upload -- --sign-in <channel>`
+to switch accounts. Uploads are recorded in `project.json`, so the same video is not uploaded twice (`--force` overrides).
+
+Limits: each upload costs 1,600 of the API's 10,000 daily units (about 6 uploads a day). While the OAuth app is in
+*Testing*, the sign-in expires every 7 days, and an unverified app's uploads stay private until Google audits it.
 
 ## Layout
 

@@ -54,4 +54,5 @@ export type Project = {
   createdAt: string;
   updatedAt: string;
   render?: { path: string; seconds: number; renderedAt: string };
+  youtube?: { videoId: string; url: string; privacy: "private" | "unlisted" | "public"; youtubeChannel: string; uploadedAt: string };
 };

@@ -27,6 +27,7 @@
     "imageStyle": "cute children's picture book illustration, bright cheerful colours, soft rounded shapes, friendly, no text, no letters",
     "mascot": { "kind": "bear", "name": "Kido" },
     "colors": { "background": "#fff4d6", "panel": "#ffffff", "text": "#2b2d42", "accent": "#ff6b6b", "muted": "#6c757d" },
-    "font": "'Chalkboard SE', 'Comic Sans MS', sans-serif"
+    "font": "'Chalkboard SE', 'Comic Sans MS', sans-serif",
+    "madeForKids": true
   }
 }

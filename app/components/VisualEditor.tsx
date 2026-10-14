@@ -1,4 +1,8 @@
 import type { Scene } from "../api.ts";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Field } from "./shared.tsx";
 
 type Visual = Scene["visual"];
 
@@ -40,36 +44,39 @@ const lines = (value: string) => value.split("\n").map((line) => line.trimEnd())
 
 export function VisualEditor({ visual, onChange }: { visual: Visual; onChange: (visual: Visual) => void }) {
   const field = (label: string, value: string | number, set: (value: string) => void, wide = false) => (
-    <label className={`field ${wide ? "wide" : ""}`}>
-      <span>{label}</span>
-      <input value={value} onChange={(event) => set(event.target.value)} />
-    </label>
+    <Field label={label} className={wide ? "col-span-2" : undefined}>
+      <Input value={value} onChange={(event) => set(event.target.value)} />
+    </Field>
   );
 
   return (
-    <div className="visual-editor">
-      <label className="field">
-        <span>On screen</span>
-        <select value={visual.type} onChange={(event) => onChange(convert(visual, event.target.value as Visual["type"]))}>
-          {Object.entries(LABELS).map(([type, label]) => (
-            <option key={type} value={type}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
+    <div className="grid grid-cols-2 gap-3 rounded-lg border border-dashed p-3" onClick={(event) => event.stopPropagation()}>
+      <Field label="On screen" className="col-span-2">
+        <Select value={visual.type} onValueChange={(type) => onChange(convert(visual, type as Visual["type"]))}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(LABELS).map(([type, label]) => (
+              <SelectItem key={type} value={type}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
 
       {visual.type === "title" && field("Headline", visual.headline, (headline) => onChange({ ...visual, headline }), true)}
       {visual.type === "chapter" && (
         <>
-          {field("Chapter #", visual.number, (number) => onChange({ ...visual, number: Number(number) || 1 }))}
-          {field("Headline", visual.headline, (headline) => onChange({ ...visual, headline }), true)}
+          {field("Chapter number", visual.number, (number) => onChange({ ...visual, number: Number(number) || 1 }))}
+          {field("Headline", visual.headline, (headline) => onChange({ ...visual, headline }))}
         </>
       )}
       {visual.type === "stat" && (
         <>
           {field("Number", visual.value, (value) => onChange({ ...visual, value }))}
-          {field("Label", visual.label, (label) => onChange({ ...visual, label }), true)}
+          {field("Label", visual.label, (label) => onChange({ ...visual, label }))}
         </>
       )}
       {visual.type === "compare" && (
@@ -83,26 +90,24 @@ export function VisualEditor({ visual, onChange }: { visual: Visual; onChange: (
       {visual.type === "quote" && (
         <>
           {field("Quote", visual.text, (text) => onChange({ ...visual, text }), true)}
-          {field("Author", visual.author ?? "", (author) => onChange({ ...visual, author }))}
+          {field("Who said it", visual.author ?? "", (author) => onChange({ ...visual, author }), true)}
         </>
       )}
       {(visual.type === "list" || visual.type === "code" || visual.type === "chart") && field("Headline", visual.headline, (headline) => onChange({ ...visual, headline }), true)}
       {visual.type === "list" && (
-        <label className="field wide">
-          <span>Items (one per line)</span>
-          <textarea rows={3} value={visual.items.join("\n")} onChange={(event) => onChange({ ...visual, items: lines(event.target.value) })} />
-        </label>
+        <Field label="Items" detail="one per line" className="col-span-2">
+          <Textarea rows={3} value={visual.items.join("\n")} onChange={(event) => onChange({ ...visual, items: lines(event.target.value) })} />
+        </Field>
       )}
       {visual.type === "code" && (
-        <label className="field wide">
-          <span>Code</span>
-          <textarea className="mono" rows={4} value={visual.lines.join("\n")} onChange={(event) => onChange({ ...visual, lines: event.target.value.split("\n") })} />
-        </label>
+        <Field label="Code" className="col-span-2">
+          <Textarea className="font-mono text-xs" rows={4} value={visual.lines.join("\n")} onChange={(event) => onChange({ ...visual, lines: event.target.value.split("\n") })} />
+        </Field>
       )}
       {visual.type === "chart" && (
-        <label className="field wide">
-          <span>Bars (label: number, one per line)</span>
-          <textarea
+        <Field label="Bars" detail="label: number, one per line" className="col-span-2">
+          <Textarea
+            className="font-mono text-xs"
             rows={3}
             value={visual.bars.map((bar) => `${bar.label}: ${bar.value}`).join("\n")}
             onChange={(event) =>
@@ -115,7 +120,7 @@ export function VisualEditor({ visual, onChange }: { visual: Visual; onChange: (
               })
             }
           />
-        </label>
+        </Field>
       )}
     </div>
   );

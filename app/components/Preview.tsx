@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
+import { MonitorPlayIcon, PauseIcon, PlayIcon } from "lucide-react";
+
 import { formatTime, type FormatId } from "../api.ts";
+import { Button } from "@/components/ui/button";
 
 type Props = {
   projectId: string;
@@ -67,27 +70,35 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
   }, [playing]);
 
   if (!available) {
-    return <div className="preview-empty">Click “Update preview” to voice the scenes, draw the pictures and build the preview.</div>;
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
+        <MonitorPlayIcon className="size-5" />
+        Update the preview to voice the scenes, draw the pictures and play the video here.
+      </div>
+    );
   }
 
   return (
-    <div className="preview">
-      <div className="preview-stage" ref={box}>
-        <div className="preview-scaler" style={{ width: width * scale, height: height * scale }}>
+    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg bg-neutral-950" ref={box}>
+        <div className="overflow-hidden" style={{ width: width * scale, height: height * scale }}>
           <iframe
             ref={frame}
             key={nonce}
             title="preview"
             src={`/files/${projectId}/index.html?preview&v=${nonce}`}
+            className="origin-top-left border-0"
             style={{ width, height, transform: `scale(${scale})` }}
           />
         </div>
       </div>
-      <div className="preview-controls">
-        <button className="play" onClick={() => send({ type: playing ? "pause" : "play" })}>
-          {playing ? "❚❚" : "▶"}
-        </button>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="icon-sm" onClick={() => send({ type: playing ? "pause" : "play" })} aria-label={playing ? "Pause" : "Play"}>
+          {playing ? <PauseIcon /> : <PlayIcon />}
+        </Button>
         <input
+          className="scrubber h-1 flex-1 cursor-pointer"
+          aria-label="Seek"
           type="range"
           min={0}
           max={duration || 1}
@@ -95,7 +106,7 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
           value={time}
           onChange={(event) => send({ type: "seek", time: Number(event.target.value) })}
         />
-        <span className="time">
+        <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
           {formatTime(time)} / {formatTime(duration)}
         </span>
       </div>

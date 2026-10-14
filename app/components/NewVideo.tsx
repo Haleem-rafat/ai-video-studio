@@ -1,10 +1,35 @@
-import { useEffect, useState } from "react";
+import { CheckIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { api, type Channel, type FormatId, type Job, type StyleId, type TopicIdea } from "../api.ts";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { ChannelSwatch, Field } from "./shared.tsx";
 
 type Props = { channels: Channel[]; llmReady: boolean; jobs: Job[] };
 
-const MASCOT: Record<string, string> = { robot: "🤖", coin: "🪙", bear: "🧸" };
+/** A selectable card in a group; behaves as a radio button. */
+function Choice({ active, onClick, children, className }: { active: boolean; onClick: () => void; children: ReactNode; className?: string }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={cn(
+        "relative flex flex-col items-start gap-1 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50",
+        active && "border-foreground/80 bg-muted/40 ring-1 ring-foreground/80",
+        className,
+      )}
+    >
+      {active && <CheckIcon className="absolute top-2.5 right-2.5 size-3.5" />}
+      {children}
+    </button>
+  );
+}
 
 export function NewVideo({ channels, llmReady, jobs }: Props) {
   const [channel, setChannel] = useState("");
@@ -27,6 +52,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
   }, [job?.status, job?.result, job?.error]);
 
   const writing = jobs.find((candidate) => candidate.label.startsWith("Write script") && (candidate.status === "running" || candidate.status === "queued"));
+  const thinking = job?.status === "running" || job?.status === "queued";
 
   const run = async (action: () => Promise<Job>) => {
     setError("");
@@ -38,91 +64,135 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
   };
 
   return (
-    <div className="new-video-page">
-      <h1>New video</h1>
-      <p className="lead">Bonsai writes and fact-checks the script, ElevenLabs narrates it, FLUX draws the backgrounds, and HyperFrames renders it.</p>
-
-      <section className="card">
-        <h2>1. Channel</h2>
-        <div className="channel-grid">
-          {channels.map((option) => (
-            <button
-              key={option.id}
-              className={`channel-card ${channel === option.id ? "active" : ""}`}
-              style={{ borderColor: channel === option.id ? option.colors.accent : undefined }}
-              onClick={() => setChannel(option.id)}
-            >
-              <span className="channel-mascot">{MASCOT[option.mascot.kind]}</span>
-              <span className="channel-name" style={{ color: option.colors.accent }}>
-                {option.name}
-              </span>
-              <span className="channel-audience">{option.audience}</span>
-            </button>
-          ))}
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto grid max-w-3xl gap-6 px-6 py-8">
+        <div className="grid gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">New video</h1>
+          <p className="text-sm text-muted-foreground">Bonsai writes and fact-checks the script, ElevenLabs narrates it, FLUX draws the pictures and HyperFrames renders it.</p>
         </div>
 
-        <h2>2. Format</h2>
-        <div className="segmented">
-          <button className={format === "short" ? "active" : ""} onClick={() => setFormat("short")}>
-            📱 Short · 9:16 · ~70s
-          </button>
-          <button className={format === "long" ? "active" : ""} onClick={() => setFormat("long")}>
-            🖥 Long · 16:9 · ~8 min
-          </button>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Channel</CardTitle>
+            <CardDescription>Sets the audience, tone, voice and picture style.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div role="radiogroup" aria-label="Channel" className="grid gap-2 sm:grid-cols-3">
+              {channels.map((option) => (
+                <Choice key={option.id} active={channel === option.id} onClick={() => setChannel(option.id)}>
+                  <span className="flex items-center gap-2 pr-5 text-sm font-medium">
+                    <ChannelSwatch color={option.colors.accent} />
+                    {option.name}
+                  </span>
+                  <span className="line-clamp-2 text-xs text-muted-foreground">{option.audience}</span>
+                </Choice>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-        <h2>Look</h2>
-        <div className="segmented">
-          <button className={style === "motion" ? "active" : ""} onClick={() => setStyle("motion")}>
-            🎨 Motion graphics
-          </button>
-          <button className={style === "whiteboard" ? "active" : ""} onClick={() => setStyle("whiteboard")}>
-            ✏️ Whiteboard
-          </button>
-        </div>
-        {style === "whiteboard" && <p className="hint">A hand draws each picture and writes the key words on paper. Pictures use FLUX dev, about $0.025 each.</p>}
-      </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Format and look</CardTitle>
+            <CardDescription>The look can be changed later on the project screen.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div role="radiogroup" aria-label="Format" className="grid gap-2 sm:grid-cols-2">
+              <Choice active={format === "short"} onClick={() => setFormat("short")}>
+                <SmartphoneIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Short</span>
+                <span className="text-xs text-muted-foreground">9:16 · about 70 seconds</span>
+              </Choice>
+              <Choice active={format === "long"} onClick={() => setFormat("long")}>
+                <MonitorIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Long</span>
+                <span className="text-xs text-muted-foreground">16:9 · about 8 minutes</span>
+              </Choice>
+            </div>
+            <div role="radiogroup" aria-label="Look" className="grid gap-2 sm:grid-cols-2">
+              <Choice active={style === "motion"} onClick={() => setStyle("motion")}>
+                <LayersIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Motion graphics</span>
+                <span className="text-xs text-muted-foreground">Full-frame pictures, animated numbers and captions.</span>
+              </Choice>
+              <Choice active={style === "whiteboard"} onClick={() => setStyle("whiteboard")}>
+                <PenLineIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Whiteboard</span>
+                <span className="text-xs text-muted-foreground">A hand draws each picture and writes the key words. About $0.025 a picture.</span>
+              </Choice>
+            </div>
+          </CardContent>
+        </Card>
 
-      <section className="card">
-        <h2>3. Topic</h2>
-        <div className="row">
-          <input className="grow" placeholder="Optional focus for ideas, e.g. surprising money history" value={focus} onChange={(event) => setFocus(event.target.value)} />
-          <button
-            disabled={!llmReady || job?.status === "running" || job?.status === "queued"}
-            onClick={async () => {
-              setIdeas([]);
-              const started = await run(() => api.topics(channel, format, focus));
-              if (started) setIdeasJob(started.id);
-            }}
-          >
-            {job?.status === "running" || job?.status === "queued" ? "Thinking…" : "💡 Get topic ideas"}
-          </button>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Topic</CardTitle>
+            <CardDescription>Type one, or ask Bonsai for ideas this channel's audience is likely to click.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="flex gap-2">
+              <Input placeholder="Optional focus, e.g. surprising money history" value={focus} onChange={(event) => setFocus(event.target.value)} />
+              <Button
+                variant="outline"
+                disabled={!llmReady || thinking}
+                onClick={async () => {
+                  setIdeas([]);
+                  const started = await run(() => api.topics(channel, format, focus));
+                  if (started) setIdeasJob(started.id);
+                }}
+              >
+                {thinking ? <Loader2Icon className="animate-spin" /> : <LightbulbIcon />}
+                {thinking ? "Thinking…" : "Suggest topics"}
+              </Button>
+            </div>
 
-        {ideas.length > 0 && (
-          <ul className="ideas">
-            {ideas.map((idea) => (
-              <li key={idea.title}>
-                <button className={topic === idea.topic ? "active" : ""} onClick={() => setTopic(idea.topic)}>
-                  <strong>{idea.title}</strong>
-                  <span>{idea.why}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+            {ideas.length > 0 && (
+              <div role="radiogroup" aria-label="Topic ideas" className="divide-y overflow-hidden rounded-lg border">
+                {ideas.map((idea) => {
+                  const active = topic === idea.topic;
+                  return (
+                    <button
+                      key={idea.title}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setTopic(idea.topic)}
+                      className={cn("flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60", active && "bg-muted")}
+                    >
+                      <span className={cn("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border", active && "border-foreground bg-foreground text-background")}>
+                        {active && <CheckIcon className="size-3" />}
+                      </span>
+                      <span className="grid gap-0.5">
+                        <span className="text-sm font-medium">{idea.title}</span>
+                        <span className="text-xs text-muted-foreground">{idea.why}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-        <textarea rows={2} placeholder="What is the video about?" value={topic} onChange={(event) => setTopic(event.target.value)} />
+            <Field label="What is the video about?" detail={topic.trim() ? `${topic.trim().split(/\s+/).length} words` : undefined}>
+              <Textarea rows={3} placeholder="e.g. How Isaac Newton lost a fortune in the South Sea Bubble" value={topic} onChange={(event) => setTopic(event.target.value)} />
+            </Field>
 
-        <div className="row end">
-          {!llmReady && <span className="hint">Start Bonsai (top right) first.</span>}
-          <button className="primary" disabled={!llmReady || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
-            {writing ? "Writing script…" : "✍️ Write script"}
-          </button>
-        </div>
-        {format === "long" && <p className="hint">A long script takes Bonsai about 30–40 minutes (outline, chapters and fact-checks).</p>}
-        {error && <p className="error">{error}</p>}
-      </section>
+            <div className="flex items-center justify-between gap-3 border-t pt-4">
+              <p className="text-xs text-muted-foreground">
+                {!llmReady
+                  ? "Start Bonsai from the sidebar first."
+                  : format === "long"
+                    ? "A long script takes Bonsai about 30–40 minutes: outline, chapters and fact-checks."
+                    : "The project opens here as soon as the script is written and fact-checked."}
+              </p>
+              <Button disabled={!llmReady || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
+                {writing ? <Loader2Icon className="animate-spin" /> : <PenLineIcon />}
+                {writing ? "Writing script…" : "Write script"}
+              </Button>
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

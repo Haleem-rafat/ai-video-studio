@@ -4,8 +4,12 @@ import { api, type Channel, type Job, type ProjectSummary, type Status } from ".
 import { JobPanel } from "./components/JobPanel.tsx";
 import { NewVideo } from "./components/NewVideo.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
-import { Sidebar } from "./components/Sidebar.tsx";
-import { TopBar } from "./components/TopBar.tsx";
+import { AppSidebar } from "./components/Sidebar.tsx";
+import { EngineStatus, TopBar } from "./components/TopBar.tsx";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useTheme } from "@/hooks/use-theme";
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -15,6 +19,7 @@ export function App() {
   /** Bumped whenever a job touching the open project finishes. */
   const [projectVersion, setProjectVersion] = useState(0);
   const seen = useRef(new Map<string, Job["status"]>());
+  const { theme, toggle } = useTheme();
 
   const refreshProjects = useCallback(() => api.projects().then(setProjects).catch(() => {}), []);
 
@@ -58,32 +63,36 @@ export function App() {
   }, [refreshProjects, select]);
 
   const jobs = status?.jobs ?? [];
+  const open = projects.find((project) => project.id === selected);
 
   return (
-    <div className="app">
-      <TopBar status={status} />
-      <div className="workspace">
-        <Sidebar projects={projects} channels={channels} selected={selected} onSelect={select} />
-        <main className="main">
-          {selected ? (
-            <ProjectView
-              key={selected}
-              id={selected}
-              version={projectVersion}
-              channels={channels}
-              jobs={jobs.filter((job) => job.projectId === selected)}
-              llmReady={Boolean(status?.llm)}
-              onDeleted={() => {
-                select(null);
-                refreshProjects();
-              }}
-            />
-          ) : (
-            <NewVideo channels={channels} llmReady={Boolean(status?.llm)} jobs={jobs} />
-          )}
-        </main>
-      </div>
-      <JobPanel jobs={jobs} />
-    </div>
+    <TooltipProvider delayDuration={300}>
+      <SidebarProvider>
+        <AppSidebar projects={projects} channels={channels} selected={selected} onSelect={select} footer={<EngineStatus status={status} />} />
+        <SidebarInset className="h-svh min-w-0 overflow-hidden">
+          <TopBar crumbs={selected ? ["Projects", open?.title ?? "…"] : ["Studio", "New video"]} theme={theme} onToggleTheme={toggle} />
+          <main className="flex min-h-0 flex-1 flex-col">
+            {selected ? (
+              <ProjectView
+                key={selected}
+                id={selected}
+                version={projectVersion}
+                channels={channels}
+                jobs={jobs.filter((job) => job.projectId === selected)}
+                llmReady={Boolean(status?.llm)}
+                onDeleted={() => {
+                  select(null);
+                  refreshProjects();
+                }}
+              />
+            ) : (
+              <NewVideo channels={channels} llmReady={Boolean(status?.llm)} jobs={jobs} />
+            )}
+          </main>
+        </SidebarInset>
+        <JobPanel jobs={jobs} />
+        <Toaster theme={theme} position="bottom-right" />
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }

@@ -4,3 +4,4 @@ output/
 .DS_Store
 .env
 dist/
+config/youtube/
