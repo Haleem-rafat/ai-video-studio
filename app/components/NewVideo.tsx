@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api, type Channel, type FormatId, type Job, type TopicIdea } from "../api.ts";
+import { api, type Channel, type FormatId, type Job, type StyleId, type TopicIdea } from "../api.ts";
 
 type Props = { channels: Channel[]; llmReady: boolean; jobs: Job[] };
 
@@ -9,6 +9,7 @@ const MASCOT: Record<string, string> = { robot: "🤖", coin: "🪙", bear: "�
 export function NewVideo({ channels, llmReady, jobs }: Props) {
   const [channel, setChannel] = useState("");
   const [format, setFormat] = useState<FormatId>("short");
+  const [style, setStyle] = useState<StyleId>("motion");
   const [topic, setTopic] = useState("");
   const [focus, setFocus] = useState("");
   const [ideasJob, setIdeasJob] = useState<string | null>(null);
@@ -69,6 +70,17 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
             🖥 Long · 16:9 · ~8 min
           </button>
         </div>
+
+        <h2>Look</h2>
+        <div className="segmented">
+          <button className={style === "motion" ? "active" : ""} onClick={() => setStyle("motion")}>
+            🎨 Motion graphics
+          </button>
+          <button className={style === "whiteboard" ? "active" : ""} onClick={() => setStyle("whiteboard")}>
+            ✏️ Whiteboard
+          </button>
+        </div>
+        {style === "whiteboard" && <p className="hint">A hand draws each picture and writes the key words on paper. Pictures use FLUX dev, about $0.025 each.</p>}
       </section>
 
       <section className="card">
@@ -104,7 +116,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
 
         <div className="row end">
           {!llmReady && <span className="hint">Start Bonsai (top right) first.</span>}
-          <button className="primary" disabled={!llmReady || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic))}>
+          <button className="primary" disabled={!llmReady || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
             {writing ? "Writing script…" : "✍️ Write script"}
           </button>
         </div>

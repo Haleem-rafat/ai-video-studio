@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -9,15 +9,16 @@ import { drawProject } from "./media/images.ts";
 import { audioSeconds, voiceProject } from "./media/voice.ts";
 import { loadProject, newProjectId, projectDir, saveProject } from "./project.ts";
 import { buildComposition } from "./render/composition.ts";
+import { buildWhiteboard, HAND_ASSET } from "./render/whiteboard.ts";
 import { reviewScenes, toScenes, writeScript } from "./script/write.ts";
-import type { FormatId, Project } from "./types.ts";
+import type { FormatId, Project, StyleId } from "./types.ts";
 
 const run = promisify(execFile);
 
 export type Log = (message: string) => void;
 
 /** Step 1: Bonsai writes the script into a new project. */
-export async function createProject(channelId: string, format: FormatId, topic: string, log: Log = console.log): Promise<Project> {
+export async function createProject(channelId: string, format: FormatId, topic: string, style: StyleId = "motion", log: Log = console.log): Promise<Project> {
   const channel = loadChannel(channelId);
   await assertLlmRunning();
 
@@ -28,6 +29,7 @@ export async function createProject(channelId: string, format: FormatId, topic: 
     id: newProjectId(channelId, format, topic),
     channel: channelId,
     format,
+    style,
     topic,
     title: draft.title,
     description: draft.description,
@@ -53,7 +55,7 @@ export async function prepareMedia(id: string, options: { images?: boolean } = {
   await saveProject(project);
 
   if (options.images ?? true) {
-    const drawn = await drawProject(dir, project.scenes, channel, project.format);
+    const drawn = await drawProject(dir, project.scenes, channel, project.format, project.style);
     log(`pictures: ${drawn} drawn, ${project.scenes.length - drawn} unchanged`);
     await saveProject(project);
   }
@@ -67,7 +69,12 @@ export async function compose(id: string, log: Log = console.log): Promise<Proje
   const channel = loadChannel(project.channel);
   const dir = projectDir(id);
 
-  await writeFile(join(dir, "index.html"), buildComposition(project, channel));
+  if (project.style === "whiteboard") {
+    await copyFile(HAND_ASSET, join(dir, "hand.png"));
+    await writeFile(join(dir, "index.html"), buildWhiteboard(project));
+  } else {
+    await writeFile(join(dir, "index.html"), buildComposition(project, channel));
+  }
   await writeFile(join(dir, "youtube.txt"), `${project.title}\n\n${project.description}\n\n${project.tags.map((tag) => `#${tag.replace(/\s+/g, "")}`).join(" ")}\n`);
   log("compose: index.html written");
   return project;

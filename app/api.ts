@@ -1,7 +1,7 @@
 import type { Channel } from "../src/config.ts";
-import type { FormatId, Project, Scene } from "../src/types.ts";
+import type { FormatId, Project, Scene, StyleId } from "../src/types.ts";
 
-export type { Channel, FormatId, Project, Scene };
+export type { Channel, FormatId, Project, Scene, StyleId };
 
 export type SceneState = Scene & { voiceCurrent: boolean; imageCurrent: boolean };
 export type ProjectState = Omit<Project, "scenes"> & { scenes: SceneState[]; hasComposition: boolean; hasVideo: boolean };
@@ -48,7 +48,7 @@ export const api = {
   job: (id: string) => call<Job>("GET", `/api/jobs/${id}`),
   projects: () => call<ProjectSummary[]>("GET", "/api/projects"),
   project: (id: string) => call<ProjectState>("GET", `/api/projects/${id}`),
-  create: (channel: string, format: FormatId, topic: string) => call<Job>("POST", "/api/projects", { channel, format, topic }),
+  create: (channel: string, format: FormatId, topic: string, style: StyleId) => call<Job>("POST", "/api/projects", { channel, format, topic, style }),
   save: (id: string, edits: Partial<Project>) => call<ProjectState>("PUT", `/api/projects/${id}`, edits),
   remove: (id: string) => call("DELETE", `/api/projects/${id}`),
   build: (id: string, images: boolean) => call<Job>("POST", `/api/projects/${id}/build`, { images }),

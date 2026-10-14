@@ -10,7 +10,7 @@ import { voiceIsCurrent } from "../media/voice.ts";
 import { build, compose, createProject, factCheck, render } from "../pipeline.ts";
 import { listProjects, loadProject, projectDir, saveProject } from "../project.ts";
 import { suggestTopics } from "../script/topics.ts";
-import { VISUAL_TYPES, type FormatId, type Project, type Scene } from "../types.ts";
+import { STYLES, VISUAL_TYPES, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
 import { enqueue, getJob, recentJobs } from "./jobs.ts";
 
 const PORT = Number(process.env.PORT ?? 4300);
@@ -154,7 +154,7 @@ function withState(project: Project) {
     scenes: project.scenes.map((scene) => ({
       ...scene,
       voiceCurrent: voiceIsCurrent(dir, scene, channel.voiceId),
-      imageCurrent: imageIsCurrent(dir, scene),
+      imageCurrent: imageIsCurrent(dir, scene, project.style),
     })),
   };
 }
@@ -164,6 +164,10 @@ function applyEdits(project: Project, edits: Partial<Project>): Project {
   if (typeof edits.title === "string") project.title = edits.title;
   if (typeof edits.description === "string") project.description = edits.description;
   if (Array.isArray(edits.tags)) project.tags = edits.tags.map(String);
+  if (edits.style !== undefined) {
+    if (!STYLES.includes(edits.style)) throw new HttpError(400, "Style is motion or whiteboard.");
+    project.style = edits.style;
+  }
 
   if (Array.isArray(edits.scenes)) {
     const previous = new Map(project.scenes.map((scene) => [scene.id, scene]));
@@ -224,11 +228,13 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   }
 
   if (path === "/api/projects" && method === "POST") {
-    const input = await body<{ channel: string; format: FormatId; topic: string }>(request);
+    const input = await body<{ channel: string; format: FormatId; topic: string; style?: StyleId }>(request);
     if (!input.topic?.trim()) throw new HttpError(400, "A topic is required.");
     if (input.format !== "short" && input.format !== "long") throw new HttpError(400, "Format is short or long.");
+    const style = input.style ?? "motion";
+    if (!STYLES.includes(style)) throw new HttpError(400, "Style is motion or whiteboard.");
     loadChannel(input.channel);
-    const job = enqueue(`Write script: ${input.topic}`, async () => (await createProject(input.channel, input.format, input.topic.trim())).id);
+    const job = enqueue(`Write script: ${input.topic}`, async () => (await createProject(input.channel, input.format, input.topic.trim(), style)).id);
     return json(response, 202, job);
   }
 

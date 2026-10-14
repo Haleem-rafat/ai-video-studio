@@ -3,16 +3,35 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { requireEnv, type Channel } from "../config.ts";
-import type { FormatId, Scene } from "../types.ts";
+import type { FormatId, Scene, StyleId } from "../types.ts";
 import { inBatches } from "./voice.ts";
 
 // FLUX schnell: ~5s and well under a cent per picture.
 const MODEL_URL = "https://fal.run/fal-ai/flux/schnell";
+// FLUX dev for whiteboard doodles: schnell's line art is too rough to redraw
+// stroke by stroke. About $0.025 a picture.
+const WHITEBOARD_MODEL_URL = "https://fal.run/fal-ai/flux/dev";
 
-export function imageIsCurrent(projectDir: string, scene: Scene): boolean {
+/**
+ * Whiteboard art direction, used instead of the channel's. The hand redraws
+ * the picture line by line, so it needs thin dark outlines, few flat fills and
+ * a plain white background that disappears into the paper.
+ */
+const WHITEBOARD_STYLE =
+  "Simple hand-drawn doodle cartoon in black ink, whiteboard animation style, thin clean black outlines, " +
+  "very few flat color fills only in muted dark green and warm beige, pure plain white background, " +
+  "no text, no letters, no words, no shading, no shadows, single isolated subject centered with white space around. Subject: ";
+
+export function imageIsCurrent(projectDir: string, scene: Scene, style: StyleId = "motion"): boolean {
   return (
     !scene.imagePrompt ||
-    Boolean(scene.image && scene.image.prompt === scene.imagePrompt && (scene.image.seed ?? 0) === (scene.imageSeed ?? 0) && existsSync(join(projectDir, scene.image.path)))
+    Boolean(
+      scene.image &&
+        scene.image.prompt === scene.imagePrompt &&
+        (scene.image.seed ?? 0) === (scene.imageSeed ?? 0) &&
+        (scene.image.style ?? "motion") === style &&
+        existsSync(join(projectDir, scene.image.path)),
+    )
   );
 }
 
@@ -23,18 +42,21 @@ function seedFor(scene: Scene): number {
   return hash + (scene.imageSeed ?? 0) * 7919;
 }
 
-export async function drawScene(projectDir: string, scene: Scene, channel: Channel, format: FormatId): Promise<void> {
-  const size = format === "short" ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
-  const response = await fetch(MODEL_URL, {
+export async function drawScene(projectDir: string, scene: Scene, channel: Channel, format: FormatId, style: StyleId = "motion"): Promise<void> {
+  const whiteboard = style === "whiteboard";
+  const size = whiteboard ? { width: 1024, height: 1024 } : format === "short" ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
+  const response = await fetch(whiteboard ? WHITEBOARD_MODEL_URL : MODEL_URL, {
     method: "POST",
     headers: { Authorization: `Key ${requireEnv("FAL_KEY")}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt: `${scene.imagePrompt}. ${channel.imageStyle}`,
+      prompt: whiteboard ? `${WHITEBOARD_STYLE}${scene.imagePrompt}` : `${scene.imagePrompt}. ${channel.imageStyle}`,
       image_size: size,
-      num_inference_steps: 4,
+      num_inference_steps: whiteboard ? 28 : 4,
       num_images: 1,
       seed: seedFor(scene),
       enable_safety_checker: true,
+      // PNG keeps the white background pure; JPEG noise would show on the paper.
+      ...(whiteboard ? { output_format: "png" } : {}),
     }),
   });
 
@@ -46,19 +68,19 @@ export async function drawScene(projectDir: string, scene: Scene, channel: Chann
 
   const picture = await fetch(url);
   // The seed is in the name so the studio never shows a cached old picture.
-  const path = `images/${scene.id}-${scene.imageSeed ?? 0}.jpg`;
+  const path = whiteboard ? `images/${scene.id}-${scene.imageSeed ?? 0}-wb.png` : `images/${scene.id}-${scene.imageSeed ?? 0}.jpg`;
 
   await mkdir(join(projectDir, "images"), { recursive: true });
   await writeFile(join(projectDir, path), Buffer.from(await picture.arrayBuffer()));
 
-  scene.image = { path, prompt: scene.imagePrompt, seed: scene.imageSeed ?? 0 };
+  scene.image = { path, prompt: scene.imagePrompt, seed: scene.imageSeed ?? 0, style };
 }
 
-/** Draws every scene whose picture prompt changed; returns how many were drawn. */
-export async function drawProject(projectDir: string, scenes: Scene[], channel: Channel, format: FormatId): Promise<number> {
-  const stale = scenes.filter((scene) => !imageIsCurrent(projectDir, scene));
+/** Draws every scene whose picture prompt or style changed; returns how many were drawn. */
+export async function drawProject(projectDir: string, scenes: Scene[], channel: Channel, format: FormatId, style: StyleId = "motion"): Promise<number> {
+  const stale = scenes.filter((scene) => !imageIsCurrent(projectDir, scene, style));
 
-  await inBatches(stale, 4, (scene) => drawScene(projectDir, scene, channel, format));
+  await inBatches(stale, 4, (scene) => drawScene(projectDir, scene, channel, format, style));
 
   return stale.length;
 }

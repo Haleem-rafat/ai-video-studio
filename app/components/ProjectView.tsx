@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { api, newSceneId, sceneSeconds, type Channel, type Job, type ProjectState, type SceneState } from "../api.ts";
+import { api, newSceneId, sceneSeconds, type Channel, type Job, type ProjectState, type SceneState, type StyleId } from "../api.ts";
 import { Preview } from "./Preview.tsx";
 import { SceneCard } from "./SceneCard.tsx";
 import { Timeline } from "./Timeline.tsx";
@@ -49,7 +49,7 @@ export function ProjectView({ id, version, channels, jobs, llmReady, onDeleted }
     const editAtSend = edits.current;
     setSaving(true);
     try {
-      const saved = await api.save(id, { title: current.title, description: current.description, tags: current.tags, scenes: current.scenes });
+      const saved = await api.save(id, { title: current.title, description: current.description, tags: current.tags, style: current.style ?? "motion", scenes: current.scenes });
       // Only take the server's copy if nothing was typed while it was saving.
       if (edits.current === editAtSend) {
         setProject(saved);
@@ -134,7 +134,21 @@ export function ProjectView({ id, version, channels, jobs, llmReady, onDeleted }
         <div className="project-titles">
           <input className="title-input" value={project.title} onChange={(event) => edit((current) => ({ ...current, title: event.target.value }))} />
           <div className="project-sub">
-            <span style={{ color: channel?.colors.accent }}>{channel?.name}</span> · {project.format === "short" ? "Short 9:16" : "Long 16:9"} · {project.topic}
+            <span style={{ color: channel?.colors.accent }}>{channel?.name}</span> · {project.format === "short" ? "Short 9:16" : "Long 16:9"} ·{" "}
+            <select
+              className="style-select"
+              value={project.style ?? "motion"}
+              disabled={busy}
+              title="Switching redraws every picture in the new look on the next Update preview"
+              onChange={(event) => {
+                const style = event.target.value as StyleId;
+                edit((current) => ({ ...current, style }));
+              }}
+            >
+              <option value="motion">🎨 Motion graphics</option>
+              <option value="whiteboard">✏️ Whiteboard</option>
+            </select>{" "}
+            · {project.topic}
             {saving ? <span className="saving"> · saving…</span> : <span className="saved"> · saved</span>}
           </div>
         </div>

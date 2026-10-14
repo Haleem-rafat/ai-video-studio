@@ -5,6 +5,15 @@
 
 export type FormatId = "short" | "long";
 
+/**
+ * How the video looks. "motion" is the original full-frame picture with motion
+ * graphics and captions; "whiteboard" is a hand drawing doodles and writing on
+ * paper. A project without a style is "motion", so older projects keep theirs.
+ */
+export type StyleId = "motion" | "whiteboard";
+
+export const STYLES = ["motion", "whiteboard"] as const;
+
 export type Visual =
   | { type: "title"; headline: string }
   | { type: "chapter"; number: number; headline: string }
@@ -27,7 +36,8 @@ export type Scene = {
   imagePrompt: string;
   /** Bumped by "redraw" to get a different picture for the same prompt. */
   imageSeed?: number;
-  image?: { path: string; prompt: string; seed?: number };
+  /** `style` is what the picture was drawn for; a whiteboard needs line art, not a background. */
+  image?: { path: string; prompt: string; seed?: number; style?: StyleId };
   audio?: { path: string; text: string; voiceId: string; seconds: number; words: Word[] };
 };
 
@@ -35,6 +45,7 @@ export type Project = {
   id: string;
   channel: string;
   format: FormatId;
+  style?: StyleId;
   topic: string;
   title: string;
   description: string;

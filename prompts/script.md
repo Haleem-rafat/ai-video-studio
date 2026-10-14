@@ -9,6 +9,8 @@ Rules:
 - Scene 1 is the hook: a surprising claim, number or question in under 15 words. No greeting, no "in this video".
 - Each scene's narration is one or two short spoken sentences. In narration, write numbers the way they are said aloud.
 - Build curiosity: open a question early and answer it near the end.
+- Tell it as a story: lead with a famous name or a vivid moment, turn over what most people believe ("most people think... but"), say the viewer's doubt out loud ("you might say...") and answer it.
+- When there are several reasons or mistakes, start each one with the same short phrase so they land like a drumbeat.
 - Only use facts you are confident are true. No made-up statistics; if unsure, describe the idea without a number.
 - The last scene ends with one clear takeaway, then "Follow for more."
 
