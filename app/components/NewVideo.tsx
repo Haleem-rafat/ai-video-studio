@@ -1,4 +1,4 @@
-import { CheckIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
+import { AppWindowIcon, CheckIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { api, type Channel, type FormatId, type Job, type StyleId, type TopicIdea } from "../api.ts";
@@ -109,7 +109,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                 <span className="text-xs text-muted-foreground">16:9 · about 8 minutes</span>
               </Choice>
             </div>
-            <div role="radiogroup" aria-label="Look" className="grid gap-2 sm:grid-cols-2">
+            <div role="radiogroup" aria-label="Look" className="grid gap-2 sm:grid-cols-3">
               <Choice active={style === "motion"} onClick={() => setStyle("motion")}>
                 <LayersIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Motion graphics</span>
@@ -119,6 +119,11 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                 <PenLineIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Whiteboard</span>
                 <span className="text-xs text-muted-foreground">A hand draws each picture and writes the key words. About $0.025 a picture.</span>
+              </Choice>
+              <Choice active={style === "explainer"} onClick={() => setStyle("explainer")}>
+                <AppWindowIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Explainer</span>
+                <span className="text-xs text-muted-foreground">A {channels.find((option) => option.id === channel)?.device ?? "phone"} on cream, each scene as an app screen, with karaoke captions. No pictures to pay for.</span>
               </Choice>
             </div>
           </CardContent>

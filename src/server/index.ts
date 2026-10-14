@@ -9,6 +9,7 @@ import { imageIsCurrent } from "../media/images.ts";
 import { voiceIsCurrent } from "../media/voice.ts";
 import { build, compose, createProject, factCheck, render } from "../pipeline.ts";
 import { listProjects, loadProject, projectDir, saveProject } from "../project.ts";
+import { completeSignIn, connectionStatus, signIn, uploadVideo, type Privacy } from "../publish/youtube.ts";
 import { suggestTopics } from "../script/topics.ts";
 import { STYLES, VISUAL_TYPES, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
 import { enqueue, getJob, recentJobs } from "./jobs.ts";
@@ -165,7 +166,7 @@ function applyEdits(project: Project, edits: Partial<Project>): Project {
   if (typeof edits.description === "string") project.description = edits.description;
   if (Array.isArray(edits.tags)) project.tags = edits.tags.map(String);
   if (edits.style !== undefined) {
-    if (!STYLES.includes(edits.style)) throw new HttpError(400, "Style is motion or whiteboard.");
+    if (!STYLES.includes(edits.style)) throw new HttpError(400, "Style is motion, whiteboard or explainer.");
     project.style = edits.style;
   }
 
@@ -232,7 +233,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     if (!input.topic?.trim()) throw new HttpError(400, "A topic is required.");
     if (input.format !== "short" && input.format !== "long") throw new HttpError(400, "Format is short or long.");
     const style = input.style ?? "motion";
-    if (!STYLES.includes(style)) throw new HttpError(400, "Style is motion or whiteboard.");
+    if (!STYLES.includes(style)) throw new HttpError(400, "Style is motion, whiteboard or explainer.");
     loadChannel(input.channel);
     const job = enqueue(`Write script: ${input.topic}`, async () => (await createProject(input.channel, input.format, input.topic.trim(), style)).id);
     return json(response, 202, job);
@@ -264,6 +265,56 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         : action === "render"
           ? enqueue(`Render video (${options.quality ?? "standard"})`, () => render(id, options.quality ?? "standard"), id)
           : enqueue("Fact-check script", () => factCheck(id), id);
+    return json(response, 202, job);
+  }
+
+  if (path === "/api/youtube/callback" && method === "GET") {
+    const { ok, message } = completeSignIn(url.searchParams);
+    response.writeHead(ok ? 200 : 400, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><meta charset="utf-8"><title>YouTube</title><body style="font:15px system-ui;display:grid;place-items:center;height:90vh"><p>${message}</p></body>`);
+    return;
+  }
+
+  if (path === "/api/youtube" && method === "GET") {
+    return json(response, 200, await connectionStatus(loadChannels().map((channel) => channel.id)));
+  }
+
+  if ((match = path.match(/^\/api\/youtube\/([a-z0-9-]+)\/connect$/)) && method === "POST") {
+    const channel = loadChannel(match[1]);
+    const job = enqueue(`Connect YouTube for ${channel.name}`, async () => (await signIn(channel.id)).youtubeChannel.title);
+    return json(response, 202, job);
+  }
+
+  if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)\/publish$/)) && method === "POST") {
+    const id = match[1];
+    const input = await body<{ privacy?: Privacy; publishAt?: string; force?: boolean }>(request);
+    const privacy = input.privacy ?? "private";
+    if (!["private", "unlisted", "public"].includes(privacy)) throw new HttpError(400, "Privacy is private, unlisted or public.");
+    if (input.publishAt !== undefined) {
+      const at = Date.parse(input.publishAt);
+      // YouTube rejects a publishAt that is not in the future.
+      if (!Number.isFinite(at) || at < Date.now() + 5 * 60_000) throw new HttpError(400, "Pick a publish time at least 5 minutes from now.");
+    }
+    const project = await loadProject(id);
+    const videoPath = join(projectDir(id), "video.mp4");
+    if (!existsSync(videoPath)) throw new HttpError(400, "Render the video first.");
+    if (project.youtube && !input.force) throw new HttpError(409, `Already on YouTube: ${project.youtube.url}`);
+
+    const channel = loadChannel(project.channel);
+    const label = input.publishAt ? `Upload to YouTube (scheduled ${new Date(input.publishAt).toLocaleString()})` : `Upload to YouTube (${privacy})`;
+    const job = enqueue(
+      label,
+      async () => {
+        const upload = await uploadVideo(await loadProject(id), videoPath, { privacy, madeForKids: channel.madeForKids ?? false, publishAt: input.publishAt });
+        // Re-read so edits made during the upload are kept.
+        const latest = await loadProject(id);
+        latest.youtube = upload;
+        await saveProject(latest);
+        console.log(`uploaded: ${upload.url}`);
+        return upload.url;
+      },
+      id,
+    );
     return json(response, 202, job);
   }
 

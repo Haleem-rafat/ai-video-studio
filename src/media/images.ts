@@ -24,6 +24,8 @@ const WHITEBOARD_STYLE =
 
 export function imageIsCurrent(projectDir: string, scene: Scene, style: StyleId = "motion"): boolean {
   return (
+    // The explainer draws its screens in code; it never shows a picture.
+    style === "explainer" ||
     !scene.imagePrompt ||
     Boolean(
       scene.image &&

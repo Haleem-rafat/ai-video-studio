@@ -1,7 +1,7 @@
 import { CheckIcon, ClapperboardIcon, DownloadIcon, FilmIcon, Loader2Icon, RefreshCwIcon, ShieldCheckIcon, Trash2Icon, VideoOffIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { api, newSceneId, sceneSeconds, type Channel, type Job, type ProjectState, type SceneState, type StyleId } from "../api.ts";
+import { api, newSceneId, sceneSeconds, type Channel, type Job, type ProjectState, type ProjectSummary, type SceneState, type StyleId } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Preview } from "./Preview.tsx";
+import { PublishDialog } from "./PublishDialog.tsx";
 import { SceneCard } from "./SceneCard.tsx";
 import { ChannelSwatch, Confirm, Field } from "./shared.tsx";
 import { Timeline } from "./Timeline.tsx";
@@ -18,6 +19,7 @@ type Props = {
   id: string;
   version: number;
   channels: Channel[];
+  projects: ProjectSummary[];
   jobs: Job[];
   llmReady: boolean;
   onDeleted: () => void;
@@ -35,7 +37,7 @@ function Action({ tip, children }: { tip: string; children: React.ReactNode }) {
   );
 }
 
-export function ProjectView({ id, version, channels, jobs, llmReady, onDeleted }: Props) {
+export function ProjectView({ id, version, channels, projects, jobs, llmReady, onDeleted }: Props) {
   const [project, setProject] = useState<ProjectState | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -183,6 +185,7 @@ export function ProjectView({ id, version, channels, jobs, llmReady, onDeleted }
               <SelectContent>
                 <SelectItem value="motion">Motion graphics</SelectItem>
                 <SelectItem value="whiteboard">Whiteboard</SelectItem>
+                <SelectItem value="explainer">Explainer</SelectItem>
               </SelectContent>
             </Select>
             {project.topic.trim().toLowerCase() !== project.title.trim().toLowerCase() && (
@@ -219,6 +222,7 @@ export function ProjectView({ id, version, channels, jobs, llmReady, onDeleted }
               <ClapperboardIcon /> Final render
             </Button>
           </Action>
+          <PublishDialog project={project} channel={channel} projects={projects} busy={busy} run={runJob} />
           <Confirm
             trigger={
               <Button variant="ghost" size="icon" disabled={busy} aria-label="Move project to trash">

@@ -9,6 +9,7 @@ import { drawProject } from "./media/images.ts";
 import { audioSeconds, voiceProject } from "./media/voice.ts";
 import { loadProject, newProjectId, projectDir, saveProject } from "./project.ts";
 import { buildComposition } from "./render/composition.ts";
+import { buildExplainer } from "./render/explainer.ts";
 import { buildWhiteboard, HAND_ASSET } from "./render/whiteboard.ts";
 import { reviewScenes, toScenes, writeScript } from "./script/write.ts";
 import type { FormatId, Project, StyleId } from "./types.ts";
@@ -72,6 +73,8 @@ export async function compose(id: string, log: Log = console.log): Promise<Proje
   if (project.style === "whiteboard") {
     await copyFile(HAND_ASSET, join(dir, "hand.png"));
     await writeFile(join(dir, "index.html"), buildWhiteboard(project));
+  } else if (project.style === "explainer") {
+    await writeFile(join(dir, "index.html"), buildExplainer(project, channel));
   } else {
     await writeFile(join(dir, "index.html"), buildComposition(project, channel));
   }

@@ -7,6 +7,7 @@
     "imageStyle": "flat vector illustration, clean geometric shapes, dark navy and charcoal background with neon green accents, soft glow, minimal, no text, no letters",
     "mascot": { "kind": "robot", "name": "Pixel" },
     "colors": { "background": "#0d1117", "panel": "#161b22", "text": "#e6edf3", "accent": "#3fb950", "muted": "#8b949e" },
+    "device": "laptop",
     "font": "'SF Mono', Menlo, monospace"
   },
   "money-mechanics": {
@@ -17,6 +18,7 @@
     "imageStyle": "editorial illustration, rich deep blue and gold palette, painterly texture, dramatic lighting, no text, no letters",
     "mascot": { "kind": "coin", "name": "Penny" },
     "colors": { "background": "#0b1a2e", "panel": "#12263f", "text": "#f5f1e6", "accent": "#f2c14e", "muted": "#9fb3c8" },
+    "device": "phone",
     "font": "'Avenir Next', Helvetica, sans-serif"
   },
   "kido-fun-zone": {
@@ -27,6 +29,7 @@
     "imageStyle": "cute children's picture book illustration, bright cheerful colours, soft rounded shapes, friendly, no text, no letters",
     "mascot": { "kind": "bear", "name": "Kido" },
     "colors": { "background": "#fff4d6", "panel": "#ffffff", "text": "#2b2d42", "accent": "#ff6b6b", "muted": "#6c757d" },
+    "device": "phone",
     "font": "'Chalkboard SE', 'Comic Sans MS', sans-serif",
     "madeForKids": true
   }

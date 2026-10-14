@@ -79,7 +79,14 @@ export function AppSidebar({ projects, channels, selected, onSelect, footer }: P
                           <span className="truncate">{channel?.name ?? project.channel}</span>
                           <span>·</span>
                           <span className="tabular-nums">{project.sceneCount}</span>
-                          {project.hasVideo && <span className="ml-auto rounded border px-1 font-mono text-[10px] leading-4">MP4</span>}
+                          {project.youtube ? (
+                            <span className="ml-auto flex items-center gap-1 rounded border px-1 font-mono text-[10px] leading-4" title={`On YouTube (${project.youtube.youtubeChannel})`}>
+                              <span className="size-1 rounded-full bg-red-600" />
+                              {project.youtube.scheduledFor && Date.parse(project.youtube.scheduledFor) > Date.now() ? "SCHED" : "YT"}
+                            </span>
+                          ) : (
+                            project.hasVideo && <span className="ml-auto rounded border px-1 font-mono text-[10px] leading-4">MP4</span>
+                          )}
                         </span>
                       </div>
                     </SidebarMenuButton>

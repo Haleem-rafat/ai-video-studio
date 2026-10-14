@@ -8,11 +8,13 @@ export type FormatId = "short" | "long";
 /**
  * How the video looks. "motion" is the original full-frame picture with motion
  * graphics and captions; "whiteboard" is a hand drawing doodles and writing on
- * paper. A project without a style is "motion", so older projects keep theirs.
+ * paper; "explainer" is a phone or laptop on cream, its screen showing each
+ * scene as an app, with karaoke captions and no AI pictures at all. A project
+ * without a style is "motion", so older projects keep theirs.
  */
-export type StyleId = "motion" | "whiteboard";
+export type StyleId = "motion" | "whiteboard" | "explainer";
 
-export const STYLES = ["motion", "whiteboard"] as const;
+export const STYLES = ["motion", "whiteboard", "explainer"] as const;
 
 export type Visual =
   | { type: "title"; headline: string }
@@ -54,5 +56,6 @@ export type Project = {
   createdAt: string;
   updatedAt: string;
   render?: { path: string; seconds: number; renderedAt: string };
-  youtube?: { videoId: string; url: string; privacy: "private" | "unlisted" | "public"; youtubeChannel: string; uploadedAt: string };
+  /** Set once uploaded; `scheduledFor` means it is private until YouTube publishes it then. */
+  youtube?: { videoId: string; url: string; privacy: "private" | "unlisted" | "public"; youtubeChannel: string; uploadedAt: string; scheduledFor?: string };
 };

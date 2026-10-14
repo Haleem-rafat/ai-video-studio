@@ -78,6 +78,7 @@ export function App() {
                 id={selected}
                 version={projectVersion}
                 channels={channels}
+                projects={projects}
                 jobs={jobs.filter((job) => job.projectId === selected)}
                 llmReady={Boolean(status?.llm)}
                 onDeleted={() => {

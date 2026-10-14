@@ -54,7 +54,15 @@ export const api = {
   build: (id: string, images: boolean) => call<Job>("POST", `/api/projects/${id}/build`, { images }),
   render: (id: string, quality: "draft" | "standard" | "high") => call<Job>("POST", `/api/projects/${id}/render`, { quality }),
   factCheck: (id: string) => call<Job>("POST", `/api/projects/${id}/factcheck`),
+  youtube: () => call<YouTubeStatus>("GET", "/api/youtube"),
+  connectYouTube: (channel: string) => call<Job>("POST", `/api/youtube/${channel}/connect`),
+  publish: (id: string, options: { privacy: Privacy; publishAt?: string; force?: boolean }) => call<Job>("POST", `/api/projects/${id}/publish`, options),
 };
+
+export type Privacy = "private" | "unlisted" | "public";
+
+/** Whether uploads are set up, and the YouTube channel each studio channel is signed in to (null = not yet). */
+export type YouTubeStatus = { configured: boolean; via: "desktop-client" | "framecast" | null; channels: Record<string, { title: string } | null> };
 
 /** Same spacing the composition uses, so the timeline matches the preview. */
 export const SCENE_GAP = 0.3;
