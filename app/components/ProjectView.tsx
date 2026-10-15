@@ -9,11 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { lookOf } from "../../src/render/looks.ts";
+import { Switch } from "@/components/ui/switch";
 import { Preview } from "./Preview.tsx";
 import { PublishDialog } from "./PublishDialog.tsx";
 import { SceneCard } from "./SceneCard.tsx";
 import { ChannelSwatch, Confirm, Field } from "./shared.tsx";
 import { Timeline } from "./Timeline.tsx";
+import { VersusPanel } from "./VersusPanel.tsx";
+import { DeepDivePanel } from "./DeepDivePanel.tsx";
 
 type Props = {
   id: string;
@@ -72,7 +76,16 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
     const editAtSend = edits.current;
     setSaving(true);
     try {
-      const saved = await api.save(id, { title: current.title, description: current.description, tags: current.tags, style: current.style ?? "motion", scenes: current.scenes });
+      const saved = await api.save(id, {
+        title: current.title,
+        description: current.description,
+        tags: current.tags,
+        style: current.style ?? "motion",
+        soundtrack: current.soundtrack !== false,
+        scenes: current.scenes,
+        ...(current.versus ? { versus: current.versus } : {}),
+        ...(current.deepdive ? { deepdive: current.deepdive } : {}),
+      });
       // Only take the server's copy if nothing was typed while it was saving.
       if (edits.current === editAtSend) {
         setProject(saved);
@@ -178,6 +191,9 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
               {channel?.name}
             </span>
             <Badge variant="outline">{project.format === "short" ? "Short · 9:16" : "Long · 16:9"}</Badge>
+            {project.style === "versus" || project.style === "deepdive" ? (
+              <Badge variant="outline">{project.style === "versus" ? "Versus" : "Deep dive"}</Badge>
+            ) : (
             <Select value={project.style ?? "motion"} disabled={busy} onValueChange={(style) => edit((current) => ({ ...current, style: style as StyleId }))}>
               <SelectTrigger size="sm" className="h-6 gap-1 rounded-4xl px-2 text-xs" aria-label="Look">
                 <SelectValue />
@@ -186,8 +202,14 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
                 <SelectItem value="motion">Motion graphics</SelectItem>
                 <SelectItem value="whiteboard">Whiteboard</SelectItem>
                 <SelectItem value="explainer">Explainer</SelectItem>
+                <SelectItem value="mixed">Mixed</SelectItem>
               </SelectContent>
             </Select>
+            )}
+            <label className="flex items-center gap-1.5" title="Background music and sound effects in the rendered video">
+              <Switch size="sm" checked={project.soundtrack !== false} disabled={busy} onCheckedChange={(soundtrack) => edit((current) => ({ ...current, soundtrack }))} />
+              Music & sound
+            </label>
             {project.topic.trim().toLowerCase() !== project.title.trim().toLowerCase() && (
               <span className="min-w-0 max-w-md truncate" title={project.topic}>
                 {project.topic}
@@ -201,11 +223,13 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <Action tip={llmReady ? "Bonsai re-checks every claim, date and number" : "Start Bonsai first"}>
-            <Button variant="outline" disabled={busy || !llmReady} onClick={() => runJob(() => api.factCheck(id))}>
-              <ShieldCheckIcon /> Fact-check
-            </Button>
-          </Action>
+          {project.style !== "versus" && project.style !== "deepdive" && (
+            <Action tip={llmReady ? "Bonsai re-checks every claim, date and number" : "Start Bonsai first"}>
+              <Button variant="outline" disabled={busy || !llmReady} onClick={() => runJob(() => api.factCheck(id))}>
+                <ShieldCheckIcon /> Fact-check
+              </Button>
+            </Action>
+          )}
           <Action tip={voiceChars ? `Voices changed scenes (about ${voiceChars.toLocaleString()} ElevenLabs characters) and draws changed pictures` : "Rebuild the preview"}>
             <Button variant={stale ? "default" : "outline"} disabled={busy} onClick={() => runJob(() => api.build(id, true))}>
               <RefreshCwIcon className={busy ? "animate-spin" : undefined} /> Update preview
@@ -252,6 +276,28 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(340px,40%)]">
         <div className="min-h-0 overflow-y-auto">
           <div className="grid gap-3 p-4">
+            {project.versus && (
+              <VersusPanel
+                project={project}
+                busy={busy}
+                onEdit={(change) => edit((current) => ({ ...current, versus: change(current.versus!) }))}
+                onUploaded={(saved) => {
+                  setProject(saved);
+                  latest.current = saved;
+                }}
+              />
+            )}
+            {project.deepdive && (
+              <DeepDivePanel
+                project={project}
+                busy={busy}
+                onEdit={(change) => edit((current) => ({ ...current, deepdive: change(current.deepdive!) }))}
+                onUploaded={(saved) => {
+                  setProject(saved);
+                  latest.current = saved;
+                }}
+              />
+            )}
             {project.scenes.map((scene, index) => (
               <SceneCard
                 key={scene.id}
@@ -261,7 +307,8 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
                 }}
                 projectId={id}
                 format={project.format}
-                square={project.style === "whiteboard"}
+                square={lookOf(project, scene) === "whiteboard"}
+                look={project.style === "mixed" ? lookOf(project, scene) : null}
                 scene={scene}
                 index={index}
                 start={starts[index]}
@@ -275,6 +322,11 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
                 onMove={(delta) => moveScene(index, index + delta)}
                 onAddAfter={() => addAfter(index)}
                 onDelete={() => edit((current) => ({ ...current, scenes: current.scenes.filter((candidate) => candidate.id !== scene.id) }))}
+                busy={busy}
+                onUploaded={(saved) => {
+                  setProject(saved);
+                  latest.current = saved;
+                }}
               />
             ))}
 

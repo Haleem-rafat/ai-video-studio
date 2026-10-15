@@ -44,6 +44,14 @@ export const api = {
   status: () => call<Status>("GET", "/api/status"),
   startLlm: () => call("POST", "/api/llm/start"),
   channels: () => call<Channel[]>("GET", "/api/channels"),
+  createChannel: (name: string, language: "en" | "ar") => call<Channel>("POST", "/api/channels", { name, language }),
+  saveChannel: (id: string, edits: Partial<Channel>) => call<Channel>("PUT", `/api/channels/${id}`, edits),
+  addBrandPicture: (id: string, kind: BrandPictureKind, data: string) => call<Channel>("POST", `/api/channels/${id}/assets`, { kind, data }),
+  removeBrandPicture: (id: string, file: string) => call<Channel>("DELETE", `/api/channels/${id}/assets/${file}`),
+  importChannel: (id: string) => call<Job>("POST", `/api/channels/${id}/import`),
+  readStyle: (id: string) => call<Job>("POST", `/api/channels/${id}/style`),
+  cloneVoice: (id: string, data: string) => call<Job>("POST", `/api/channels/${id}/voice`, { data, consent: true }),
+  makeCharacter: (id: string, description: string) => call<Job>("POST", `/api/channels/${id}/character`, { description }),
   topics: (channel: string, format: FormatId, focus: string) => call<Job>("POST", "/api/topics", { channel, format, focus }),
   job: (id: string) => call<Job>("GET", `/api/jobs/${id}`),
   projects: () => call<ProjectSummary[]>("GET", "/api/projects"),
@@ -52,6 +60,8 @@ export const api = {
   save: (id: string, edits: Partial<Project>) => call<ProjectState>("PUT", `/api/projects/${id}`, edits),
   remove: (id: string) => call("DELETE", `/api/projects/${id}`),
   build: (id: string, images: boolean) => call<Job>("POST", `/api/projects/${id}/build`, { images }),
+  scenePhoto: (id: string, target: string, data: string) => call<ProjectState>("POST", `/api/projects/${id}/photo/${target}`, { data }),
+  productPhoto: (id: string, side: "a" | "b", data: string) => call<ProjectState>("POST", `/api/projects/${id}/product/${side}`, { data }),
   render: (id: string, quality: "draft" | "standard" | "high") => call<Job>("POST", `/api/projects/${id}/render`, { quality }),
   factCheck: (id: string) => call<Job>("POST", `/api/projects/${id}/factcheck`),
   youtube: () => call<YouTubeStatus>("GET", "/api/youtube"),
@@ -60,6 +70,19 @@ export const api = {
 };
 
 export type Privacy = "private" | "unlisted" | "public";
+
+export type BrandPictureKind = "logo" | "banner" | "mascot" | "reference" | "photo";
+
+export const brandUrl = (channel: string, file: string) => `/brand/${channel}/${file}`;
+
+/** The fonts a channel can use: system fonts, so every render has them. Mirrors FONTS in src/brand/brand.ts. */
+export const CHANNEL_FONTS: Record<string, string> = {
+  "Avenir Next": "'Avenir Next', Helvetica, sans-serif",
+  "SF Mono": "'SF Mono', Menlo, monospace",
+  "Chalkboard": "'Chalkboard SE', 'Comic Sans MS', sans-serif",
+  "Arabic (SF Arabic)": "'SF Arabic', 'Geeza Pro', 'Avenir Next', sans-serif",
+  "Arabic rounded (Baghdad)": "'Baghdad', 'Geeza Pro', sans-serif",
+};
 
 /** Whether uploads are set up, and the YouTube channel each studio channel is signed in to (null = not yet). */
 export type YouTubeStatus = { configured: boolean; via: "desktop-client" | "framecast" | null; channels: Record<string, { title: string } | null> };

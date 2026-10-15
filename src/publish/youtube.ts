@@ -231,10 +231,19 @@ async function authorize(channel: string): Promise<{ accessToken: string; youtub
   return { accessToken: token.access_token!, youtubeChannel: token.youtubeChannel };
 }
 
+/** A read-only YouTube Data API call as the channel's signed-in account. */
+export async function youtubeApi<T>(channel: string, path: string): Promise<T> {
+  const { accessToken } = await authorize(channel);
+  const response = await fetch(`${API_URL}/${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) throw new Error(`YouTube ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  return (await response.json()) as T;
+}
+
 /** YouTube's limits: title 100 chars, no angle brackets; description 5000 bytes; tags 500 chars in total. */
-function metadata(project: Project, privacy: Privacy, madeForKids: boolean, publishAt?: string) {
+function metadata(project: Project, privacy: Privacy, madeForKids: boolean, publishAt?: string, language = "en") {
   const clean = (text: string) => text.replace(/[<>]/g, "");
-  const hashtags = project.tags.map((tag) => `#${tag.replace(/\s+/g, "")}`).join(" ");
+  // A versus description carries its own hashtags; tags as hashtags would bury them.
+  const hashtags = project.style === "versus" || project.style === "deepdive" ? "" : project.tags.map((tag) => `#${tag.replace(/\s+/g, "")}`).join(" ");
   const tags: string[] = [];
   let tagChars = 0;
   for (const tag of project.tags) {
@@ -248,11 +257,11 @@ function metadata(project: Project, privacy: Privacy, madeForKids: boolean, publ
   return {
     snippet: {
       title: clean(project.title).slice(0, 100),
-      description: clean(`${project.description}\n\n${hashtags}`).slice(0, 4900),
+      description: clean(`${project.description}\n\n${hashtags}`.trim()).slice(0, 4900),
       tags,
       categoryId: CATEGORY_ID,
-      defaultLanguage: "en",
-      defaultAudioLanguage: "en",
+      defaultLanguage: language,
+      defaultAudioLanguage: language,
     },
     // A scheduled video must go up private; YouTube makes it public at publishAt.
     status: publishAt
@@ -264,7 +273,11 @@ function metadata(project: Project, privacy: Privacy, madeForKids: boolean, publ
 export type Upload = { videoId: string; url: string; privacy: Privacy; youtubeChannel: string; uploadedAt: string; scheduledFor?: string };
 
 /** Resumable upload of output/<id>/video.mp4: one session, then the file streamed in a single PUT. */
-export async function uploadVideo(project: Project, videoPath: string, options: { privacy: Privacy; madeForKids: boolean; publishAt?: string }): Promise<Upload> {
+export async function uploadVideo(
+  project: Project,
+  videoPath: string,
+  options: { privacy: Privacy; madeForKids: boolean; publishAt?: string; language?: string; thumbnail?: string },
+): Promise<Upload> {
   const { accessToken, youtubeChannel } = await authorize(project.channel);
   const { size } = await stat(videoPath);
   console.log(
@@ -279,7 +292,7 @@ export async function uploadVideo(project: Project, videoPath: string, options: 
       "X-Upload-Content-Type": "video/mp4",
       "X-Upload-Content-Length": String(size),
     },
-    body: JSON.stringify(metadata(project, options.privacy, options.madeForKids, options.publishAt)),
+    body: JSON.stringify(metadata(project, options.privacy, options.madeForKids, options.publishAt, options.language)),
   });
   const location = session.headers.get("location");
   if (!session.ok || !location) throw new Error(`YouTube refused the upload (${session.status}): ${await session.text()}`);
@@ -304,6 +317,7 @@ export async function uploadVideo(project: Project, videoPath: string, options: 
   if (!response.ok) throw new Error(`YouTube upload failed (${response.status}): ${await response.text()}`);
 
   const video = (await response.json()) as { id: string; status?: { privacyStatus?: Privacy } };
+  if (options.thumbnail) await setThumbnail(accessToken, video.id, options.thumbnail);
   return {
     videoId: video.id,
     url: project.format === "short" ? `https://youtube.com/shorts/${video.id}` : `https://youtu.be/${video.id}`,
@@ -312,4 +326,19 @@ export async function uploadVideo(project: Project, videoPath: string, options: 
     uploadedAt: new Date().toISOString(),
     ...(options.publishAt ? { scheduledFor: options.publishAt } : {}),
   };
+}
+
+/**
+ * Sets a custom thumbnail. YouTube only allows it on phone-verified channels,
+ * so a refusal is reported and the upload still counts.
+ */
+async function setThumbnail(accessToken: string, videoId: string, path: string): Promise<void> {
+  const image = await readFile(path);
+  const response = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${videoId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "image/png", "Content-Length": String(image.length) },
+    body: image,
+  });
+  if (response.ok) console.log("Thumbnail set.");
+  else console.warn(`YouTube kept its own thumbnail (${response.status}): ${(await response.text()).slice(0, 200)}`);
 }

@@ -1,5 +1,7 @@
 import { FORMATS, type Channel } from "../config.ts";
 import type { FormatId, Project, Scene, Visual, Word } from "../types.ts";
+import { brandPaths } from "../brand/brand.ts";
+import { brandBadge } from "./brand-badge.ts";
 import { mascotSvg } from "./mascots.ts";
 
 /** Seconds each scene stays on screen under the next one while it wipes in. */
@@ -94,8 +96,12 @@ export function buildComposition(project: Project, channel: Channel): string {
     ? { stageTop: 170, stageBottom: 820, captionLeft: 300, captionRight: 150, captionBottom: 470, mascotLeft: 40, mascotBottom: 430, mascotWidth: 250 }
     : { stageTop: 90, stageBottom: 250, captionLeft: 260, captionRight: 160, captionBottom: 50, mascotLeft: 40, mascotBottom: 30, mascotWidth: 190 };
 
+  const badge = brandBadge(channel, u, { top: isShort ? 40 : 28, side: "center" });
+  const ownMascot = brandPaths(channel).mascots[0];
+  const rtl = channel.language === "ar";
+
   return `<!doctype html>
-<html lang="en">
+<html lang="${rtl ? "ar" : "en"}" dir="${rtl ? "rtl" : "ltr"}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=${width}, height=${height}" />
@@ -136,15 +142,17 @@ export function buildComposition(project: Project, channel: Channel): string {
       .bar { height: ${80 * u}px; background: ${c.accent}; border-radius: ${10 * u}px; transform-origin: left center; display: flex; align-items: center; justify-content: flex-end; padding-right: ${18 * u}px; color: ${c.background}; text-shadow: none; box-sizing: border-box; }
       .caption { position: absolute; left: ${layout.captionLeft * u}px; right: ${layout.captionRight * u}px; bottom: ${layout.captionBottom * u}px; height: ${(isShort ? 260 : 150) * u}px; }
       .chunk { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; opacity: 0; background: ${c.panel}f2; border-radius: ${28 * u}px; padding: 0 ${30 * u}px; font-size: ${(isShort ? 66 : 50) * u}px; font-weight: 800; line-height: 1.15; color: ${c.text}; box-shadow: 0 ${10 * u}px ${30 * u}px #0007; }
-      .chunk p { margin: 0; }
+      .chunk p { margin: 0; }${badge.css}
+      #mascot img { width: 100%; height: 100%; object-fit: contain; object-position: bottom; }${ownMascot ? `
+      #mascot { height: ${layout.mascotWidth * 1.7 * u}px; }` : ""}
       .chunk::before { content: ""; position: absolute; left: ${-26 * u}px; bottom: ${40 * u}px; border: ${16 * u}px solid transparent; border-right: ${28 * u}px solid ${c.panel}f2; border-left: 0; }
     </style>
   </head>
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="${total}" data-width="${width}" data-height="${height}">
       <div id="progress"></div>
-      <div id="brand">${escapeHtml(channel.name)}</div>
-      <div id="mascot">${mascotSvg(channel)}</div>${sections.join("")}
+      ${badge.html}
+      <div id="mascot">${ownMascot ? `<img id="m-body" src="${ownMascot}" alt="" />` : mascotSvg(channel)}</div>${sections.join("")}
     </div>
     <script>
       window.__timelines = window.__timelines || {};
@@ -307,6 +315,9 @@ function visualHtml(id: string, v: Visual): string {
         .join("")}</pre>`;
     case "chapter":
       return `<div id="${id}-kicker" class="kicker">Chapter ${v.number}</div><div id="${id}-rule" class="rule"></div><h1 id="${id}-headline" class="headline">${escapeHtml(v.headline)}</h1>`;
+    case "versus":
+    case "deepdive":
+      return `<h1 id="${id}-headline" class="headline">${escapeHtml(v.title)}</h1>`;
     default:
       return `<h1 id="${id}-headline" class="headline">${escapeHtml(v.headline)}</h1>`;
   }

@@ -5,3 +5,7 @@ output/
 .env
 dist/
 config/youtube/
+
+# Channel logos, character poses, photos and voice samples: personal, kept local.
+config/brand/
+bin/cutout

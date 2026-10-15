@@ -1,4 +1,5 @@
 import { FORMATS, type Channel } from "../config.ts";
+import { brandBadge } from "./brand-badge.ts";
 import type { Project, Visual, Word } from "../types.ts";
 import { captionChunks, parseCounter, placeScenes, totalSeconds, type TimedScene } from "./composition.ts";
 
@@ -61,6 +62,10 @@ function visualText(v: Visual): string[] {
       return [v.text, v.author ?? ""];
     case "code":
       return [v.headline];
+    case "versus":
+      return [v.title, ...v.rows.flatMap((row) => [row.a, row.b])];
+    case "deepdive":
+      return [v.title, ...v.items.flatMap((item) => [item.label, item.note ?? ""])];
     default:
       return [v.headline];
   }
@@ -69,7 +74,7 @@ function visualText(v: Visual): string[] {
 /** The scene's headline, or its first sentence when the visual has none. */
 function headlineOf(scene: { visual: Visual; narration: string }): string {
   const v = scene.visual;
-  const text = v.type === "stat" ? v.label : v.type === "quote" ? (v.author ?? v.text) : v.type === "compare" ? `${v.left.label} vs ${v.right.label}` : v.headline;
+  const text = v.type === "stat" ? v.label : v.type === "quote" ? (v.author ?? v.text) : v.type === "compare" ? `${v.left.label} vs ${v.right.label}` : v.type === "versus" || v.type === "deepdive" ? v.title : v.headline;
   return String(text ?? "").trim() || scene.narration.split(/(?<=[.!?])\s/)[0];
 }
 
@@ -93,8 +98,9 @@ function stepsOf(scenes: TimedScene[], total: number): Step[] {
   if (firsts.length >= 2) {
     if (firsts[0] !== 0) firsts = [0, ...firsts];
   } else {
-    const n = Math.min(5, Math.max(2, Math.round(scenes.length / 3)));
-    firsts = [...new Set(Array.from({ length: n }, (_, k) => Math.round((k * scenes.length) / n)))];
+    // Never more steps than scenes: a mixed video's explainer segment can be one scene long.
+    const n = Math.min(scenes.length, 5, Math.max(2, Math.round(scenes.length / 3)));
+    firsts = [...new Set(Array.from({ length: n }, (_, k) => Math.floor((k * scenes.length) / n)))];
   }
   return firsts.map((index, k) => ({
     start: scenes[index].start,
@@ -308,7 +314,7 @@ function laptopScreen(id: string, v: Visual, channel: Channel, seconds: number, 
 
 // ---------------------------------------------------------------- page
 
-export function buildExplainer(project: Project, channel: Channel): string {
+export function buildExplainer(project: Project, channel: Channel, options: { cta?: boolean; header?: boolean } = {}): string {
   const device: Device = channel.device ?? "phone";
   const accent = ACCENT[device];
   const { width, height } = FORMATS[project.format];
@@ -363,8 +369,8 @@ export function buildExplainer(project: Project, channel: Channel): string {
       .join("");
   });
 
-  // The ending: a Subscribe button the cursor clicks.
-  const cta = Math.max(0, total - 2.6);
+  // The ending: a Subscribe button the cursor clicks (only the last segment of a mixed video has it).
+  const cta = options.cta === false ? total + 10 : Math.max(0, total - 2.6);
   t.push(`tl.fromTo("#cta", { opacity: 0, y: 20, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "back.out(2)" }, ${r(cta)});`);
   t.push(`tl.fromTo("#cursor", { opacity: 0, x: 160, y: 120 }, { opacity: 1, x: 0, y: 0, duration: 0.6, ease: "power2.out" }, ${r(cta + 0.3)});`);
   t.push(`tl.to("#cta", { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, ${r(cta + 0.95)});`);
@@ -378,8 +384,10 @@ export function buildExplainer(project: Project, channel: Channel): string {
   const deviceBox = device === "phone" ? PHONE : LAPTOP;
   const headerAlign = h.align === "center" ? `left:${h.x}px; transform:translateX(-50%); align-items:center;` : `left:${h.x}px; align-items:flex-start;`;
 
+  const badge = brandBadge(channel, height / 1080 > 1.5 ? 1.4 : 1, { top: 22, side: "right", dark: true });
+
   return `<!doctype html>
-<html lang="en">
+<html lang="${channel.language === "ar" ? "ar" : "en"}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=${width}, height=${height}" />
@@ -395,7 +403,7 @@ export function buildExplainer(project: Project, channel: Channel): string {
       .muted { color: #8a8178; } .small { font-size: 20px; }
       .mono, pre { font-family: "JetBrains Mono", ui-monospace, monospace; }
 
-      #header { position: absolute; top: ${h.y}px; ${headerAlign} display: flex; flex-direction: column; gap: 22px; z-index: 5; }
+      #header { display: ${options.header === false ? "none" : "flex"}; position: absolute; top: ${h.y}px; ${headerAlign} flex-direction: column; gap: 22px; z-index: 5; }
       .labels { position: relative; height: 74px; min-width: 300px; }
       .label { position: absolute; ${h.align === "center" ? "left: 50%; transform: translateX(-50%);" : "left: 0;"} top: 0; white-space: nowrap; opacity: 0;
         background: #fff; border-radius: 999px; padding: 14px 30px 18px; font-size: 36px; font-weight: 700; box-shadow: 0 6px 20px #0000000f; }
@@ -494,11 +502,12 @@ export function buildExplainer(project: Project, channel: Channel): string {
       .cta { position: absolute; left: ${h.align === "center" ? width / 2 : c.left}px; top: ${c.top + c.height + 20}px; ${h.align === "center" ? "transform: translateX(-50%);" : ""}
         background: #ff0033; color: #fff; border-radius: 999px; padding: 18px 40px; font-size: 32px; font-weight: 800; opacity: 0; z-index: 6; white-space: nowrap; }
       .cta .after { display: none; } .cta.done { background: #e9e3da; color: ${INK}; } .cta.done .before { display: none; } .cta.done .after { display: inline; }
-      #cursor { position: absolute; right: -26px; bottom: -34px; width: 44px; opacity: 0; }
+      #cursor { position: absolute; right: -26px; bottom: -34px; width: 44px; opacity: 0; }${badge.css}
     </style>
   </head>
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="${total}" data-width="${width}" data-height="${height}">
+      ${badge.html}
       <div id="header">
         <div class="labels">${labels.join("")}</div>
         <div class="chips"><span class="series">${esc(channel.name)}</span>${chips}</div>

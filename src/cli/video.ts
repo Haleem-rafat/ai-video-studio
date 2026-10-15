@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import { parseArgs } from "node:util";
 
 import { build, createProject } from "../pipeline.ts";
+import type { StyleId } from "../types.ts";
 
 const USAGE = `
 Make a video, start to finish:
@@ -14,7 +15,7 @@ Options:
   --channel    dev-pixel | money-mechanics | kido-fun-zone
   --format     short (9:16, ~70s) | long (16:9, ~8 min)
   --topic      what the video is about
-  --style      motion (default) | whiteboard (a hand draws doodles on paper) | explainer (a phone or laptop showing app screens)
+  --style      motion (default) | whiteboard (a hand draws doodles on paper) | explainer (a phone or laptop showing app screens) | mixed (each scene its own look)
   --project    rebuild this project instead of writing a new script
   --no-images  skip AI background pictures
   --no-render  stop after index.html (preview with: cd output/<id> && npx hyperframes preview)
@@ -46,8 +47,8 @@ async function main(): Promise<void> {
   if (!id) {
     if (!values.channel || !values.topic) throw new Error(`--channel and --topic are required.\n${USAGE}`);
     if (values.format !== "short" && values.format !== "long") throw new Error("--format is short or long.");
-    if (values.style !== "motion" && values.style !== "whiteboard" && values.style !== "explainer") throw new Error("--style is motion, whiteboard or explainer.");
-    id = (await createProject(values.channel, values.format, values.topic, values.style)).id;
+    if (!["motion", "whiteboard", "explainer", "mixed"].includes(values.style!)) throw new Error("--style is motion, whiteboard, explainer or mixed.");
+    id = (await createProject(values.channel, values.format, values.topic, values.style as StyleId)).id;
   }
 
   const started = Date.now();

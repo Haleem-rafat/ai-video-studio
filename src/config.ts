@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { FormatId } from "./types.ts";
@@ -18,9 +18,37 @@ export function requireEnv(name: string): string {
 
 export type MascotKind = "robot" | "coin" | "bear";
 
+/**
+ * A channel's own look, kept in config/brand/<channel>/: the logo and @handle
+ * every video carries, mascot poses that replace the drawn mascot, and the
+ * reference pictures (recent thumbnails) its style was read from.
+ */
+export type Brand = {
+  handle?: string;
+  logo?: string;
+  banner?: string;
+  /** Transparent PNG poses of the channel's character; the first is the main one. */
+  mascots?: string[];
+  references?: string[];
+  /** The photo a character was made from. */
+  photo?: string;
+  youtube?: { id: string; title: string; importedAt: string };
+};
+
 export type Channel = {
   id: string;
   name: string;
+  /** Narration and on-screen language. Arabic lays text out right to left. */
+  language?: "en" | "ar";
+  /** How the narration is written and spoken, e.g. "Egyptian colloquial Arabic". */
+  dialect?: string;
+  /**
+   * Narrates with Gemini instead of ElevenLabs (voiceId) when set: `voice` is
+   * a Gemini voice name, `style` the reading direction. A cloned ElevenLabs
+   * voice replaces it by clearing this and setting voiceId.
+   */
+  narrator?: { provider: "gemini"; voice: string; style?: string };
+  brand?: Brand;
   audience: string;
   tone: string;
   /** ElevenLabs voice id. */
@@ -54,6 +82,21 @@ export const FORMATS: Record<FormatId, Format> = {
 export function loadChannels(): Channel[] {
   const all = JSON.parse(readFileSync(join(ROOT, "config", "channels.json"), "utf8")) as Record<string, Omit<Channel, "id">>;
   return Object.entries(all).map(([id, channel]) => ({ id, ...channel }));
+}
+
+export const BRAND_DIR = join(ROOT, "config", "brand");
+
+export function brandDir(id: string): string {
+  return join(BRAND_DIR, id);
+}
+
+/** Writes one channel back to channels.json, keeping the others and their order. */
+export function saveChannel(channel: Channel): void {
+  const path = join(ROOT, "config", "channels.json");
+  const all = JSON.parse(readFileSync(path, "utf8")) as Record<string, Omit<Channel, "id">>;
+  const { id, ...rest } = channel;
+  all[id] = rest;
+  writeFileSync(path, `${JSON.stringify(all, null, 2)}\n`);
 }
 
 export function loadChannel(id: string): Channel {

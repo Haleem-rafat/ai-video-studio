@@ -4,14 +4,19 @@ import { mkdir, readFile, rename, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
 
-import { LLM_URL, OUTPUT_DIR, ROOT, loadChannel, loadChannels } from "../config.ts";
+import { addAsset, cloneVoice, FONTS, importFromYouTube, makeCharacter, readStyle, removeAsset, type AssetKind } from "../brand/brand.ts";
+import { LLM_URL, OUTPUT_DIR, ROOT, brandDir, loadChannel, loadChannels, saveChannel, type Channel } from "../config.ts";
 import { imageIsCurrent } from "../media/images.ts";
-import { voiceIsCurrent } from "../media/voice.ts";
+import { narratorKey, voiceIsCurrent } from "../media/voice.ts";
 import { build, compose, createProject, factCheck, render } from "../pipeline.ts";
 import { listProjects, loadProject, projectDir, saveProject } from "../project.ts";
 import { completeSignIn, connectionStatus, signIn, uploadVideo, type Privacy } from "../publish/youtube.ts";
+import { lookOf } from "../render/looks.ts";
 import { suggestTopics } from "../script/topics.ts";
-import { STYLES, VISUAL_TYPES, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
+import { productsOf } from "../script/versus.ts";
+import { addProductPhoto } from "../media/products.ts";
+import { addScenePhoto } from "../media/photos.ts";
+import { LOOKS, STYLES, VISUAL_TYPES, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
 import { enqueue, getJob, recentJobs } from "./jobs.ts";
 
 const PORT = Number(process.env.PORT ?? 4300);
@@ -26,6 +31,7 @@ const TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".jpg": "image/jpeg",
+  ".webp": "image/webp",
   ".mp3": "audio/mpeg",
   ".wav": "audio/wav",
   ".mp4": "video/mp4",
@@ -154,8 +160,8 @@ function withState(project: Project) {
     hasVideo: existsSync(join(dir, "video.mp4")),
     scenes: project.scenes.map((scene) => ({
       ...scene,
-      voiceCurrent: voiceIsCurrent(dir, scene, channel.voiceId),
-      imageCurrent: imageIsCurrent(dir, scene, project.style),
+      voiceCurrent: voiceIsCurrent(dir, scene, narratorKey(channel)),
+      imageCurrent: imageIsCurrent(dir, scene, lookOf(project, scene)),
     })),
   };
 }
@@ -165,10 +171,35 @@ function applyEdits(project: Project, edits: Partial<Project>): Project {
   if (typeof edits.title === "string") project.title = edits.title;
   if (typeof edits.description === "string") project.description = edits.description;
   if (Array.isArray(edits.tags)) project.tags = edits.tags.map(String);
-  if (edits.style !== undefined) {
-    if (!STYLES.includes(edits.style)) throw new HttpError(400, "Style is motion, whiteboard or explainer.");
+  if (edits.style !== undefined && edits.style !== project.style) {
+    if (!STYLES.includes(edits.style)) throw new HttpError(400, `Style is one of ${STYLES.join(", ")}.`);
+    // Versus and deep-dive scenes are their own kind; other looks can't show them, and vice versa.
+    const own = ["versus", "deepdive"];
+    if (own.includes(edits.style) || own.includes(project.style ?? "")) throw new HttpError(400, "A versus or deep-dive video can't switch to another look. Start a new video instead.");
     project.style = edits.style;
   }
+  if (edits.versus && project.versus) {
+    for (const side of ["a", "b"] as const) {
+      const next = edits.versus[side];
+      if (!next) continue;
+      project.versus[side] = {
+        ...project.versus[side],
+        name: String(next.name ?? project.versus[side].name),
+        short: String(next.short ?? project.versus[side].short),
+        color: /^#[0-9a-fA-F]{6}$/.test(String(next.color)) ? String(next.color) : project.versus[side].color,
+      };
+    }
+    if (typeof edits.versus.hook === "string") project.versus.hook = edits.versus.hook;
+    if (edits.versus.thumbnail) project.versus.thumbnail = { ...project.versus.thumbnail, ...edits.versus.thumbnail, headline: String(edits.versus.thumbnail.headline ?? project.versus.thumbnail?.headline ?? "") };
+  }
+  if (edits.deepdive && project.deepdive) {
+    if (typeof edits.deepdive.hook === "string") project.deepdive.hook = edits.deepdive.hook;
+    if (edits.deepdive.thumbnail) project.deepdive.thumbnail = { ...project.deepdive.thumbnail, ...edits.deepdive.thumbnail, headline: String(edits.deepdive.thumbnail.headline ?? project.deepdive.thumbnail?.headline ?? "") };
+    const query = edits.deepdive.cover?.query;
+    // A new search drops the old photo; the next preview update finds one.
+    if (typeof query === "string" && query.trim() !== project.deepdive.cover?.query) project.deepdive.cover = { query: query.trim() };
+  }
+  if (typeof edits.soundtrack === "boolean") project.soundtrack = edits.soundtrack;
 
   if (Array.isArray(edits.scenes)) {
     const previous = new Map(project.scenes.map((scene) => [scene.id, scene]));
@@ -176,12 +207,20 @@ function applyEdits(project: Project, edits: Partial<Project>): Project {
       if (!/^s[a-z0-9]+$/.test(edit.id)) throw new HttpError(400, `Bad scene id "${edit.id}"`);
       if (!VISUAL_TYPES.includes(edit.visual?.type)) throw new HttpError(400, `Bad visual on ${edit.id}`);
       const old = previous.get(edit.id);
+      if (edit.visual.type === "deepdive" && edit.visual.photo) {
+        const before = old?.visual.type === "deepdive" ? old.visual.photo : undefined;
+        const query = String(edit.visual.photo.query ?? "").trim();
+        // Keep the found or uploaded photo unless its search words changed.
+        edit.visual.photo = query === before?.query && before?.path ? before : query ? { query } : undefined;
+        if (!edit.visual.photo) delete edit.visual.photo;
+      }
       return {
         id: edit.id,
         narration: String(edit.narration ?? ""),
         visual: edit.visual,
         imagePrompt: String(edit.imagePrompt ?? ""),
         imageSeed: Number(edit.imageSeed ?? old?.imageSeed ?? 0),
+        ...(edit.look && LOOKS.includes(edit.look) ? { look: edit.look } : {}),
         image: old?.image,
         audio: old?.audio,
       };
@@ -210,7 +249,78 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     return json(response, 200, { ok: true });
   }
 
-  if (path === "/api/channels") return json(response, 200, loadChannels());
+  if (path === "/api/channels" && method === "GET") return json(response, 200, loadChannels());
+
+  if (path === "/api/channels" && method === "POST") {
+    const input = await body<{ name?: string; language?: "en" | "ar" }>(request);
+    const name = input.name?.trim();
+    if (!name) throw new HttpError(400, "Give the channel a name");
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `channel-${Date.now().toString(36)}`;
+    if (loadChannels().some((channel) => channel.id === id)) throw new HttpError(409, `A channel called "${id}" already exists`);
+    const arabic = input.language === "ar";
+    const channel: Channel = {
+      id,
+      name,
+      language: arabic ? "ar" : "en",
+      audience: "curious viewers who like clear, quick explanations",
+      tone: "clear, friendly and energetic",
+      voiceId: loadChannels()[0]?.voiceId ?? "",
+      imageStyle: "clean modern illustration, soft studio lighting, no text, no letters",
+      mascot: { kind: "robot", name: "Pixel" },
+      colors: { background: "#0f172a", panel: "#1e293b", text: "#f8fafc", accent: "#f97316", muted: "#94a3b8" },
+      font: arabic ? FONTS["Arabic (SF Arabic)"] : FONTS["Avenir Next"],
+      device: "laptop",
+      brand: {},
+    };
+    saveChannel(channel);
+    return json(response, 201, channel);
+  }
+
+  if ((match = path.match(/^\/api\/channels\/([a-z0-9-]+)$/)) && method === "PUT") {
+    const channel = loadChannel(match[1]);
+    const edits = await body<Partial<Channel>>(request);
+    const allowed = ["name", "language", "audience", "tone", "voiceId", "imageStyle", "colors", "font", "device", "mascot"] as const;
+    const next: Channel = { ...channel };
+    for (const key of allowed) if (edits[key] !== undefined) (next as Record<string, unknown>)[key] = edits[key];
+    if (edits.brand?.handle !== undefined) next.brand = { ...channel.brand, handle: edits.brand.handle.trim() || undefined };
+    if (!/^#[0-9a-fA-F]{6}$/.test(next.colors.accent)) throw new HttpError(400, "Colors must be #rrggbb");
+    saveChannel(next);
+    return json(response, 200, next);
+  }
+
+  if ((match = path.match(/^\/api\/channels\/([a-z0-9-]+)\/assets$/)) && method === "POST") {
+    const input = await body<{ kind: AssetKind; data: string }>(request);
+    if (!["logo", "banner", "mascot", "reference", "photo"].includes(input.kind)) throw new HttpError(400, "Unknown picture kind");
+    return json(response, 200, await addAsset(match[1], input.kind, input.data));
+  }
+
+  if ((match = path.match(/^\/api\/channels\/([a-z0-9-]+)\/voice$/)) && method === "POST") {
+    const id = match[1];
+    const input = await body<{ data: string; consent?: boolean }>(request);
+    if (!input.consent) throw new HttpError(400, "Confirm the recording is your own voice");
+    return json(response, 202, enqueue(`Clone ${loadChannel(id).name}'s voice`, () => cloneVoice(id, input.data)));
+  }
+
+  if ((match = path.match(/^\/api\/channels\/([a-z0-9-]+)\/assets\/([\w.-]+)$/)) && method === "DELETE") {
+    return json(response, 200, await removeAsset(match[1], match[2]));
+  }
+
+  if ((match = path.match(/^\/api\/channels\/([a-z0-9-]+)\/(import|style|character)$/)) && method === "POST") {
+    const [, id, action] = match;
+    const channel = loadChannel(id);
+    const input = await body<{ description?: string }>(request);
+    const job =
+      action === "import"
+        ? enqueue(`Import ${channel.name} from YouTube`, () => importFromYouTube(id))
+        : action === "style"
+          ? enqueue(`Read ${channel.name}'s style`, () => readStyle(loadChannel(id)))
+          : enqueue(`Make ${channel.name}'s character`, () => makeCharacter(id, input.description ?? ""));
+    return json(response, 202, job);
+  }
+
+  if ((match = path.match(/^\/brand\/([a-z0-9-]+)\/([\w.-]+)$/))) {
+    return sendFile(request, response, inside(brandDir(match[1]), match[2]));
+  }
 
   if (path === "/api/topics" && method === "POST") {
     const input = await body<{ channel: string; format: FormatId; focus?: string; count?: number }>(request);
@@ -233,7 +343,8 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     if (!input.topic?.trim()) throw new HttpError(400, "A topic is required.");
     if (input.format !== "short" && input.format !== "long") throw new HttpError(400, "Format is short or long.");
     const style = input.style ?? "motion";
-    if (!STYLES.includes(style)) throw new HttpError(400, "Style is motion, whiteboard or explainer.");
+    if (!STYLES.includes(style)) throw new HttpError(400, `Style is one of ${STYLES.join(", ")}.`);
+    if (style === "versus" && !productsOf(input.topic)) throw new HttpError(400, 'For a versus video, write the topic as "Product A vs Product B".');
     loadChannel(input.channel);
     const job = enqueue(`Write script: ${input.topic}`, async () => (await createProject(input.channel, input.format, input.topic.trim(), style)).id);
     return json(response, 202, job);
@@ -305,7 +416,14 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     const job = enqueue(
       label,
       async () => {
-        const upload = await uploadVideo(await loadProject(id), videoPath, { privacy, madeForKids: channel.madeForKids ?? false, publishAt: input.publishAt });
+        const thumbnail = join(projectDir(id), "thumbnail.png");
+        const upload = await uploadVideo(await loadProject(id), videoPath, {
+          privacy,
+          madeForKids: channel.madeForKids ?? false,
+          publishAt: input.publishAt,
+          language: channel.language ?? "en",
+          thumbnail: existsSync(thumbnail) ? thumbnail : undefined,
+        });
         // Re-read so edits made during the upload are kept.
         const latest = await loadProject(id);
         latest.youtube = upload;
@@ -318,6 +436,22 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     return json(response, 202, job);
   }
 
+  if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)\/product\/(a|b)$/)) && method === "POST") {
+    const [, id, side] = match;
+    const input = await body<{ data: string }>(request);
+    const project = await addProductPhoto(projectDir(id), await loadProject(id), side as "a" | "b", input.data);
+    await saveProject(project);
+    return json(response, 200, withState(project));
+  }
+
+  if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)\/photo\/(cover|s[a-z0-9]+)$/)) && method === "POST") {
+    const [, id, target] = match;
+    const input = await body<{ data: string }>(request);
+    const project = await addScenePhoto(projectDir(id), await loadProject(id), target, input.data);
+    await saveProject(project);
+    return json(response, 200, withState(project));
+  }
+
   if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)\/compose$/)) && method === "POST") {
     await compose(match[1]);
     return json(response, 200, { ok: true });
@@ -326,7 +460,8 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   if ((match = path.match(/^\/files\/([a-z0-9-]+)\/(.+)$/))) {
     const dir = projectDir(match[1]);
     const file = inside(dir, match[2]);
-    const preview = url.searchParams.has("preview") && file.endsWith("index.html");
+    // Any composition can be previewed: a mixed video's segments are run-N.html.
+    const preview = url.searchParams.has("preview") && file.endsWith(".html");
     return sendFile(request, response, file, preview ? `<script>${await readFile(PREVIEW_RUNTIME, "utf8")}</script>` : undefined);
   }
 
@@ -350,3 +485,21 @@ createServer((request, response) => {
   console.log(`AI Video Studio: http://localhost:${PORT}`);
   if (process.env.OPEN) spawn("open", [`http://localhost:${PORT}`]);
 });
+
+/**
+ * Google sends YouTube sign-ins to Framecast's callback (localhost:3000).
+ * When Framecast isn't running, the studio stands in on that port for the
+ * callback alone and passes it here; when Framecast is up, it keeps the port.
+ */
+const FRAMECAST_PORT = 3000;
+const standIn = createServer((request, response) => {
+  const url = new URL(request.url ?? "/", "http://localhost");
+  if (url.pathname !== "/api/youtube/callback") {
+    response.writeHead(404, { "Content-Type": "text/plain" });
+    return void response.end("Only the studio's YouTube sign-in is handled here while Framecast is off.");
+  }
+  response.writeHead(302, { Location: `http://localhost:${PORT}/api/youtube/callback${url.search}` });
+  response.end();
+});
+standIn.on("error", () => {});
+standIn.listen(FRAMECAST_PORT, "127.0.0.1");

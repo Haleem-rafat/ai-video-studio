@@ -31,11 +31,56 @@
 
   /** Where a page's picture and its writing go. */
   function regions(hasImage) {
-    if (!hasImage) return { image: null, text: PORTRAIT ? { x: 90, y: 300, w: 900, h: 1000 } : { x: 200, y: 140, w: 1520, h: 800 } };
+    // With captions on, the writing gives up the bottom strip to them.
+    const cap = DATA.captions ? (PORTRAIT ? 150 : 110) : 0;
+    if (!hasImage) return { image: null, text: PORTRAIT ? { x: 90, y: 300, w: 900, h: 1000 - cap } : { x: 200, y: 140, w: 1520, h: 800 - cap } };
     // Shorts keep clear of YouTube's buttons (right) and title (bottom ~400px).
     return PORTRAIT
-      ? { image: { x: 140, y: 170, w: 800, h: 800 }, text: { x: 80, y: 1010, w: 860, h: 520 } }
-      : { image: { x: 70, y: 110, w: 860, h: 860 }, text: { x: 990, y: 150, w: 860, h: 780 } };
+      ? { image: { x: 140, y: 170, w: 800, h: 800 }, text: { x: 80, y: 1010, w: 860, h: 520 - cap } }
+      : { image: { x: 70, y: 110, w: 860 - cap, h: 860 - cap }, text: { x: 990, y: 150, w: 860, h: 780 - cap } };
+  }
+
+  // ------------------------------------------------------------ captions
+
+  /**
+   * Karaoke captions over the paper, the same as the explainer's: each chunk
+   * fades in faded, and every word turns to ink as it is spoken. Built as DOM
+   * on top of the canvas and driven by the same timeline.
+   */
+  function buildCaptions(tl) {
+    const box = document.createElement("div");
+    box.id = "wbcap";
+    box.style.cssText = PORTRAIT
+      ? "position:absolute;left:70px;right:70px;top:1395px;height:140px;"
+      : "position:absolute;left:160px;right:160px;top:925px;height:120px;";
+    document.getElementById("root").appendChild(box);
+    const size = PORTRAIT ? 56 : 46;
+    const max = PORTRAIT ? 8 : 12;
+    for (const scene of DATA.scenes) {
+      const chunks = [];
+      let current = [];
+      for (const word of scene.words) {
+        current.push(word);
+        if (current.length >= max || /[.!?]$/.test(word.text)) { chunks.push(current); current = []; }
+      }
+      if (current.length) chunks.push(current);
+      chunks.forEach((chunk, ci) => {
+        const p = document.createElement("p");
+        p.style.cssText = `position:absolute;inset:0;margin:0;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;column-gap:0.28em;font:700 ${size}px/1.2 Inter,-apple-system,sans-serif;letter-spacing:-0.5px;color:#cdc5ba;opacity:0;text-align:center;`;
+        const spans = chunk.map((word) => {
+          const span = document.createElement("span");
+          span.textContent = word.text;
+          p.appendChild(span);
+          return span;
+        });
+        box.appendChild(p);
+        const show = scene.start + chunk[0].start;
+        const next = chunks[ci + 1];
+        tl.set(p, { opacity: 1 }, show);
+        tl.set(p, { opacity: 0 }, next ? scene.start + next[0].start : scene.start + scene.duration);
+        chunk.forEach((word, wi) => tl.set(spans[wi], { color: "#1c1917" }, scene.start + word.start));
+      });
+    }
   }
 
   /** The handwritten pieces a visual becomes, top to bottom. */
@@ -532,6 +577,7 @@
       const tl = gsap.timeline({ paused: true });
       const clock = { t: 0 };
       tl.to(clock, { t: DATA.total, duration: DATA.total, ease: "none", onUpdate: () => renderAt(clock.t) }, 0);
+      if (DATA.captions) buildCaptions(tl);
       window.__timelines.main = tl;
     });
 })();

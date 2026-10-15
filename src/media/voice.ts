@@ -5,7 +5,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { requireEnv } from "../config.ts";
+import { readFile } from "node:fs/promises";
+
+import { generateSpeech, transcribe } from "ai";
+
+import { requireEnv, type Channel } from "../config.ts";
 import type { Scene, Word } from "../types.ts";
 
 const run = promisify(execFile);
@@ -89,11 +93,58 @@ export async function voiceScene(projectDir: string, scene: Scene, voiceId: stri
   };
 }
 
-/** Voices every scene whose narration changed; returns how many were spoken. */
-export async function voiceProject(projectDir: string, scenes: Scene[], voiceId: string): Promise<number> {
-  const stale = scenes.map((scene, index) => ({ scene, index })).filter(({ scene }) => !voiceIsCurrent(projectDir, scene, voiceId));
+/** What a channel's narration is spoken with: an ElevenLabs voice id, or "gemini:<voice>". */
+export function narratorKey(channel: Channel): string {
+  return channel.narrator ? `gemini:${channel.narrator.voice}` : channel.voiceId;
+}
 
-  await inBatches(stale, 3, ({ scene, index }) => voiceScene(projectDir, scene, voiceId, scenes[index - 1]?.narration, scenes[index + 1]?.narration));
+/**
+ * Speaks one scene with Gemini through the AI Gateway. Gemini returns no
+ * timings, so Whisper listens back for word times; its words can differ from
+ * the script (digits for numbers), which the captions allow for.
+ */
+export async function voiceSceneGemini(projectDir: string, scene: Scene, channel: Channel): Promise<void> {
+  const narrator = channel.narrator!;
+  const { audio } = await generateSpeech({
+    model: "google/gemini-3.8-flash-tts",
+    voice: narrator.voice,
+    text: scene.narration,
+    instructions: narrator.style ?? `Read naturally in ${channel.dialect ?? (channel.language === "ar" ? "Arabic" : "English")}: ${channel.tone}`,
+  });
+  const key = narratorKey(channel);
+  const take = createHash("sha1").update(`${key}:${scene.narration}`).digest("hex").slice(0, 8);
+  const path = `audio/${scene.id}-${take}.mp3`;
+  const raw = join(projectDir, `audio/${scene.id}-${take}.raw`);
+
+  await mkdir(join(projectDir, "audio"), { recursive: true });
+  await writeFile(raw, audio.uint8Array);
+  // Trims the silence Gemini leaves at both ends.
+  await run("ffmpeg", ["-v", "error", "-y", "-i", raw, "-af", "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse", "-ar", "44100", "-b:a", "160k", join(projectDir, path)]);
+  await run("rm", ["-f", raw]);
+
+  const heard = await transcribe({
+    model: "openai/whisper-1",
+    audio: await readFile(join(projectDir, path)),
+    providerOptions: { openai: { language: channel.language ?? "en", timestampGranularities: ["word"] } },
+  });
+
+  scene.audio = {
+    path,
+    text: scene.narration,
+    voiceId: key,
+    seconds: await audioSeconds(join(projectDir, path)),
+    words: heard.segments.map((word) => ({ text: word.text, start: word.startSecond, end: word.endSecond })),
+  };
+}
+
+/** Voices every scene whose narration changed; returns how many were spoken. */
+export async function voiceProject(projectDir: string, scenes: Scene[], channel: Channel): Promise<number> {
+  const key = narratorKey(channel);
+  const stale = scenes.map((scene, index) => ({ scene, index })).filter(({ scene }) => !voiceIsCurrent(projectDir, scene, key));
+
+  await inBatches(stale, 3, ({ scene, index }) =>
+    channel.narrator ? voiceSceneGemini(projectDir, scene, channel) : voiceScene(projectDir, scene, key, scenes[index - 1]?.narration, scenes[index + 1]?.narration),
+  );
 
   return stale.length;
 }

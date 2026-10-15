@@ -60,7 +60,7 @@ Limits: each upload costs 1,600 of the API's 10,000 daily units (about 6 uploads
 | `prompts/` | Every prompt Bonsai gets (edit freely) |
 | `output/<id>/` | One video: `project.json`, `audio/`, `images/`, `index.html`, `video.mp4`, `youtube.txt` |
 
-Keys live in `.env` (`ELEVENLABS_API_KEY`, `FAL_KEY`). The model and its llama.cpp build live in `~/ai/bonsai`
+Keys live in `.env` (`ELEVENLABS_API_KEY`, and `AI_GATEWAY_API_KEY` for pictures — `FAL_KEY` is used instead when there is no gateway key). The model and its llama.cpp build live in `~/ai/bonsai`
 (set `BONSAI_DIR` to move them).
 
 ## One-time setup (already done on this Mac)

@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { generateImage } from "ai";
+
 import { requireEnv, type Channel } from "../config.ts";
 import type { FormatId, Scene, StyleId } from "../types.ts";
 import { inBatches } from "./voice.ts";
@@ -11,6 +13,13 @@ const MODEL_URL = "https://fal.run/fal-ai/flux/schnell";
 // FLUX dev for whiteboard doodles: schnell's line art is too rough to redraw
 // stroke by stroke. About $0.025 a picture.
 const WHITEBOARD_MODEL_URL = "https://fal.run/fal-ai/flux/dev";
+
+// Through the Vercel AI Gateway when AI_GATEWAY_API_KEY is set, so pictures
+// bill to the same account as Framecast. FLUX.2 klein draws the square
+// whiteboard doodles in ~4s; FLUX 3 takes an aspect ratio for full-frame
+// pictures (~$0.024 each).
+const GATEWAY_WHITEBOARD_MODEL = "bfl/flux-2-klein-9b";
+const GATEWAY_MODEL = "bfl/flux-3-image";
 
 /**
  * Whiteboard art direction, used instead of the channel's. The hand redraws
@@ -44,14 +53,28 @@ function seedFor(scene: Scene): number {
   return hash + (scene.imageSeed ?? 0) * 7919;
 }
 
-export async function drawScene(projectDir: string, scene: Scene, channel: Channel, format: FormatId, style: StyleId = "motion"): Promise<void> {
-  const whiteboard = style === "whiteboard";
+function promptFor(scene: Scene, channel: Channel, whiteboard: boolean): string {
+  return whiteboard ? `${WHITEBOARD_STYLE}${scene.imagePrompt}` : `${scene.imagePrompt}. ${channel.imageStyle}`;
+}
+
+/** The picture's bytes and file extension, from the AI Gateway. */
+async function drawWithGateway(scene: Scene, channel: Channel, format: FormatId, whiteboard: boolean): Promise<{ bytes: Uint8Array; ext: string }> {
+  const { image } = await generateImage({
+    model: whiteboard ? GATEWAY_WHITEBOARD_MODEL : GATEWAY_MODEL,
+    prompt: promptFor(scene, channel, whiteboard),
+    ...(whiteboard ? { seed: seedFor(scene) } : { aspectRatio: format === "short" ? "9:16" : "16:9" }),
+  });
+  return { bytes: image.uint8Array, ext: image.mediaType === "image/png" ? "png" : "jpg" };
+}
+
+/** The picture's bytes and file extension, from fal. */
+async function drawWithFal(scene: Scene, channel: Channel, format: FormatId, whiteboard: boolean): Promise<{ bytes: Uint8Array; ext: string }> {
   const size = whiteboard ? { width: 1024, height: 1024 } : format === "short" ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
   const response = await fetch(whiteboard ? WHITEBOARD_MODEL_URL : MODEL_URL, {
     method: "POST",
     headers: { Authorization: `Key ${requireEnv("FAL_KEY")}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt: whiteboard ? `${WHITEBOARD_STYLE}${scene.imagePrompt}` : `${scene.imagePrompt}. ${channel.imageStyle}`,
+      prompt: promptFor(scene, channel, whiteboard),
       image_size: size,
       num_inference_steps: whiteboard ? 28 : 4,
       num_images: 1,
@@ -69,20 +92,29 @@ export async function drawScene(projectDir: string, scene: Scene, channel: Chann
   if (!url) throw new Error(`fal returned no picture for ${scene.id}`);
 
   const picture = await fetch(url);
+  return { bytes: new Uint8Array(await picture.arrayBuffer()), ext: whiteboard ? "png" : "jpg" };
+}
+
+export async function drawScene(projectDir: string, scene: Scene, channel: Channel, format: FormatId, style: StyleId = "motion"): Promise<void> {
+  const whiteboard = style === "whiteboard";
+  const { bytes, ext } = process.env.AI_GATEWAY_API_KEY
+    ? await drawWithGateway(scene, channel, format, whiteboard)
+    : await drawWithFal(scene, channel, format, whiteboard);
+
   // The seed is in the name so the studio never shows a cached old picture.
-  const path = whiteboard ? `images/${scene.id}-${scene.imageSeed ?? 0}-wb.png` : `images/${scene.id}-${scene.imageSeed ?? 0}.jpg`;
+  const path = `images/${scene.id}-${scene.imageSeed ?? 0}${whiteboard ? "-wb" : ""}.${ext}`;
 
   await mkdir(join(projectDir, "images"), { recursive: true });
-  await writeFile(join(projectDir, path), Buffer.from(await picture.arrayBuffer()));
+  await writeFile(join(projectDir, path), bytes);
 
   scene.image = { path, prompt: scene.imagePrompt, seed: scene.imageSeed ?? 0, style };
 }
 
-/** Draws every scene whose picture prompt or style changed; returns how many were drawn. */
-export async function drawProject(projectDir: string, scenes: Scene[], channel: Channel, format: FormatId, style: StyleId = "motion"): Promise<number> {
-  const stale = scenes.filter((scene) => !imageIsCurrent(projectDir, scene, style));
+/** Draws every scene whose picture prompt or look changed; returns how many were drawn. */
+export async function drawProject(projectDir: string, scenes: Scene[], channel: Channel, format: FormatId, lookFor: (scene: Scene) => StyleId): Promise<number> {
+  const stale = scenes.filter((scene) => !imageIsCurrent(projectDir, scene, lookFor(scene)));
 
-  await inBatches(stale, 4, (scene) => drawScene(projectDir, scene, channel, format, style));
+  await inBatches(stale, 4, (scene) => drawScene(projectDir, scene, channel, format, lookFor(scene)));
 
   return stale.length;
 }

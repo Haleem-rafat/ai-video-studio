@@ -1,6 +1,7 @@
 import { ClapperboardIcon, MonitorIcon, PlusIcon, SmartphoneIcon } from "lucide-react";
 
-import type { Channel, ProjectSummary } from "../api.ts";
+
+import { brandUrl, type Channel, type ProjectSummary } from "../api.ts";
 import {
   Sidebar,
   SidebarContent,
@@ -14,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { NewChannelDialog } from "./NewChannelDialog.tsx";
 import { ChannelSwatch } from "./shared.tsx";
 
 type Props = {
@@ -21,10 +23,14 @@ type Props = {
   channels: Channel[];
   selected: string | null;
   onSelect: (id: string | null) => void;
+  /** The channel whose settings are open, if any. */
+  openChannel: string | null;
+  onOpenChannel: (id: string) => void;
+  onChannelCreated: (channel: Channel) => void;
   footer: React.ReactNode;
 };
 
-export function AppSidebar({ projects, channels, selected, onSelect, footer }: Props) {
+export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, footer }: Props) {
   const channelOf = (id: string) => channels.find((channel) => channel.id === id);
 
   return (
@@ -50,10 +56,41 @@ export function AppSidebar({ projects, channels, selected, onSelect, footer }: P
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={selected === null} tooltip="New video" onClick={() => onSelect(null)}>
+                <SidebarMenuButton isActive={selected === null && openChannel === null} tooltip="New video" onClick={() => onSelect(null)}>
                   <PlusIcon />
                   <span>New video</span>
                 </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+          <SidebarGroupLabel>Channels</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {channels.map((channel) => (
+                <SidebarMenuItem key={channel.id}>
+                  <SidebarMenuButton isActive={openChannel === channel.id} onClick={() => onOpenChannel(channel.id)}>
+                    {channel.brand?.logo ? (
+                      <img src={brandUrl(channel.id, channel.brand.logo)} alt="" className="size-4 rounded-full object-cover" />
+                    ) : (
+                      <ChannelSwatch color={channel.colors.accent} className="size-3 rounded-full" />
+                    )}
+                    <span className="truncate">{channel.name}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              <SidebarMenuItem>
+                <NewChannelDialog
+                  onCreated={onChannelCreated}
+                  trigger={
+                    <SidebarMenuButton className="text-muted-foreground">
+                      <PlusIcon />
+                      <span>New channel</span>
+                    </SidebarMenuButton>
+                  }
+                />
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

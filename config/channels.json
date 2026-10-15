@@ -1,14 +1,44 @@
 {
   "dev-pixel": {
     "name": "Dev Pixel",
-    "audience": "junior and mid-level software developers who want better careers and higher pay",
-    "tone": "direct, practical, a little bold; concrete numbers and real examples, no hype",
+    "audience": "Software developers and tech professionals seeking to understand software architecture, coding patterns, and industry-defining engineering stories.",
+    "tone": "Informative, analytical, and engaging, explaining complex technical concepts and system design breakdowns with clarity.",
     "voiceId": "nPczCjzI2devNBz1zQrb",
-    "imageStyle": "flat vector illustration, clean geometric shapes, dark navy and charcoal background with neon green accents, soft glow, minimal, no text, no letters",
-    "mascot": { "kind": "robot", "name": "Pixel" },
-    "colors": { "background": "#0d1117", "panel": "#161b22", "text": "#e6edf3", "accent": "#3fb950", "muted": "#8b949e" },
+    "imageStyle": "Cinematic photography, low-key dramatic lighting, moody atmospheric settings featuring developers or glowing computer terminal screens, deep dark palette. no text, no letters",
+    "mascot": {
+      "kind": "robot",
+      "name": "Pixel"
+    },
+    "colors": {
+      "background": "#0b111e",
+      "panel": "#182232",
+      "text": "#f8fafc",
+      "accent": "#00d7f3",
+      "muted": "#738aff"
+    },
     "device": "laptop",
-    "font": "'SF Mono', Menlo, monospace"
+    "font": "'Avenir Next', Helvetica, sans-serif",
+    "brand": {
+      "handle": "@devpixel.99",
+      "logo": "logo-youtube.jpg",
+      "banner": "banner-youtube.jpg",
+      "references": [
+        "ref-youtube-1.jpg",
+        "ref-youtube-2.jpg",
+        "ref-youtube-3.jpg",
+        "ref-youtube-4.jpg",
+        "ref-youtube-5.jpg",
+        "ref-youtube-6.jpg",
+        "ref-youtube-7.jpg",
+        "ref-youtube-8.jpg"
+      ],
+      "youtube": {
+        "id": "UCJBtIAzxuG7QeUkfPpWJZPQ",
+        "title": "Dev Pixel",
+        "importedAt": "2026-10-14T21:43:34.889Z"
+      }
+    },
+    "language": "en"
   },
   "money-mechanics": {
     "name": "Money Mechanics",
@@ -16,21 +46,132 @@
     "tone": "clear, story-driven, surprising facts first; explain every number",
     "voiceId": "JBFqnCBsd6RMkjVDRZzb",
     "imageStyle": "editorial illustration, rich deep blue and gold palette, painterly texture, dramatic lighting, no text, no letters",
-    "mascot": { "kind": "coin", "name": "Penny" },
-    "colors": { "background": "#0b1a2e", "panel": "#12263f", "text": "#f5f1e6", "accent": "#f2c14e", "muted": "#9fb3c8" },
+    "mascot": {
+      "kind": "coin",
+      "name": "Penny"
+    },
+    "colors": {
+      "background": "#0b1a2e",
+      "panel": "#12263f",
+      "text": "#f5f1e6",
+      "accent": "#f2c14e",
+      "muted": "#9fb3c8"
+    },
     "device": "phone",
-    "font": "'Avenir Next', Helvetica, sans-serif"
+    "font": "'Avenir Next', Helvetica, sans-serif",
+    "brand": {
+      "handle": "@moneymechanics-q3m",
+      "logo": "logo-youtube.jpg",
+      "banner": "banner-youtube.jpg",
+      "references": [
+        "ref-youtube-1.jpg",
+        "ref-youtube-2.jpg",
+        "ref-youtube-3.jpg",
+        "ref-youtube-4.jpg",
+        "ref-youtube-5.jpg",
+        "ref-youtube-6.jpg",
+        "ref-youtube-7.jpg",
+        "ref-youtube-8.jpg"
+      ],
+      "youtube": {
+        "id": "UC1Z7xl7GPZKZ-ea_gi8OdMA",
+        "title": "Money Mechanics",
+        "importedAt": "2026-10-14T21:43:52.210Z"
+      }
+    }
   },
   "kido-fun-zone": {
     "name": "KIDO FUN ZONE",
-    "audience": "children aged 4 to 8 and their parents",
-    "tone": "warm, playful, simple words, short sentences, one fun fact at a time",
+    "audience": "Young children, toddlers, and parents looking for gentle, comforting bedtime stories and simple educational adventures.",
+    "tone": "Warm, gentle, and soothing, like a cozy bedtime story read with wonder and affection.",
     "voiceId": "cgSgspJ2msm6clMCkdW9",
-    "imageStyle": "cute children's picture book illustration, bright cheerful colours, soft rounded shapes, friendly, no text, no letters",
-    "mascot": { "kind": "bear", "name": "Kido" },
-    "colors": { "background": "#fff4d6", "panel": "#ffffff", "text": "#2b2d42", "accent": "#ff6b6b", "muted": "#6c757d" },
+    "imageStyle": "Charming children's book illustrations with a textured colored pencil style, soft golden glow lighting, cozy warm tones, and a whimsical, comforting mood. End with: no text, no letters",
+    "mascot": {
+      "kind": "bear",
+      "name": "Kido"
+    },
+    "colors": {
+      "background": "#e1f5fe",
+      "panel": "#b3e5fc",
+      "text": "#263238",
+      "accent": "#ff9100",
+      "muted": "#78909c"
+    },
     "device": "phone",
     "font": "'Chalkboard SE', 'Comic Sans MS', sans-serif",
-    "madeForKids": true
+    "madeForKids": true,
+    "brand": {
+      "handle": "@kidofunzone-d1b",
+      "logo": "logo-youtube.jpg",
+      "banner": "banner-youtube.jpg",
+      "references": [
+        "ref-youtube-1.jpg",
+        "ref-youtube-2.jpg",
+        "ref-youtube-3.jpg",
+        "ref-youtube-4.jpg",
+        "ref-youtube-5.jpg",
+        "ref-youtube-6.jpg",
+        "ref-youtube-7.jpg",
+        "ref-youtube-8.jpg"
+      ],
+      "youtube": {
+        "id": "UCp1WCIsJ3JH8TmvrjRjLS-g",
+        "title": "KIDO FUN ZONE",
+        "importedAt": "2026-10-14T21:45:42.454Z"
+      }
+    },
+    "language": "en"
+  },
+  "haleemrafat": {
+    "name": "HaleemRafat",
+    "language": "ar",
+    "audience": "Arabic-speaking tech enthusiasts and consumers looking for honest, in-depth reviews of laptops, smartphones, and smart gadgets.",
+    "tone": "Informative, candid, and analytical with a straightforward, expert-level breakdown of real-world device performance.",
+    "voiceId": "nPczCjzI2devNBz1zQrb",
+    "imageStyle": "A sleek, high-contrast modern workspace with dramatic neon lighting, dark metallic and glass surfaces, showing futuristic technology in a moody cinematic atmosphere, no text, no letters",
+    "mascot": {
+      "kind": "robot",
+      "name": "Pixel"
+    },
+    "colors": {
+      "background": "#111113",
+      "panel": "#1b1b1f",
+      "text": "#ffffff",
+      "accent": "#ff3b30",
+      "muted": "#8e8e93"
+    },
+    "font": "'Cairo', 'SF Arabic', 'Geeza Pro', sans-serif",
+    "device": "laptop",
+    "brand": {
+      "handle": "@haleemrafat",
+      "logo": "logo-youtube.jpg",
+      "banner": "banner-youtube.jpg",
+      "references": [
+        "ref-youtube-1.jpg",
+        "ref-youtube-2.jpg",
+        "ref-youtube-3.jpg",
+        "ref-youtube-4.jpg",
+        "ref-youtube-5.jpg",
+        "ref-youtube-6.jpg",
+        "ref-youtube-7.jpg",
+        "ref-youtube-8.jpg"
+      ],
+      "youtube": {
+        "id": "UCRDdUeVQE1YnWx3YhrmzPZg",
+        "title": "Haleem Rafat - حليم رأفت",
+        "importedAt": "2026-10-14T21:46:18.735Z"
+      },
+      "mascots": [
+        "mascot-mv8newpq-point.png",
+        "mascot-mv8newpq-think.png",
+        "mascot-mv8newpq-wave.png"
+      ]
+    },
+    "dialect": "Egyptian colloquial Arabic (عامية مصرية)",
+    "narrator": {
+      "provider": "gemini",
+      "voice": "Charon",
+      "style": "اقرأ باللهجة المصرية العامية، بصوت يوتيوبر تقني مصري شاب، واثق وصريح وحماسي، إيقاع سريع وطبيعي كأنه بيتكلم مع صاحبه. انطق أسماء المنتجات بالإنجليزي."
+    }
   }
 }

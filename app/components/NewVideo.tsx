@@ -1,4 +1,4 @@
-import { AppWindowIcon, CheckIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
+import { AppWindowIcon, CheckIcon, MicroscopeIcon, SwordsIcon, ShapesIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { api, type Channel, type FormatId, type Job, type StyleId, type TopicIdea } from "../api.ts";
@@ -109,7 +109,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                 <span className="text-xs text-muted-foreground">16:9 · about 8 minutes</span>
               </Choice>
             </div>
-            <div role="radiogroup" aria-label="Look" className="grid gap-2 sm:grid-cols-3">
+            <div role="radiogroup" aria-label="Look" className="grid gap-2 sm:grid-cols-2">
               <Choice active={style === "motion"} onClick={() => setStyle("motion")}>
                 <LayersIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Motion graphics</span>
@@ -124,6 +124,27 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                 <AppWindowIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Explainer</span>
                 <span className="text-xs text-muted-foreground">A {channels.find((option) => option.id === channel)?.device ?? "phone"} on cream, each scene as an app screen, with karaoke captions. No pictures to pay for.</span>
+              </Choice>
+              <Choice active={style === "mixed"} onClick={() => setStyle("mixed")}>
+                <ShapesIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Mixed</span>
+                <span className="text-xs text-muted-foreground">Each scene picks its look: whiteboard for ideas, the device for code and steps, motion for numbers.</span>
+              </Choice>
+              <Choice active={style === "versus"} onClick={() => setStyle("versus")}>
+                <SwordsIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Versus</span>
+                <span className="text-xs text-muted-foreground">
+                  Two products face off: spec tables with winners, a live score, red wipes, your character and logo, and a subscribe click. Researched on the web and written in the
+                  channel's language; makes its own thumbnail and chapters. Type the topic as "A vs B".
+                </span>
+              </Choice>
+              <Choice active={style === "deepdive"} onClick={() => setStyle("deepdive")}>
+                <MicroscopeIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Deep dive</span>
+                <span className="text-xs text-muted-foreground">
+                  A long explainer in the versus look: real photos from Wikimedia Commons (credited), chip maps that light up part by part, numbered steps, big numbers and tables. Researched on
+                  the web; makes its own thumbnail and chapters.
+                </span>
               </Choice>
             </div>
           </CardContent>
@@ -178,18 +199,29 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
             )}
 
             <Field label="What is the video about?" detail={topic.trim() ? `${topic.trim().split(/\s+/).length} words` : undefined}>
-              <Textarea rows={3} placeholder="e.g. How Isaac Newton lost a fortune in the South Sea Bubble" value={topic} onChange={(event) => setTopic(event.target.value)} />
+              <Textarea
+                rows={3}
+                placeholder={style === "deepdive" ? "e.g. How a smartphone SoC works, why it's a System on a Chip, and how chips are made" : style === "versus" ? "e.g. iPhone 17 Pro Max vs iPhone 18 Pro Max (add a question after a colon: Apple M5 vs Intel x86: why is M faster?)" : "e.g. How Isaac Newton lost a fortune in the South Sea Bubble"}
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+              />
             </Field>
 
             <div className="flex items-center justify-between gap-3 border-t pt-4">
               <p className="text-xs text-muted-foreground">
-                {!llmReady
+                {style === "deepdive"
+                  ? "Research and writing take 2–3 minutes, through the AI Gateway."
+                  : style === "versus"
+                  ? /\s(vs\.?|versus|ضد|ولا|مقابل)\s/i.test(topic)
+                    ? "Research and writing take about a minute, through the AI Gateway."
+                    : 'Write it as "Product A vs Product B".'
+                  : !llmReady
                   ? "Start Bonsai from the sidebar first."
                   : format === "long"
                     ? "A long script takes Bonsai about 30–40 minutes: outline, chapters and fact-checks."
                     : "The project opens here as soon as the script is written and fact-checked."}
               </p>
-              <Button disabled={!llmReady || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
+              <Button disabled={(style !== "versus" && style !== "deepdive" && !llmReady) || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
                 {writing ? <Loader2Icon className="animate-spin" /> : <PenLineIcon />}
                 {writing ? "Writing script…" : "Write script"}
               </Button>

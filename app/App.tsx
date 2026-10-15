@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, type Channel, type Job, type ProjectSummary, type Status } from "./api.ts";
+import { ChannelSettings } from "./components/ChannelSettings.tsx";
 import { JobPanel } from "./components/JobPanel.tsx";
 import { NewVideo } from "./components/NewVideo.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
@@ -16,6 +17,7 @@ export function App() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(location.search).get("project"));
+  const [openChannel, setOpenChannel] = useState<string | null>(() => new URLSearchParams(location.search).get("channel"));
   /** Bumped whenever a job touching the open project finishes. */
   const [projectVersion, setProjectVersion] = useState(0);
   const seen = useRef(new Map<string, Job["status"]>());
@@ -25,13 +27,22 @@ export function App() {
 
   const select = useCallback((id: string | null) => {
     setSelected(id);
+    setOpenChannel(null);
     history.replaceState(null, "", id ? `?project=${id}` : "/");
   }, []);
 
+  const showChannel = useCallback((id: string) => {
+    setSelected(null);
+    setOpenChannel(id);
+    history.replaceState(null, "", `?channel=${id}`);
+  }, []);
+
+  const refreshChannels = useCallback(() => api.channels().then(setChannels).catch(() => {}), []);
+
   useEffect(() => {
-    api.channels().then(setChannels);
+    refreshChannels();
     refreshProjects();
-  }, [refreshProjects]);
+  }, [refreshChannels, refreshProjects]);
 
   // One poll drives everything live: Bonsai state, credit and job progress.
   useEffect(() => {
@@ -64,15 +75,42 @@ export function App() {
 
   const jobs = status?.jobs ?? [];
   const open = projects.find((project) => project.id === selected);
+  const shownChannel = openChannel ? channels.find((channel) => channel.id === openChannel) : undefined;
 
   return (
     <TooltipProvider delayDuration={300}>
       <SidebarProvider>
-        <AppSidebar projects={projects} channels={channels} selected={selected} onSelect={select} footer={<EngineStatus status={status} />} />
+        <AppSidebar
+          projects={projects}
+          channels={channels}
+          selected={selected}
+          onSelect={select}
+          openChannel={openChannel}
+          onOpenChannel={showChannel}
+          onChannelCreated={(channel) => {
+            refreshChannels();
+            showChannel(channel.id);
+          }}
+          footer={<EngineStatus status={status} />}
+        />
         <SidebarInset className="h-svh min-w-0 overflow-hidden">
-          <TopBar crumbs={selected ? ["Projects", open?.title ?? "…"] : ["Studio", "New video"]} theme={theme} onToggleTheme={toggle} />
+          <TopBar
+            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : ["Studio", "New video"]}
+            theme={theme}
+            onToggleTheme={toggle}
+          />
           <main className="flex min-h-0 flex-1 flex-col">
-            {selected ? (
+            {shownChannel ? (
+              <ChannelSettings
+                key={shownChannel.id}
+                channel={shownChannel}
+                jobs={jobs}
+                onChanged={(channel) => {
+                  if (channel) setChannels((all) => all.map((entry) => (entry.id === channel.id ? channel : entry)));
+                  else refreshChannels();
+                }}
+              />
+            ) : selected ? (
               <ProjectView
                 key={selected}
                 id={selected}
