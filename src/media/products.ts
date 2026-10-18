@@ -8,6 +8,7 @@ import { generateImage } from "ai";
 
 import { ROOT } from "../config.ts";
 import type { Product, Project } from "../types.ts";
+import { recordImage } from "../usage.ts";
 
 const run = promisify(execFile);
 
@@ -46,7 +47,7 @@ export async function addProductPhoto(projectDir: string, project: Project, side
 
 /** A clean studio picture of the product when no photo was uploaded. */
 async function drawProduct(projectDir: string, product: Product, side: "a" | "b"): Promise<string> {
-  const { image } = await generateImage({
+  const result = await generateImage({
     model: "openai/gpt-image-1.5",
     prompt:
       `Photorealistic studio product render of the ${product.name}, as it really looks, in its launch colour close to ${product.color}, ` +
@@ -54,6 +55,8 @@ async function drawProduct(projectDir: string, product: Product, side: "a" | "b"
     size: "1024x1536",
     providerOptions: { openai: { background: "transparent", quality: "high", outputFormat: "png" } },
   });
+  recordImage("openai/gpt-image-1.5", result, "products");
+  const { image } = result;
   const path = `images/product-${side}-ai.png`;
   await mkdir(join(projectDir, "images"), { recursive: true });
   await writeFile(join(projectDir, path), image.uint8Array);

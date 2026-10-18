@@ -13,12 +13,12 @@ export type FormatId = "short" | "long";
  * without a style is "motion", so older projects keep theirs.
  */
 /** "arena" only picks a look when a video is created: it is saved as a "versus" video with `versus.look` "arena". */
-export type StyleId = "motion" | "whiteboard" | "explainer" | "mixed" | "versus" | "arena" | "deepdive";
+export type StyleId = "motion" | "whiteboard" | "explainer" | "mixed" | "versus" | "arena" | "deepdive" | "marketing";
 
-export const STYLES = ["motion", "whiteboard", "explainer", "mixed", "versus", "arena", "deepdive"] as const;
+export const STYLES = ["motion", "whiteboard", "explainer", "mixed", "versus", "arena", "deepdive", "marketing"] as const;
 
 /** The look of one scene. A "mixed" project gives every scene its own; "versus" and "deepdive" are whole-video formats. */
-export type Look = Exclude<StyleId, "mixed" | "versus" | "arena" | "deepdive">;
+export type Look = Exclude<StyleId, "mixed" | "versus" | "arena" | "deepdive" | "marketing">;
 
 export const LOOKS = ["motion", "whiteboard", "explainer"] as const;
 
@@ -41,7 +41,52 @@ export type Visual =
    * pictures (`columns` across; an item with an empty label leaves its cell
    * empty).
    */
-  | { type: "deepdive"; title: string; layout: DeepLayout; items: DeepItem[]; heads?: string[]; columns?: number; photo?: Photo; gallery?: Photo[]; pose?: Pose };
+  | { type: "deepdive"; title: string; layout: DeepLayout; items: DeepItem[]; heads?: string[]; columns?: number; photo?: Photo; gallery?: Photo[]; pose?: Pose }
+  /**
+   * One beat of a marketing video, animated in the brand's own colours and
+   * fonts. `words` are the 1-3 short phrases that appear on screen as they
+   * are said (never the whole narration); `items` feed the beat's animation
+   * (the problems as bubbles, the days of a calendar, the traffic sources of
+   * a dashboard); `shot` names one of the website's screenshots.
+   */
+  | { type: "marketing"; beat: MarketingBeat; headline: string; words: string[]; items: MarketingItem[]; shot?: string; backdrop?: Photo; object?: Photo };
+
+/**
+ * What a marketing scene animates. journey: a phone scrolls the brand's
+ * content, a like, a comment, a tap on the profile, everything piling up.
+ * pain: the problems as question bubbles. turn: one calm sentence, the
+ * turning point. page: a blank page builds itself, then the real website on
+ * a laptop and a phone. booking: a booking widget, a slot picked and
+ * confirmed, two calendars syncing. traffic: three posts with their own
+ * links sending visitors to the page. dashboard: where visitors come from
+ * and what they read. recap: page, bookings and insights joined up. cta: the
+ * call to action as a big button with an arrow to the link.
+ *
+ * The rest are pure motion graphics, drawn from the brand's colours and type
+ * rather than its screenshots. kinetic: the words themselves are the picture,
+ * punched, slid and highlighted as they are said. chaos: scattered pieces
+ * (messages, links, forms) drift, then fly into one neat card. path: a dot
+ * travels a drawn path through stations that light up. stat: one big number
+ * counting up inside a ring. split: before and after, wiped across. notify:
+ * a lock screen collecting notifications. orbit: the parts circle the logo,
+ * then are pulled in. sting: the logo built from shapes, with a light sweep.
+ * links: a customer asks, and you answer with link after link, each opening
+ * a different preview, piling up. conflict: a week's calendar fills up and
+ * two appointments collide, with a clear conflict mark.
+ */
+export type MarketingBeat = "journey" | "pain" | "turn" | "page" | "booking" | "traffic" | "dashboard" | "recap" | "cta" | "kinetic" | "chaos" | "path" | "stat" | "split" | "notify" | "orbit" | "sting" | "links" | "conflict";
+
+export const MARKETING_BEATS = ["journey", "pain", "turn", "page", "booking", "traffic", "dashboard", "recap", "cta", "kinetic", "chaos", "path", "stat", "split", "notify", "orbit", "sting", "links", "conflict"] as const;
+
+/**
+ * How far a marketing video may go from its website. "faithful" shows the
+ * real pages; "creative" designs its own motion graphics and shows the site
+ * once at most; "bold" never shows it, only the brand's colours and type.
+ */
+export type Creativity = "faithful" | "creative" | "bold";
+
+/** `value` is a number for a dashboard bar (a share in %), a time for a booking slot, or a link tag for a traffic post. */
+export type MarketingItem = { label: string; value?: string };
 
 export type DeepLayout = "photo" | "blocks" | "steps" | "stat" | "table" | "grid";
 
@@ -71,7 +116,7 @@ export type VersusRow = { label?: string; a: string; b: string; winner?: "a" | "
 /** Which of the channel's character poses a versus scene shows. */
 export type Pose = "point" | "think" | "wave";
 
-export const VISUAL_TYPES = ["title", "chapter", "stat", "list", "quote", "code", "compare", "chart", "versus", "deepdive"] as const;
+export const VISUAL_TYPES = ["title", "chapter", "stat", "list", "quote", "code", "compare", "chart", "versus", "deepdive", "marketing"] as const;
 
 /** A product in a versus video. `image` is project-relative: a cut-out photo or an AI picture. */
 export type Product = { name: string; short: string; color: string; image?: string; imageSource?: "photo" | "ai"; photos?: Photo[] };
@@ -107,6 +152,8 @@ export type Project = {
   versus?: { a: Product; b: Product; hook?: string; thumbnail?: Thumbnail; look?: VersusLook };
   /** The intro hook and thumbnail of a "deepdive" video; `cover` is the thumbnail's photo. */
   deepdive?: { hook?: string; thumbnail?: Thumbnail; cover?: Photo };
+  /** A marketing video's brand (read from its website), its brief from the chat, and how it is voiced. */
+  marketing?: MarketingSetup;
   topic: string;
   title: string;
   description: string;
@@ -117,4 +164,65 @@ export type Project = {
   render?: { path: string; seconds: number; renderedAt: string };
   /** Set once uploaded; `scheduledFor` means it is private until YouTube publishes it then. */
   youtube?: { videoId: string; url: string; privacy: "private" | "unlisted" | "public"; youtubeChannel: string; uploadedAt: string; scheduledFor?: string };
+};
+
+/** A brand as read from its website. Pictures are project-relative (or session-relative before a project exists). */
+export type SiteBrand = {
+  url: string;
+  name: string;
+  /** What the business offers, in one or two sentences. */
+  summary: string;
+  services: string[];
+  language: "en" | "ar";
+  logo?: string;
+  colors: { background: string; panel: string; text: string; accent: string; cta: string; muted: string };
+  /** Font families; the renderer loads them from Google Fonts when the site does (`googleFonts`). */
+  fonts: { heading: string; body: string };
+  googleFonts: string[];
+  /** Real photos from the page (the owner, their work). */
+  photos: string[];
+  /** Real screenshots: `hero-desktop`, `hero-phone`, `page-desktop` (the whole page), `page-phone`, and one per section. */
+  shots: { id: string; path: string; label: string; device: "desktop" | "phone"; height: number }[];
+  /** The main call to action found on the page. */
+  cta?: { label: string; url: string };
+  /** The page's own text, for the writer to quote from. */
+  text: string;
+};
+
+/** What the chat collects before a marketing video is written. Empty strings are still unknown. */
+export type MarketingBrief = {
+  business: string;
+  audience: string;
+  problems: string[];
+  result: string;
+  features: string[];
+  proof: string;
+  /** Dashboard numbers: the client's real ones, or examples that the video labels as such. */
+  data: "real" | "example" | "";
+  cta: { label: string; url: string };
+  tone: string;
+  voice: "male" | "female" | "";
+  seconds: number;
+  platforms: string[];
+  captions: boolean | null;
+  notes: string;
+};
+
+export type MarketingSetup = {
+  brand: SiteBrand;
+  /** Unset on older projects, which were all "faithful". */
+  creativity?: Creativity;
+  brief: MarketingBrief;
+  language: "en" | "ar";
+  /** Gemini voice and how it reads. */
+  narrator: { voice: string; style: string };
+  captions: boolean;
+  /** The social post text written with the script. */
+  post?: { caption: string; hashtags: string[] };
+  /**
+   * The video's own pictures, made for it rather than taken from the website:
+   * one art style for the whole video, and the pictures shown as social posts
+   * and link previews. Each scene's backdrop and floating object live on its visual.
+   */
+  art?: { style: string; cards: Photo[] };
 };

@@ -1,5 +1,5 @@
 import type { Scene } from "../api.ts";
-import type { DeepLayout } from "../../src/types.ts";
+import type { DeepLayout, MarketingBeat } from "../../src/types.ts";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,29 @@ const LABELS: Record<Visual["type"], string> = {
   code: "Code",
   versus: "Versus round",
   deepdive: "Deep-dive chapter",
+  marketing: "Marketing beat",
+};
+
+const BEATS: Record<MarketingBeat, { label: string; items: string }> = {
+  journey: { label: "Customer's journey (phone)", items: "what they check | a comment, 3–5" },
+  pain: { label: "Problems as messages", items: "one question per line, 2–5" },
+  turn: { label: "Turning point (one sentence)", items: "none: the headline is the sentence" },
+  page: { label: "The page builds itself", items: "part | screenshot id (section-1…), 2–4" },
+  booking: { label: "Booking + calendars", items: "one time slot per line, 4–6" },
+  traffic: { label: "Posts send visitors", items: "platform | link tag, 3" },
+  dashboard: { label: "Dashboard", items: "source | share 0–100, 3–5" },
+  recap: { label: "Parts joined up", items: "the 3 parts" },
+  cta: { label: "Call to action", items: "none: the headline is the button" },
+  kinetic: { label: "Kinetic type (words are the picture)", items: "0–2 words to highlight" },
+  chaos: { label: "Chaos → one neat card", items: "piece | icon word (message, link, form…), 4–7" },
+  path: { label: "Journey path with stations", items: "station | icon word (eye, heart, calendar…), 3–5" },
+  stat: { label: "Big number in a ring", items: "number | unit and meaning" },
+  split: { label: "Before / after wipe", items: "before | after, 2–4" },
+  notify: { label: "Notifications on a lock screen", items: "title | detail, 2–4" },
+  orbit: { label: "Orbit around the logo", items: "one part per line, 3–6" },
+  sting: { label: "Logo sting", items: "none: the headline is the tagline" },
+  links: { label: "Chat full of links", items: "what it is | short link, 3–5" },
+  conflict: { label: "Calendar with a clash", items: "one appointment per line, 3–5" },
 };
 
 const LAYOUTS: Record<DeepLayout, { label: string; items: string }> = {
@@ -53,6 +76,8 @@ function convert(visual: Visual, type: Visual["type"]): Visual {
       return { type, title: text, rows: [{ a: "", b: "" }], pose: "point" };
     case "deepdive":
       return { type, title: text, layout: "photo", items: [], pose: "point" };
+    case "marketing":
+      return { type, beat: "turn", headline: text, words: [], items: [] };
   }
 }
 
@@ -206,6 +231,43 @@ export function VisualEditor({ visual, onChange }: { visual: Visual; onChange: (
                 <SelectItem value="wave">Waving</SelectItem>
               </SelectContent>
             </Select>
+          </Field>
+        </>
+      )}
+      {visual.type === "marketing" && (
+        <>
+          <Field label="Animation">
+            <Select value={visual.beat} onValueChange={(beat) => onChange({ ...visual, beat: beat as MarketingBeat })}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(BEATS).map(([beat, { label }]) => (
+                  <SelectItem key={beat} value={beat}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          {field(visual.beat === "cta" ? "Button" : visual.beat === "turn" ? "Sentence" : "Title", visual.headline, (headline) => onChange({ ...visual, headline }))}
+          {field("Words on screen", visual.words.join(" | "), (words) => onChange({ ...visual, words: words.split("|").map((word) => word.trim()).filter(Boolean) }), true)}
+          <Field label="Items" detail={BEATS[visual.beat].items} className="col-span-2">
+            <Textarea
+              className="text-xs"
+              dir="auto"
+              rows={Math.min(6, Math.max(2, visual.items.length))}
+              value={visual.items.map((item) => (item.value ? `${item.label} | ${item.value}` : item.label)).join("\n")}
+              onChange={(event) =>
+                onChange({
+                  ...visual,
+                  items: event.target.value.split("\n").map((line) => {
+                    const [label, ...rest] = line.split("|").map((part) => part.trim());
+                    return rest.length ? { label: label ?? "", value: rest.join(" | ") } : { label: label ?? "" };
+                  }),
+                })
+              }
+            />
           </Field>
         </>
       )}

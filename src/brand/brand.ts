@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { brandDir, loadChannel, saveChannel, type Brand, type Channel } from "../config.ts";
 import { youtubeApi } from "../publish/youtube.ts";
+import { recordImage } from "../usage.ts";
 
 // Reads pictures, so it must be a vision model.
 const STYLE_MODEL = "google/gemini-3.5-flash";
@@ -135,6 +136,7 @@ export async function readStyle(channel: Channel, extra: { titles?: string[]; de
 
   log(`style: reading ${pictures.length} picture(s) ...`);
   const { output } = await generateText({
+    telemetry: { functionId: "brand" },
     model: STYLE_MODEL,
     output: Output.object({ schema: STYLE_SCHEMA }),
     messages: [
@@ -198,6 +200,7 @@ export async function makeCharacter(id: string, description: string, log: (messa
       : "An original cute 3D cartoon mascot character, Pixar-like render. ") +
     `${look}. Full body, standing, ${POSES.point}. Isolated on a transparent background, no text.`;
   const first = await generateImage({ model: CHARACTER_MODEL, prompt: photo ? { images: [photo], text: firstText } : firstText, ...options });
+  recordImage(CHARACTER_MODEL, first, "character");
   const names = [await store(id, `mascot-${stamp}-point.png`, first.image.uint8Array)];
 
   for (const pose of ["think", "wave"] as const) {
@@ -207,6 +210,7 @@ export async function makeCharacter(id: string, description: string, log: (messa
       prompt: { images: [first.image.uint8Array], text: `Same exact character, same face, hair, clothes and shoes. New pose: ${POSES[pose]}. Full body, transparent background, no text.` },
       ...options,
     });
+    recordImage(CHARACTER_MODEL, next, "character");
     names.push(await store(id, `mascot-${stamp}-${pose}.png`, next.image.uint8Array));
   }
 

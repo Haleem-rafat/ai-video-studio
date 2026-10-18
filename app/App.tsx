@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Channel, type Job, type ProjectSummary, type Status } from "./api.ts";
 import { ChannelSettings } from "./components/ChannelSettings.tsx";
 import { JobPanel } from "./components/JobPanel.tsx";
+import { MarketingChat } from "./components/MarketingChat.tsx";
 import { NewVideo } from "./components/NewVideo.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
 import { AppSidebar } from "./components/Sidebar.tsx";
@@ -18,6 +19,8 @@ export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(location.search).get("project"));
   const [openChannel, setOpenChannel] = useState<string | null>(() => new URLSearchParams(location.search).get("channel"));
+  /** The marketing page: "new" for the start form, else a chat's id; null when another page is open. */
+  const [marketing, setMarketing] = useState<string | null>(() => new URLSearchParams(location.search).get("marketing"));
   /** Bumped whenever a job touching the open project finishes. */
   const [projectVersion, setProjectVersion] = useState(0);
   const seen = useRef(new Map<string, Job["status"]>());
@@ -28,13 +31,22 @@ export function App() {
   const select = useCallback((id: string | null) => {
     setSelected(id);
     setOpenChannel(null);
+    setMarketing(null);
     history.replaceState(null, "", id ? `?project=${id}` : "/");
   }, []);
 
   const showChannel = useCallback((id: string) => {
     setSelected(null);
+    setMarketing(null);
     setOpenChannel(id);
     history.replaceState(null, "", `?channel=${id}`);
+  }, []);
+
+  const showMarketing = useCallback((id: string) => {
+    setSelected(null);
+    setOpenChannel(null);
+    setMarketing(id);
+    history.replaceState(null, "", `?marketing=${id}`);
   }, []);
 
   const refreshChannels = useCallback(() => api.channels().then(setChannels).catch(() => {}), []);
@@ -87,6 +99,8 @@ export function App() {
           onSelect={select}
           openChannel={openChannel}
           onOpenChannel={showChannel}
+          marketing={marketing}
+          onMarketing={() => showMarketing("new")}
           onChannelCreated={(channel) => {
             refreshChannels();
             showChannel(channel.id);
@@ -95,12 +109,14 @@ export function App() {
         />
         <SidebarInset className="h-svh min-w-0 overflow-hidden">
           <TopBar
-            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : ["Studio", "New video"]}
+            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
             theme={theme}
             onToggleTheme={toggle}
           />
           <main className="flex min-h-0 flex-1 flex-col">
-            {shownChannel ? (
+            {marketing ? (
+              <MarketingChat sessionId={marketing === "new" ? null : marketing} jobs={jobs} onOpen={showMarketing} />
+            ) : shownChannel ? (
               <ChannelSettings
                 key={shownChannel.id}
                 channel={shownChannel}

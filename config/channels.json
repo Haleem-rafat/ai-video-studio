@@ -125,22 +125,22 @@
   "haleemrafat": {
     "name": "HaleemRafat",
     "language": "ar",
-    "audience": "Arabic-speaking tech enthusiasts and consumers looking for honest, in-depth reviews of laptops, smartphones, and smart gadgets.",
-    "tone": "Informative, candid, and analytical with a straightforward, expert-level breakdown of real-world device performance.",
+    "audience": "Arabic-speaking tech enthusiasts and buyers seeking analytical, honest reviews of smartphones, processors, and laptops.",
+    "tone": "Analytical, honest, and expert-level with a direct, no-nonsense approach to tech specs and performance.",
     "voiceId": "nPczCjzI2devNBz1zQrb",
-    "imageStyle": "A sleek, high-contrast modern workspace with dramatic neon lighting, dark metallic and glass surfaces, showing futuristic technology in a moody cinematic atmosphere, no text, no letters",
+    "imageStyle": "High-contrast studio shot of sleek consumer electronics, dramatic red rim lighting, clean dark background with subtle radial glow, no text, no letters",
     "mascot": {
       "kind": "robot",
       "name": "Pixel"
     },
     "colors": {
-      "background": "#111113",
-      "panel": "#1b1b1f",
+      "background": "#0f0f10",
+      "panel": "#1c1c1e",
       "text": "#ffffff",
       "accent": "#ff3b30",
       "muted": "#8e8e93"
     },
-    "font": "'Cairo', 'SF Arabic', 'Geeza Pro', sans-serif",
+    "font": "'SF Arabic', 'Geeza Pro', 'Avenir Next', sans-serif",
     "device": "laptop",
     "brand": {
       "handle": "@haleemrafat",
@@ -159,7 +159,7 @@
       "youtube": {
         "id": "UCRDdUeVQE1YnWx3YhrmzPZg",
         "title": "Haleem Rafat - حليم رأفت",
-        "importedAt": "2026-10-14T21:46:18.735Z"
+        "importedAt": "2026-10-18T12:47:34.004Z"
       },
       "mascots": [
         "mascot-mv8newpq-point.png",

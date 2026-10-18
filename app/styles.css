@@ -1,19 +1,21 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
-/* Framecast's studio tokens: neutral, chroma 0, Geist. Colour on screen comes
-   from the content (pictures, channel accents), never from the chrome. */
+/* Studio tokens: a dark workspace with one strong blue for actions. Other
+   colour on screen comes from the content (pictures, brand and channel accents). */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
-  --font-heading: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,62 +50,70 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Light studio: the same blue for actions, neutral greys for the chrome. */
+  --background: #f6f6f8;
+  --foreground: #16161a;
+  --card: #ffffff;
+  --card-foreground: #16161a;
+  --popover: #ffffff;
+  --popover-foreground: #16161a;
+  --primary: #3d5afe;
+  --primary-foreground: #ffffff;
+  --secondary: #ececf0;
+  --secondary-foreground: #16161a;
+  --muted: #ececf0;
+  --muted-foreground: #6b6b76;
+  --accent: #e7e7ec;
+  --accent-foreground: #16161a;
+  --destructive: #ef4444;
+  --border: #e2e2e8;
+  --input: #dcdce3;
+  --ring: #3d5afe;
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #16161a;
+  --sidebar-primary: #3d5afe;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ececf0;
+  --sidebar-accent-foreground: #16161a;
+  --sidebar-border: #e2e2e8;
+  --sidebar-ring: #3d5afe;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --progress: linear-gradient(90deg, #3d5afe, #8b5cf6);
 }
 
+/* Dark studio workspace: calm panels so the video stands out; blue only for actions. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.922 0 0);
-  --sidebar-primary-foreground: oklch(0.205 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0e0e11;
+  --foreground: #f2f2f5;
+  --card: #1c1c21;
+  --card-foreground: #f2f2f5;
+  --popover: #1c1c21;
+  --popover-foreground: #f2f2f5;
+  --primary: #3d5afe;
+  --primary-foreground: #ffffff;
+  --secondary: #232329;
+  --secondary-foreground: #f2f2f5;
+  --muted: #232329;
+  --muted-foreground: #8a8a94;
+  --accent: #26262d;
+  --accent-foreground: #f2f2f5;
+  --destructive: #ef4444;
+  --border: #2a2a31;
+  --input: #2a2a31;
+  --ring: #3d5afe;
+  --sidebar: #16161a;
+  --sidebar-foreground: #f2f2f5;
+  --sidebar-primary: #3d5afe;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #232329;
+  --sidebar-accent-foreground: #f2f2f5;
+  --sidebar-border: #2a2a31;
+  --sidebar-ring: #3d5afe;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --progress: linear-gradient(90deg, #3d5afe, #8b5cf6);
 }
 
 /* Native controls (the scene audio players, the scrubber) follow the theme. */
@@ -126,7 +136,22 @@
   }
 }
 
-/* The preview scrubber: a native range in the theme's ink. */
+/* The preview scrubber: a native range in the action blue. */
 .scrubber {
-  accent-color: var(--foreground);
+  accent-color: var(--primary);
+}
+
+/* Progress bars: the blue-to-violet gradient, with a moving sheen while work runs. */
+.progress-fill {
+  background: var(--progress);
+  transition: width 0.4s ease;
+}
+.progress-busy {
+  background-image: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.25) 50%, transparent 70%), var(--progress);
+  background-size: 200% 100%, 100% 100%;
+  animation: progress-sheen 1.4s linear infinite;
+}
+@keyframes progress-sheen {
+  from { background-position: 150% 0, 0 0; }
+  to { background-position: -50% 0, 0 0; }
 }

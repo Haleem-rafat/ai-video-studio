@@ -1,4 +1,5 @@
 import { LLM_URL } from "./config.ts";
+import { recordLocal } from "./usage.ts";
 
 type ChatOptions = { maxTokens?: number; thinking?: boolean };
 
@@ -16,6 +17,7 @@ export async function assertLlmRunning(): Promise<void> {
 /** One chat turn against llama-server's OpenAI-compatible endpoint. */
 export async function chat(prompt: string, options: ChatOptions = {}): Promise<string> {
   const thinking = options.thinking ?? false;
+  const started = Date.now();
   const response = await fetch(`${LLM_URL}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -33,7 +35,8 @@ export async function chat(prompt: string, options: ChatOptions = {}): Promise<s
 
   if (!response.ok) throw new Error(`LLM ${response.status}: ${await response.text()}`);
 
-  const data = (await response.json()) as { choices: { message: { content: string } }[] };
+  const data = (await response.json()) as { choices: { message: { content: string } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+  recordLocal("local", "Bonsai 27B (this Mac)", Date.now() - started, { inputTokens: data.usage?.prompt_tokens ?? 0, outputTokens: data.usage?.completion_tokens ?? 0 });
 
   return data.choices[0]?.message.content ?? "";
 }

@@ -9,6 +9,7 @@ import { lookOf } from "../render/looks.ts";
 import { placeVersus, rowTimes } from "../render/versus.ts";
 import { arenaRowTimes, hitDelay, meetAt, resultAt } from "../render/arena.ts";
 import { itemTimes, photoBeat, placeDeep, planMotion } from "../render/deepdive.ts";
+import { itemTimes as beatTimes, phraseTimes, placeMarketing } from "../render/marketing-kit.ts";
 import type { Project } from "../types.ts";
 
 const run = promisify(execFile);
@@ -23,6 +24,7 @@ type Cue = { sound: "whoosh" | "pop" | "click" | "typing" | "pen" | "chime"; at:
 export function cuesFor(project: Project): Cue[] {
   if (project.style === "versus") return project.versus?.look === "arena" ? arenaCues(project) : versusCues(project);
   if (project.style === "deepdive") return deepCues(project);
+  if (project.style === "marketing") return marketingCues(project);
   const scenes = placeScenes(project.scenes);
   const total = totalSeconds(scenes);
   const cues: Cue[] = [];
@@ -111,6 +113,72 @@ function deepCues(project: Project): Cue[] {
   return cues.filter((cue) => cue.at >= 0 && existsSync(join(SFX_DIR, `${cue.sound}.mp3`)));
 }
 
+/**
+ * A marketing video's beats, kept light: a soft whoosh between scenes, a pop
+ * per on-screen phrase and item, clicks where the booking widget is tapped,
+ * a chime when the booking is confirmed and on the call to action.
+ */
+function marketingCues(project: Project): Cue[] {
+  const { scenes, total } = placeMarketing(project);
+  const cues: Cue[] = [];
+  scenes.forEach((scene, index) => {
+    const t = scene.start;
+    const D = scene.seconds;
+    if (index > 0) cues.push({ sound: "whoosh", at: t - 0.4, gain: 0.22 });
+    phraseTimes(scene).forEach((at) => cues.push({ sound: "pop", at: t + at, gain: 0.18 }));
+    switch (scene.visual.beat) {
+      case "journey":
+        cues.push({ sound: "pop", at: t + D * 0.16, gain: 0.3 }, { sound: "click", at: t + D * 0.4, gain: 0.35 });
+        break;
+      case "pain":
+        beatTimes(scene, 0.08, 0.7).forEach((at) => cues.push({ sound: "pop", at: t + at, gain: 0.28 }));
+        break;
+      case "booking": {
+        const E = D >= 8 ? 0.55 : 0.9;
+        [0.14, 0.38, 0.62, 0.8].forEach((f) => cues.push({ sound: "click", at: t + D * E * f, gain: 0.4 }));
+        cues.push({ sound: "chime", at: t + D * E * 0.86, gain: 0.3 });
+        if (D >= 8) cues.push({ sound: "whoosh", at: t + D * 0.72, gain: 0.2 }, { sound: "pop", at: t + D * 0.72 + 1, gain: 0.3 });
+        break;
+      }
+      case "traffic":
+        cues.push({ sound: "whoosh", at: t + D * 0.35, gain: 0.18 });
+        break;
+      case "dashboard":
+        beatTimes(scene, 0.12, 0.55).forEach((at) => cues.push({ sound: "pop", at: t + at, gain: 0.16 }));
+        cues.push({ sound: "chime", at: t + D * 0.72, gain: 0.2 });
+        break;
+      case "recap":
+        [0.1, 0.32, 0.54].forEach((f) => cues.push({ sound: "pop", at: t + D * f, gain: 0.25 }));
+        break;
+      case "cta":
+        cues.push({ sound: "pop", at: t + 0.3, gain: 0.4 }, { sound: "chime", at: t + 0.5, gain: 0.25 });
+        break;
+      case "sting":
+        cues.push({ sound: "whoosh", at: t - 0.1, gain: 0.35 }, { sound: "pop", at: t + 1.05, gain: 0.45 }, { sound: "chime", at: t + 1.5, gain: 0.25 });
+        break;
+      case "chaos":
+        beatTimes(scene, 0.02, 0.3).forEach((at) => cues.push({ sound: "pop", at: t + at, gain: 0.14 }));
+        cues.push({ sound: "whoosh", at: t + D * 0.58, gain: 0.3 }, { sound: "chime", at: t + D * 0.58 + 1.1, gain: 0.25 });
+        break;
+      case "path":
+      case "notify":
+        beatTimes(scene, scene.visual.beat === "path" ? 0.1 : 0.15, scene.visual.beat === "path" ? 0.8 : 0.75).forEach((at) => cues.push({ sound: "pop", at: t + at, gain: 0.25 }));
+        break;
+      case "stat":
+        cues.push({ sound: "chime", at: t + Math.min(D * 0.55, 2.2), gain: 0.3 });
+        break;
+      case "split":
+        cues.push({ sound: "whoosh", at: t + D * 0.5, gain: 0.3 });
+        break;
+      case "orbit":
+        cues.push({ sound: "whoosh", at: t + D * 0.68, gain: 0.25 }, { sound: "pop", at: t + D * 0.68 + 0.5, gain: 0.35 });
+        break;
+    }
+  });
+  cues.push({ sound: "chime", at: total - 2, gain: 0.2 });
+  return cues.filter((cue) => cue.at >= 0 && existsSync(join(SFX_DIR, `${cue.sound}.mp3`)));
+}
+
 /** The channel's own bed if there is one (assets/music/<channel>.mp3), else the first track. */
 function musicFor(channel: string): string | null {
   if (!existsSync(MUSIC_DIR)) return null;
@@ -129,7 +197,7 @@ function musicFor(channel: string): string | null {
  * playback level. The picture is copied untouched.
  */
 export async function addSoundtrack(project: Project, input: string, output: string): Promise<void> {
-  const total = project.style === "versus" ? placeVersus(project).total : totalSeconds(placeScenes(project.scenes));
+  const total = project.style === "versus" ? placeVersus(project).total : project.style === "marketing" ? placeMarketing(project).total : project.style === "deepdive" ? placeDeep(project).total : totalSeconds(placeScenes(project.scenes));
   const music = musicFor(project.channel);
   const cues = cuesFor(project);
   const sounds = [...new Set(cues.map((cue) => cue.sound))];

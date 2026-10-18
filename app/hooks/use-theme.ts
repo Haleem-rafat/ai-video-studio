@@ -11,7 +11,7 @@ function initialTheme(): Theme {
   } catch {
     // Storage blocked: follow the system.
   }
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "dark";
 }
 
 /** Light or dark, remembered per browser; the class on <html> is what the CSS reads. */

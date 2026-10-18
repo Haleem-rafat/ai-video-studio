@@ -1,7 +1,7 @@
-import { ClapperboardIcon, MonitorIcon, PlusIcon, SmartphoneIcon } from "lucide-react";
+import { ClapperboardIcon, MegaphoneIcon, MonitorIcon, PlusIcon, SmartphoneIcon } from "lucide-react";
 
 
-import { brandUrl, type Channel, type ProjectSummary } from "../api.ts";
+import { brandUrl, formatCost, type Channel, type ProjectSummary } from "../api.ts";
 import {
   Sidebar,
   SidebarContent,
@@ -27,11 +27,46 @@ type Props = {
   openChannel: string | null;
   onOpenChannel: (id: string) => void;
   onChannelCreated: (channel: Channel) => void;
+  /** The open marketing page, if any. */
+  marketing: string | null;
+  onMarketing: () => void;
   footer: React.ReactNode;
 };
 
-export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, footer }: Props) {
+export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, marketing, onMarketing, footer }: Props) {
   const channelOf = (id: string) => channels.find((channel) => channel.id === id);
+  // Marketing videos are made for clients, not for a YouTube channel: they get their own list.
+  const marketingProjects = projects.filter((project) => project.marketing);
+  const videoProjects = projects.filter((project) => !project.marketing);
+  const item = (project: ProjectSummary) => {
+    const channel = channelOf(project.channel);
+    const Icon = project.format === "short" ? SmartphoneIcon : MonitorIcon;
+    return (
+      <SidebarMenuItem key={project.id}>
+        <SidebarMenuButton size="lg" isActive={selected === project.id} onClick={() => onSelect(project.id)} className="h-auto py-2">
+          <Icon className="mt-0.5 self-start text-muted-foreground" />
+          <div className="grid min-w-0 flex-1 gap-0.5 leading-tight">
+            <span className="truncate text-[13px] font-medium">{project.title}</span>
+            <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+              <ChannelSwatch color={project.marketing?.brand.colors.accent ?? channel?.colors.accent} />
+              <span className="truncate">{project.marketing?.brand.name ?? channel?.name ?? project.channel}</span>
+              <span>·</span>
+              <span className="tabular-nums">{project.sceneCount}</span>
+        {project.cost > 0 && <span className="font-mono text-[10px] tabular-nums" title="What this video has cost in AI">{formatCost(project.cost)}</span>}
+              {project.youtube ? (
+                <span className="ml-auto flex items-center gap-1 rounded border px-1 font-mono text-[10px] leading-4" title={`On YouTube (${project.youtube.youtubeChannel})`}>
+                  <span className="size-1 rounded-full bg-red-600" />
+                  {project.youtube.scheduledFor && Date.parse(project.youtube.scheduledFor) > Date.now() ? "SCHED" : "YT"}
+                </span>
+              ) : (
+                project.hasVideo && <span className="ml-auto rounded border px-1 font-mono text-[10px] leading-4">MP4</span>
+              )}
+            </span>
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -56,9 +91,15 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={selected === null && openChannel === null} tooltip="New video" onClick={() => onSelect(null)}>
+                <SidebarMenuButton isActive={selected === null && openChannel === null && !marketing} tooltip="New video" onClick={() => onSelect(null)}>
                   <PlusIcon />
                   <span>New video</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={Boolean(marketing)} tooltip="Marketing video" onClick={onMarketing}>
+                  <MegaphoneIcon />
+                  <span>Marketing video</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -96,41 +137,25 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {marketingProjects.length > 0 && (
+          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+            <SidebarGroupLabel>
+              Marketing <span className="ml-auto font-mono tabular-nums">{marketingProjects.length}</span>
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>{marketingProjects.map(item)}</SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         <SidebarGroup className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupLabel>
-            Projects <span className="ml-auto font-mono tabular-nums">{projects.length}</span>
+            Projects <span className="ml-auto font-mono tabular-nums">{videoProjects.length}</span>
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {projects.map((project) => {
-                const channel = channelOf(project.channel);
-                const Icon = project.format === "short" ? SmartphoneIcon : MonitorIcon;
-                return (
-                  <SidebarMenuItem key={project.id}>
-                    <SidebarMenuButton size="lg" isActive={selected === project.id} onClick={() => onSelect(project.id)} className="h-auto py-2">
-                      <Icon className="mt-0.5 self-start text-muted-foreground" />
-                      <div className="grid min-w-0 flex-1 gap-0.5 leading-tight">
-                        <span className="truncate text-[13px] font-medium">{project.title}</span>
-                        <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-                          <ChannelSwatch color={channel?.colors.accent} />
-                          <span className="truncate">{channel?.name ?? project.channel}</span>
-                          <span>·</span>
-                          <span className="tabular-nums">{project.sceneCount}</span>
-                          {project.youtube ? (
-                            <span className="ml-auto flex items-center gap-1 rounded border px-1 font-mono text-[10px] leading-4" title={`On YouTube (${project.youtube.youtubeChannel})`}>
-                              <span className="size-1 rounded-full bg-red-600" />
-                              {project.youtube.scheduledFor && Date.parse(project.youtube.scheduledFor) > Date.now() ? "SCHED" : "YT"}
-                            </span>
-                          ) : (
-                            project.hasVideo && <span className="ml-auto rounded border px-1 font-mono text-[10px] leading-4">MP4</span>
-                          )}
-                        </span>
-                      </div>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-              {projects.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No videos yet. Start one with New video.</p>}
+              {videoProjects.map(item)}
+              {videoProjects.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No videos yet. Start one with New video.</p>}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

@@ -6,6 +6,8 @@ import { generateImage, generateText, Output } from "ai";
 import { z } from "zod";
 
 import type { FormatId, Photo, Project } from "../types.ts";
+import { recordImage } from "../usage.ts";
+import { reportProgress } from "../progress.ts";
 
 /**
  * Real photos for a deep-dive video. Each photo query is searched on
@@ -89,6 +91,7 @@ async function pick(query: string, topic: string, options: Candidate[]): Promise
   const usable = options.map((option, index) => ({ option, image: previews[index], index })).filter((entry) => entry.image);
   if (!usable.length) return -1;
   const { output } = await generateText({
+    telemetry: { functionId: "photos" },
     model: PICK_MODEL,
     output: Output.object({ schema: z.object({ best: z.number().int(), reason: z.string() }) }),
     messages: [
@@ -112,12 +115,13 @@ async function pick(query: string, topic: string, options: Candidate[]): Promise
 }
 
 async function drawPhoto(query: string, topic: string, format: FormatId): Promise<Uint8Array> {
-  const { image } = await generateImage({
+  const result = await generateImage({
     model: "bfl/flux-3-image",
     prompt: `Realistic editorial photograph of ${query}, for a video about ${topic}. Natural light, sharp detail, shallow depth of field, no text, no logos.`,
     aspectRatio: format === "short" ? "9:16" : "16:9",
   });
-  return image.uint8Array;
+  recordImage("bfl/flux-3-image", result, "photos");
+  return result.image.uint8Array;
 }
 
 /** Finds (or draws) one photo and saves it as images/<name>.jpg. */
@@ -150,10 +154,12 @@ export async function preparePhotos(dir: string, project: Project, log: (message
   const used = new Set<string>();
   const missing = (photo?: Photo) => photo?.query && !(photo.path && existsSync(join(dir, photo.path)));
   let found = 0;
+  const wanted = project.scenes.filter((scene) => scene.visual.type === "deepdive" && missing(scene.visual.photo)).length;
   for (const scene of project.scenes) {
     if (scene.visual.type !== "deepdive" || !missing(scene.visual.photo)) continue;
     scene.visual.photo = await findPhoto(dir, `photo-${scene.id}-${Date.now().toString(36)}`, scene.visual.photo!, project.topic, project.format, used, log);
     found++;
+    reportProgress("photos", found, wanted);
   }
   const cover = project.deepdive?.cover;
   if (project.deepdive && missing(cover)) {

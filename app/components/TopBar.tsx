@@ -1,6 +1,7 @@
-import { CpuIcon, Loader2Icon, MicIcon, MoonIcon, PowerIcon, SunIcon } from "lucide-react";
+import { CpuIcon, Loader2Icon, MicIcon, MoonIcon, PowerIcon, SunIcon, WalletIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { api, type Status } from "../api.ts";
+import { api, formatCost, type Status, type StudioUsage } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger } from "@/components/ui/sidebar";
@@ -11,7 +12,7 @@ import { StatusDot } from "./shared.tsx";
 /** The strip above every page: sidebar toggle, where you are, and the theme. */
 export function TopBar({ crumbs, theme, onToggleTheme }: { crumbs: string[]; theme: Theme; onToggleTheme: () => void }) {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-sidebar px-3">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
@@ -55,6 +56,7 @@ export function EngineStatus({ status }: { status: Status | null }) {
           <StatusDot tone={llm} />
         </SidebarMenuButton>
       </SidebarMenuItem>
+      <Spend />
       {left !== null && credit && (
         <SidebarMenuItem>
           <SidebarMenuButton tooltip={`${left.toLocaleString()} ElevenLabs characters left`} className="h-auto py-1.5">
@@ -72,5 +74,39 @@ export function EngineStatus({ status }: { status: Status | null }) {
         </SidebarMenuItem>
       )}
     </SidebarMenu>
+  );
+}
+
+/** What the studio has spent on AI this month, and what is left on the AI Gateway. */
+function Spend() {
+  const [usage, setUsage] = useState<StudioUsage | null>(null);
+  useEffect(() => {
+    const load = () => api.studioUsage().then(setUsage, () => {});
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  if (!usage) return null;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        tooltip={`AI this month ${formatCost(usage.month.cost)} · all time ${formatCost(usage.total.cost)} · ${usage.videos} rendered videos, about ${formatCost(usage.perVideo)} each`}
+        className="h-auto py-1.5"
+      >
+        <WalletIcon />
+        <div className="grid flex-1 gap-0.5 text-xs">
+          <span className="flex justify-between">
+            <span>AI this month</span>
+            <span className="font-mono tabular-nums">{formatCost(usage.month.cost)}</span>
+          </span>
+          {usage.balance !== null && (
+            <span className="flex justify-between text-muted-foreground">
+              <span>Gateway balance</span>
+              <span className={`font-mono tabular-nums ${usage.balance < 5 ? "text-warning" : ""}`}>${usage.balance.toFixed(2)}</span>
+            </span>
+          )}
+        </div>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }

@@ -68,7 +68,7 @@ export function arenaRowTimes(scene: VersusScene): number[] {
 }
 
 /** Arabic letters (not its punctuation, so "Ultra،" still counts as Latin). */
-const ARABIC = /[\u0621-\u064A]/;
+export const ARABIC = /[\u0621-\u064A]/;
 
 /**
  * Caption lines (up to `perLine` words, broken at punctuation) with every
@@ -76,7 +76,7 @@ const ARABIC = /[\u0621-\u064A]/;
  * "$2,599") is one piece, so a right-to-left line keeps it in reading order
  * and lights it up as one.
  */
-function karaoke(scene: VersusScene, perLine: number): { words: string[]; at: number[] }[] {
+export function karaoke(scene: Pick<VersusScene, "narration" | "audio" | "seconds">, perLine: number): { words: string[]; at: number[] }[] {
   const spoken = scene.narration.split(/\s+/).filter(Boolean);
   const times = alignWords(spoken, scene.audio?.words ?? [], scene.seconds);
   // "وMediaTek" becomes "و" + "MediaTek"; both parts keep the word's time.

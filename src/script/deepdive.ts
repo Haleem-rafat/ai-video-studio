@@ -67,6 +67,7 @@ export type DeepDiveDraft = {
 export async function writeDeepDive(channel: Channel, format: FormatId, topic: string, log: (message: string) => void = console.log): Promise<DeepDiveDraft> {
   log(`research: looking up "${topic}" ...`);
   const research = await generateText({
+    telemetry: { functionId: "research" },
     model: RESEARCH_MODEL,
     tools: { search: gateway.tools.perplexitySearch({ maxResults: 8 }) },
     stopWhen: stepCountIs(12),
@@ -81,6 +82,7 @@ export async function writeDeepDive(channel: Channel, format: FormatId, topic: s
   const short = format === "short";
   log(`script: writing the ${short ? "Short" : "video"} ...`);
   const { output } = await generateText({
+    telemetry: { functionId: "script" },
     model: WRITER_MODEL,
     output: Output.object({ schema: DRAFT }),
     prompt: `You write in-depth explainer videos for the YouTube channel "${channel.name}".

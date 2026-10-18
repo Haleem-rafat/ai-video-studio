@@ -75,6 +75,7 @@ export type Spoken = { narration: string; facts: string };
  */
 export async function checkNumbers(sections: Spoken[], research: string, channel: Channel, log: (message: string) => void): Promise<string[]> {
   const { output } = await generateText({
+    telemetry: { functionId: "check" },
     model: WRITER_MODEL,
     output: Output.object({ schema: z.object({ narrations: z.array(z.string()), fixes: z.array(z.string()) }) }),
     prompt: `Check these video narrations (${channel.dialect ?? channel.language ?? "English"}) number by number.
@@ -128,6 +129,7 @@ export async function writeVersus(channel: Channel, format: FormatId, topic: str
 
   log(`research: looking up ${a} and ${b} ...`);
   const research = await generateText({
+    telemetry: { functionId: "research" },
     model: RESEARCH_MODEL,
     tools: { search: gateway.tools.perplexitySearch({ maxResults: 8 }) },
     stopWhen: stepCountIs(10),
@@ -147,6 +149,7 @@ export async function writeVersus(channel: Channel, format: FormatId, topic: str
   const short = format === "short";
   log(`script: writing the ${short ? "Short" : "video"} ...`);
   const { output } = await generateText({
+    telemetry: { functionId: "script" },
     model: WRITER_MODEL,
     output: Output.object({ schema: DRAFT }),
     prompt: `You write comparison videos for the YouTube channel "${channel.name}".

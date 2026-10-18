@@ -1,4 +1,4 @@
-import { AppWindowIcon, CheckIcon, MicroscopeIcon, SwordsIcon, ShapesIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
+import { AppWindowIcon, CheckIcon, Columns2Icon, MicroscopeIcon, SwordsIcon, ShapesIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { api, type Channel, type FormatId, type Job, type StyleId, type TopicIdea } from "../api.ts";
@@ -8,8 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ChannelSwatch, Field } from "./shared.tsx";
+import { JobProgress } from "./JobProgress.tsx";
 
 type Props = { channels: Channel[]; llmReady: boolean; jobs: Job[] };
+
+/** A short silent loop of a real video made in this look, so the choice shows rather than tells. */
+export function ModeClip({ mode }: { mode: string }) {
+  return <video src={`/modes/${mode}.mp4`} autoPlay muted loop playsInline preload="metadata" className="mb-1.5 aspect-video w-full rounded-md border bg-black object-cover" />;
+}
 
 /** A selectable card in a group; behaves as a radio button. */
 function Choice({ active, onClick, children, className }: { active: boolean; onClick: () => void; children: ReactNode; className?: string }) {
@@ -33,7 +39,7 @@ function Choice({ active, onClick, children, className }: { active: boolean; onC
 
 export function NewVideo({ channels, llmReady, jobs }: Props) {
   const [channel, setChannel] = useState("");
-  const [format, setFormat] = useState<FormatId>("short");
+  const [format, setFormat] = useState<FormatId | "both">("both");
   const [style, setStyle] = useState<StyleId>("motion");
   const [topic, setTopic] = useState("");
   const [focus, setFocus] = useState("");
@@ -51,7 +57,8 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
     if (job?.status === "failed") setError(job.error ?? "Topic ideas failed.");
   }, [job?.status, job?.result, job?.error]);
 
-  const writing = jobs.find((candidate) => candidate.label.startsWith("Write script") && (candidate.status === "running" || candidate.status === "queued"));
+  const scriptJobs = jobs.filter((candidate) => candidate.label.startsWith("Write script") && !candidate.label.includes("marketing") && (candidate.status === "running" || candidate.status === "queued"));
+  const writing = scriptJobs[0];
   const thinking = job?.status === "running" || job?.status === "queued";
 
   const run = async (action: () => Promise<Job>) => {
@@ -97,7 +104,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
             <CardDescription>The look can be changed later on the project screen.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <div role="radiogroup" aria-label="Format" className="grid gap-2 sm:grid-cols-2">
+            <div role="radiogroup" aria-label="Format" className="grid gap-2 sm:grid-cols-3">
               <Choice active={format === "short"} onClick={() => setFormat("short")}>
                 <SmartphoneIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Short</span>
@@ -108,29 +115,39 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                 <span className="text-sm font-medium">Long</span>
                 <span className="text-xs text-muted-foreground">16:9 · about 8 minutes</span>
               </Choice>
+              <Choice active={format === "both"} onClick={() => setFormat("both")}>
+                <Columns2Icon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Both</span>
+                <span className="text-xs text-muted-foreground">A long video and a Short, each written for its shape</span>
+              </Choice>
             </div>
-            <div role="radiogroup" aria-label="Look" className="grid gap-2 sm:grid-cols-2">
+            <div role="radiogroup" aria-label="Look" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <Choice active={style === "motion"} onClick={() => setStyle("motion")}>
+                <ModeClip mode="motion" />
                 <LayersIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Motion graphics</span>
                 <span className="text-xs text-muted-foreground">Full-frame pictures, animated numbers and captions.</span>
               </Choice>
               <Choice active={style === "whiteboard"} onClick={() => setStyle("whiteboard")}>
+                <ModeClip mode="whiteboard" />
                 <PenLineIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Whiteboard</span>
                 <span className="text-xs text-muted-foreground">A hand draws each picture and writes the key words. About $0.025 a picture.</span>
               </Choice>
               <Choice active={style === "explainer"} onClick={() => setStyle("explainer")}>
+                <ModeClip mode="explainer" />
                 <AppWindowIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Explainer</span>
                 <span className="text-xs text-muted-foreground">A {channels.find((option) => option.id === channel)?.device ?? "phone"} on cream, each scene as an app screen, with karaoke captions. No pictures to pay for.</span>
               </Choice>
               <Choice active={style === "mixed"} onClick={() => setStyle("mixed")}>
+                <ModeClip mode="mixed" />
                 <ShapesIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Mixed</span>
                 <span className="text-xs text-muted-foreground">Each scene picks its look: whiteboard for ideas, the device for code and steps, motion for numbers.</span>
               </Choice>
               <Choice active={style === "versus"} onClick={() => setStyle("versus")}>
+                <ModeClip mode="versus" />
                 <SwordsIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Versus</span>
                 <span className="text-xs text-muted-foreground">
@@ -139,6 +156,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                 </span>
               </Choice>
               <Choice active={style === "arena"} onClick={() => setStyle("arena")}>
+                <ModeClip mode="arena" />
                 <SwordsIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Arena</span>
                 <span className="text-xs text-muted-foreground">
@@ -147,6 +165,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                 </span>
               </Choice>
               <Choice active={style === "deepdive"} onClick={() => setStyle("deepdive")}>
+                <ModeClip mode="deepdive" />
                 <MicroscopeIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Deep dive</span>
                 <span className="text-xs text-muted-foreground">
@@ -171,7 +190,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                 disabled={!llmReady || thinking}
                 onClick={async () => {
                   setIdeas([]);
-                  const started = await run(() => api.topics(channel, format, focus));
+                  const started = await run(() => api.topics(channel, format === "both" ? "long" : format, focus));
                   if (started) setIdeasJob(started.id);
                 }}
               >
@@ -225,7 +244,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                     : 'Write it as "Product A vs Product B".'
                   : !llmReady
                   ? "Start Bonsai from the sidebar first."
-                  : format === "long"
+                  : format !== "short"
                     ? "A long script takes Bonsai about 30–40 minutes: outline, chapters and fact-checks."
                     : "The project opens here as soon as the script is written and fact-checked."}
               </p>
@@ -235,6 +254,9 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
               </Button>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {scriptJobs.map((job) => (
+              <JobProgress key={job.id} job={job} />
+            ))}
           </CardContent>
         </Card>
       </div>

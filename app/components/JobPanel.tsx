@@ -1,16 +1,9 @@
-import { CircleCheckIcon, CircleXIcon, ClockIcon, HistoryIcon, Loader2Icon } from "lucide-react";
+import { HistoryIcon } from "lucide-react";
 import { useState } from "react";
 
 import type { Job } from "../api.ts";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
-const ICON: Record<Job["status"], React.ReactNode> = {
-  queued: <ClockIcon className="size-3.5 text-muted-foreground" />,
-  running: <Loader2Icon className="size-3.5 animate-spin" />,
-  done: <CircleCheckIcon className="size-3.5 text-emerald-600 dark:text-emerald-500" />,
-  failed: <CircleXIcon className="size-3.5 text-destructive" />,
-};
+import { JobProgress } from "./JobProgress.tsx";
 
 /** Bottom-right: what the studio is doing right now, with live logs. */
 export function JobPanel({ jobs }: { jobs: Job[] }) {
@@ -38,12 +31,8 @@ export function JobPanel({ jobs }: { jobs: Job[] }) {
       <div className="max-h-[50vh] divide-y overflow-y-auto">
         {visible.map((job) => (
           <div key={job.id} className="px-3 py-2">
-            <div className="flex items-center gap-2 text-[13px]">
-              {ICON[job.status]}
-              <span className={cn("min-w-0 flex-1 truncate", job.status === "failed" && "text-destructive")}>{job.label}</span>
-              {job.status === "running" && <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{Math.round((Date.now() - job.createdAt) / 1000)}s</span>}
-            </div>
-            {(job.status === "running" || open || job.status === "failed") && job.log.length > 0 && (
+            <JobProgress job={job} compact />
+            {open && job.log.length > 0 && (
               <pre className="mt-1.5 max-h-36 overflow-auto rounded-md bg-muted px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
                 {job.log.slice(open ? -12 : -3).join("\n")}
               </pre>

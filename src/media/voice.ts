@@ -11,6 +11,8 @@ import { generateSpeech, transcribe } from "ai";
 
 import { requireEnv, type Channel } from "../config.ts";
 import type { Scene, Word } from "../types.ts";
+import { recordElevenLabs } from "../usage.ts";
+import { reportProgress } from "../progress.ts";
 
 const run = promisify(execFile);
 const MODEL_ID = "eleven_multilingual_v2";
@@ -77,6 +79,7 @@ export async function voiceScene(projectDir: string, scene: Scene, voiceId: stri
   if (!response.ok) throw new Error(`ElevenLabs ${response.status} on ${scene.id}: ${(await response.text()).slice(0, 300)}`);
 
   const data = (await response.json()) as { audio_base64: string; alignment: Alignment };
+  recordElevenLabs(scene.narration.length);
   // Named by content so the studio never plays a cached old take.
   const take = createHash("sha1").update(`${voiceId}:${scene.narration}`).digest("hex").slice(0, 8);
   const path = `audio/${scene.id}-${take}.mp3`;
@@ -142,9 +145,12 @@ export async function voiceProject(projectDir: string, scenes: Scene[], channel:
   const key = narratorKey(channel);
   const stale = scenes.map((scene, index) => ({ scene, index })).filter(({ scene }) => !voiceIsCurrent(projectDir, scene, key));
 
-  await inBatches(stale, 3, ({ scene, index }) =>
-    channel.narrator ? voiceSceneGemini(projectDir, scene, channel) : voiceScene(projectDir, scene, key, scenes[index - 1]?.narration, scenes[index + 1]?.narration),
-  );
+  let done = 0;
+  if (stale.length) reportProgress("voice", 0, stale.length);
+  await inBatches(stale, 3, async ({ scene, index }) => {
+    await (channel.narrator ? voiceSceneGemini(projectDir, scene, channel) : voiceScene(projectDir, scene, key, scenes[index - 1]?.narration, scenes[index + 1]?.narration));
+    reportProgress("voice", ++done, stale.length);
+  });
 
   return stale.length;
 }

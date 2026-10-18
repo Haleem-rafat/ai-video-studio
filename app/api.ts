@@ -1,12 +1,19 @@
 import type { Channel } from "../src/config.ts";
-import type { FormatId, Project, Scene, StyleId } from "../src/types.ts";
+import type { Creativity, FormatId, MarketingBrief, Project, Scene, SiteBrand, StyleId } from "../src/types.ts";
+import type { ChatMessage, Session } from "../src/marketing/session.ts";
+import type { UsageEntry, UsageSummary } from "../src/usage.ts";
+import type { Progress } from "../src/server/jobs.ts";
 
-export type { Channel, FormatId, Project, Scene, StyleId };
+export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
+
+/** What one video, or the whole studio, has cost. */
+export type ProjectUsage = { entries: UsageEntry[]; summary: UsageSummary };
+export type StudioUsage = { total: UsageSummary; month: UsageSummary; videos: number; perVideo: number; balance: number | null };
 
 export type SceneState = Scene & { voiceCurrent: boolean; imageCurrent: boolean };
 /** `timing`: where each scene really sits in a versus or deep-dive video (they have an intro and gaps). */
 export type ProjectState = Omit<Project, "scenes"> & { scenes: SceneState[]; hasComposition: boolean; hasVideo: boolean; timing?: { starts: number[]; lengths: number[] } };
-export type ProjectSummary = Omit<Project, "scenes"> & { sceneCount: number; hasVideo: boolean };
+export type ProjectSummary = Omit<Project, "scenes"> & { sceneCount: number; hasVideo: boolean; cost: number };
 
 export type Job = {
   id: string;
@@ -14,6 +21,11 @@ export type Job = {
   projectId?: string;
   status: "queued" | "running" | "done" | "failed";
   log: string[];
+  /** Every stage reached so far; the last one is current. */
+  stages: Progress[];
+  /** US dollars spent on AI so far. */
+  cost: number;
+  startedAt?: number;
   result?: unknown;
   error?: string;
   createdAt: number;
@@ -57,7 +69,9 @@ export const api = {
   job: (id: string) => call<Job>("GET", `/api/jobs/${id}`),
   projects: () => call<ProjectSummary[]>("GET", "/api/projects"),
   project: (id: string) => call<ProjectState>("GET", `/api/projects/${id}`),
-  create: (channel: string, format: FormatId, topic: string, style: StyleId) => call<Job>("POST", "/api/projects", { channel, format, topic, style }),
+  create: (channel: string, format: FormatId | "both", topic: string, style: StyleId) => call<Job>("POST", "/api/projects", { channel, format, topic, style }),
+  usage: (id: string) => call<ProjectUsage>("GET", `/api/projects/${id}/usage`),
+  studioUsage: () => call<StudioUsage>("GET", "/api/usage"),
   save: (id: string, edits: Partial<Project>) => call<ProjectState>("PUT", `/api/projects/${id}`, edits),
   remove: (id: string) => call("DELETE", `/api/projects/${id}`),
   build: (id: string, images: boolean) => call<Job>("POST", `/api/projects/${id}/build`, { images }),
@@ -68,7 +82,17 @@ export const api = {
   youtube: () => call<YouTubeStatus>("GET", "/api/youtube"),
   connectYouTube: (channel: string) => call<Job>("POST", `/api/youtube/${channel}/connect`),
   publish: (id: string, options: { privacy: Privacy; publishAt?: string; force?: boolean }) => call<Job>("POST", `/api/projects/${id}/publish`, options),
+  marketingScript: (language: "en" | "ar") => call<{ script: string }>("GET", `/api/marketing/script?language=${language}`),
+  marketingSessions: () => call<Session[]>("GET", "/api/marketing"),
+  startMarketing: (input: { url: string; language: "en" | "ar"; format: FormatId | "both"; creativity: Creativity; script: string }) => call<{ session: Session; job: Job }>("POST", "/api/marketing", input),
+  marketingSession: (id: string) => call<Session>("GET", `/api/marketing/${id}`),
+  editMarketing: (id: string, edits: { brief?: Partial<MarketingBrief>; script?: string; colors?: Record<string, string> }) => call<Session>("PUT", `/api/marketing/${id}`, edits),
+  sendMarketing: (id: string, text: string) => call<Session>("POST", `/api/marketing/${id}/messages`, { text }),
+  createMarketing: (id: string) => call<Job>("POST", `/api/marketing/${id}/create`),
 };
+
+/** A picture of a marketing chat (a website screenshot or logo), before it has a project. */
+export const sessionUrl = (session: string, file: string) => `/marketing-files/${session}/${file}`;
 
 export type Privacy = "private" | "unlisted" | "public";
 
@@ -99,6 +123,13 @@ export function sceneSeconds(scene: Scene): number {
 
 export function newSceneId(): string {
   return `s${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+}
+
+/** "$0.42", or "<$0.01" for the tiny costs of a single call. */
+export function formatCost(dollars: number): string {
+  if (!dollars) return "$0";
+  if (dollars < 0.01) return "<$0.01";
+  return `$${dollars < 10 ? dollars.toFixed(2) : dollars.toFixed(1)}`;
 }
 
 export function formatTime(seconds: number): string {

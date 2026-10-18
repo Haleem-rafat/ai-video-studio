@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { lookOf } from "../../src/render/looks.ts";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Preview } from "./Preview.tsx";
 import { PublishDialog } from "./PublishDialog.tsx";
 import { SceneCard } from "./SceneCard.tsx";
@@ -18,6 +19,10 @@ import { ChannelSwatch, Confirm, Field } from "./shared.tsx";
 import { Timeline } from "./Timeline.tsx";
 import { VersusPanel } from "./VersusPanel.tsx";
 import { DeepDivePanel } from "./DeepDivePanel.tsx";
+import { MarketingPanel } from "./MarketingPanel.tsx";
+import { CostPanel } from "./CostPanel.tsx";
+import { JobProgress } from "./JobProgress.tsx";
+import { formatCost } from "../api.ts";
 
 type Props = {
   id: string;
@@ -46,7 +51,7 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState<"preview" | "video">("preview");
+  const [tab, setTab] = useState<"preview" | "video" | "cost">("preview");
   const [nonce, setNonce] = useState(0);
   const [time, setTime] = useState(0);
   const [seekTo, setSeekTo] = useState<{ time: number; at: number } | null>(null);
@@ -85,6 +90,7 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
         scenes: current.scenes,
         ...(current.versus ? { versus: current.versus } : {}),
         ...(current.deepdive ? { deepdive: current.deepdive } : {}),
+        ...(current.marketing ? { marketing: current.marketing } : {}),
       });
       // Only take the server's copy if nothing was typed while it was saving.
       if (edits.current === editAtSend) {
@@ -160,20 +166,35 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
   };
 
   if (!project) {
+    if (error) return <div className="flex flex-1 items-center justify-center p-6 text-sm text-destructive">{error}</div>;
+    // The page's own shape while it loads: header, scene cards, preview.
     return (
-      <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-        {error || (
-          <>
-            <Loader2Icon className="size-4 animate-spin" /> Loading project…
-          </>
-        )}
+      <div className="flex min-h-0 flex-1 flex-col" aria-busy="true" aria-label="Loading project">
+        <div className="flex items-center gap-3 border-b px-4 py-3">
+          <div className="grid flex-1 gap-2">
+            <Skeleton className="h-6 w-72" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-8 w-28" />
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(340px,40%)]">
+          <div className="grid content-start gap-3 p-4">
+            {[0, 1, 2].map((index) => (
+              <Skeleton key={index} className="h-36 w-full rounded-xl" />
+            ))}
+          </div>
+          <div className="border-l p-3">
+            <Skeleton className="aspect-video w-full rounded-lg" />
+          </div>
+        </div>
       </div>
     );
   }
 
   const stale = project.scenes.filter((scene) => !scene.voiceCurrent || (scene.imagePrompt && !scene.imageCurrent)).length;
   const voiceChars = project.scenes.filter((scene) => !scene.voiceCurrent).reduce((sum, scene) => sum + scene.narration.length, 0);
-  const running = jobs.find((job) => job.status === "running");
+  const running = jobs.find((job) => job.status === "running") ?? jobs.find((job) => job.status === "queued");
   const renderBlocked = busy || stale > 0 || !project.hasComposition;
 
   return (
@@ -188,12 +209,12 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
           />
           <div className="flex min-w-0 flex-wrap items-center gap-2 px-1.5 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5 text-foreground">
-              <ChannelSwatch color={channel?.colors.accent} />
-              {channel?.name}
+              <ChannelSwatch color={project.marketing?.brand.colors.accent ?? channel?.colors.accent} />
+              {project.marketing?.brand.name ?? channel?.name}
             </span>
             <Badge variant="outline">{project.format === "short" ? "Short · 9:16" : "Long · 16:9"}</Badge>
-            {project.style === "versus" || project.style === "deepdive" ? (
-              <Badge variant="outline">{project.style === "versus" ? "Versus" : "Deep dive"}</Badge>
+            {project.style === "versus" || project.style === "deepdive" || project.style === "marketing" ? (
+              <Badge variant="outline">{project.style === "versus" ? "Versus" : project.style === "marketing" ? "Marketing" : "Deep dive"}</Badge>
             ) : (
             <Select value={project.style ?? "motion"} disabled={busy} onValueChange={(style) => edit((current) => ({ ...current, style: style as StyleId }))}>
               <SelectTrigger size="sm" className="h-6 gap-1 rounded-4xl px-2 text-xs" aria-label="Look">
@@ -224,7 +245,7 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {project.style !== "versus" && project.style !== "deepdive" && (
+          {project.style !== "versus" && project.style !== "deepdive" && project.style !== "marketing" && (
             <Action tip={llmReady ? "Bonsai re-checks every claim, date and number" : "Start Bonsai first"}>
               <Button variant="outline" disabled={busy || !llmReady} onClick={() => runJob(() => api.factCheck(id))}>
                 <ShieldCheckIcon /> Fact-check
@@ -247,7 +268,38 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
               <ClapperboardIcon /> Final render
             </Button>
           </Action>
-          <PublishDialog project={project} channel={channel} projects={projects} busy={busy} run={runJob} />
+          {project.marketing ? (
+            <>
+              <Action tip={project.hasVideo ? "The rendered video, ready to post" : "Render it first"}>
+                <Button variant="outline" disabled={!project.hasVideo} asChild={project.hasVideo}>
+                  {project.hasVideo ? (
+                    <a href={`/files/${id}/video.mp4`} download={`${project.marketing.brand.name}-${project.format}.mp4`}>
+                      <DownloadIcon /> Video
+                    </a>
+                  ) : (
+                    <span>
+                      <DownloadIcon /> Video
+                    </span>
+                  )}
+                </Button>
+              </Action>
+              <Action tip="The post's caption and hashtags">
+                <Button variant="outline" disabled={!project.hasComposition} asChild={project.hasComposition}>
+                  {project.hasComposition ? (
+                    <a href={`/files/${id}/post.txt`} download={`${project.marketing.brand.name}-post.txt`}>
+                      <DownloadIcon /> Caption
+                    </a>
+                  ) : (
+                    <span>
+                      <DownloadIcon /> Caption
+                    </span>
+                  )}
+                </Button>
+              </Action>
+            </>
+          ) : (
+            <PublishDialog project={project} channel={channel} projects={projects} busy={busy} run={runJob} />
+          )}
           <Confirm
             trigger={
               <Button variant="ghost" size="icon" disabled={busy} aria-label="Move project to trash">
@@ -266,10 +318,8 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
       </div>
 
       {running && (
-        <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-1.5 text-xs">
-          <Loader2Icon className="size-3.5 shrink-0 animate-spin" />
-          <span className="font-medium">{running.label}</span>
-          <span className="min-w-0 truncate font-mono text-muted-foreground">{running.log.at(-1) ?? "starting…"}</span>
+        <div className="border-b bg-card/60 px-4 py-2.5">
+          <JobProgress job={running} compact />
         </div>
       )}
       {error && <div className="border-b bg-destructive/10 px-4 py-1.5 text-xs text-destructive">{error}</div>}
@@ -288,6 +338,7 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
                 }}
               />
             )}
+            {project.marketing && <MarketingPanel project={project} busy={busy} onEdit={(change) => edit((current) => ({ ...current, marketing: change(current.marketing!) }))} />}
             {project.deepdive && (
               <DeepDivePanel
                 project={project}
@@ -347,11 +398,14 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
         </div>
 
         <div className="flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l">
-          <Tabs value={tab} onValueChange={(value) => setTab(value as "preview" | "video")} className="flex min-h-0 flex-1 flex-col gap-0">
+          <Tabs value={tab} onValueChange={(value) => setTab(value as "preview" | "video" | "cost")} className="flex min-h-0 flex-1 flex-col gap-0">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <TabsList>
                 <TabsTrigger value="preview">Live preview</TabsTrigger>
                 <TabsTrigger value="video">Rendered video</TabsTrigger>
+                <TabsTrigger value="cost">
+                  Cost{(projects.find((p) => p.id === id)?.cost ?? 0) > 0 && <span className="ml-1 font-mono text-[11px] text-muted-foreground">{formatCost(projects.find((p) => p.id === id)!.cost)}</span>}
+                </TabsTrigger>
               </TabsList>
               {tab === "video" && project.hasVideo && (
                 <Button variant="ghost" size="sm" asChild>
@@ -383,6 +437,9 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
                   No rendered video yet. Quick render makes a draft; Final render makes the upload version.
                 </div>
               )}
+            </TabsContent>
+            <TabsContent value="cost" className="flex min-h-0 flex-1 flex-col">
+              <CostPanel projectId={id} version={version} />
             </TabsContent>
           </Tabs>
         </div>

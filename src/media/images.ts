@@ -7,6 +7,8 @@ import { generateImage } from "ai";
 import { requireEnv, type Channel } from "../config.ts";
 import type { FormatId, Scene, StyleId } from "../types.ts";
 import { inBatches } from "./voice.ts";
+import { recordImage } from "../usage.ts";
+import { reportProgress } from "../progress.ts";
 
 // FLUX schnell: ~5s and well under a cent per picture.
 const MODEL_URL = "https://fal.run/fal-ai/flux/schnell";
@@ -59,11 +61,14 @@ function promptFor(scene: Scene, channel: Channel, whiteboard: boolean): string 
 
 /** The picture's bytes and file extension, from the AI Gateway. */
 async function drawWithGateway(scene: Scene, channel: Channel, format: FormatId, whiteboard: boolean): Promise<{ bytes: Uint8Array; ext: string }> {
-  const { image } = await generateImage({
-    model: whiteboard ? GATEWAY_WHITEBOARD_MODEL : GATEWAY_MODEL,
+  const model = whiteboard ? GATEWAY_WHITEBOARD_MODEL : GATEWAY_MODEL;
+  const result = await generateImage({
+    model,
     prompt: promptFor(scene, channel, whiteboard),
     ...(whiteboard ? { seed: seedFor(scene) } : { aspectRatio: format === "short" ? "9:16" : "16:9" }),
   });
+  recordImage(model, result, "pictures");
+  const { image } = result;
   return { bytes: image.uint8Array, ext: image.mediaType === "image/png" ? "png" : "jpg" };
 }
 
@@ -114,7 +119,12 @@ export async function drawScene(projectDir: string, scene: Scene, channel: Chann
 export async function drawProject(projectDir: string, scenes: Scene[], channel: Channel, format: FormatId, lookFor: (scene: Scene) => StyleId): Promise<number> {
   const stale = scenes.filter((scene) => !imageIsCurrent(projectDir, scene, lookFor(scene)));
 
-  await inBatches(stale, 4, (scene) => drawScene(projectDir, scene, channel, format, lookFor(scene)));
+  let done = 0;
+  if (stale.length) reportProgress("pictures", 0, stale.length);
+  await inBatches(stale, 4, async (scene) => {
+    await drawScene(projectDir, scene, channel, format, lookFor(scene));
+    reportProgress("pictures", ++done, stale.length);
+  });
 
   return stale.length;
 }

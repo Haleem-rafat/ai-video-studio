@@ -8,7 +8,10 @@ import { addAsset, cloneVoice, FONTS, importFromYouTube, makeCharacter, readStyl
 import { LLM_URL, OUTPUT_DIR, ROOT, brandDir, loadChannel, loadChannels, saveChannel, type Channel } from "../config.ts";
 import { imageIsCurrent } from "../media/images.ts";
 import { narratorKey, voiceIsCurrent } from "../media/voice.ts";
-import { build, compose, createProject, factCheck, render } from "../pipeline.ts";
+import { build, channelOf, compose, createMarketing, createProject, factCheck, MARKETING_VOICES, render } from "../pipeline.ts";
+import { assistantTurn, defaultScript, listSessions, loadSession, newSession, saveSession, sessionDir, type Session } from "../marketing/session.ts";
+import { readSite } from "../marketing/site.ts";
+import { placeMarketing } from "../render/marketing-kit.ts";
 import { listProjects, loadProject, projectDir, saveProject } from "../project.ts";
 import { completeSignIn, connectionStatus, signIn, uploadVideo, type Privacy } from "../publish/youtube.ts";
 import { lookOf } from "../render/looks.ts";
@@ -18,8 +21,10 @@ import { placeVersus } from "../render/versus.ts";
 import { placeDeep } from "../render/deepdive.ts";
 import { addProductPhoto } from "../media/products.ts";
 import { addScenePhoto } from "../media/photos.ts";
-import { LOOKS, STYLES, VISUAL_TYPES, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
+import { LOOKS, STYLES, VISUAL_TYPES, type Creativity, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
 import { enqueue, getJob, recentJobs } from "./jobs.ts";
+import { appendUsage, collectUsage, readUsage, STUDIO_LEDGER, summarize } from "../usage.ts";
+import { gateway } from "ai";
 
 const PORT = Number(process.env.PORT ?? 4300);
 const DIST = join(ROOT, "dist");
@@ -102,6 +107,16 @@ async function elevenCredit(): Promise<unknown> {
 
 // ---------------------------------------------------------------- helpers
 
+let balanceCache: { at: number; value: number | null } = { at: 0, value: null };
+
+/** What is left on the AI Gateway, in dollars; asked at most once a minute. */
+async function gatewayBalance(): Promise<number | null> {
+  if (Date.now() - balanceCache.at < 60_000) return balanceCache.value;
+  const value = await gateway.getCredits().then((credits) => Number(credits.balance), () => null);
+  balanceCache = { at: Date.now(), value };
+  return value;
+}
+
 async function body<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(chunk as Buffer);
@@ -157,8 +172,8 @@ function inside(base: string, relative: string): string {
  * laying scenes end to end.
  */
 function timingOf(project: Project): { starts: number[]; lengths: number[] } | undefined {
-  if (project.style !== "versus" && project.style !== "deepdive") return undefined;
-  const { scenes, total } = project.style === "deepdive" ? placeDeep(project) : placeVersus(project);
+  if (project.style !== "versus" && project.style !== "deepdive" && project.style !== "marketing") return undefined;
+  const { scenes, total } = project.style === "deepdive" ? placeDeep(project) : project.style === "marketing" ? placeMarketing(project) : placeVersus(project);
   const starts = scenes.map((scene) => scene.start);
   return { starts, lengths: starts.map((start, index) => (starts[index + 1] ?? total) - start) };
 }
@@ -166,7 +181,7 @@ function timingOf(project: Project): { starts: number[]; lengths: number[] } | u
 /** What the studio shows per scene beyond the project file itself. */
 function withState(project: Project) {
   const dir = projectDir(project.id);
-  const channel = loadChannel(project.channel);
+  const channel = channelOf(project);
 
   return {
     ...project,
@@ -189,7 +204,7 @@ function applyEdits(project: Project, edits: Partial<Project>): Project {
   if (edits.style !== undefined && edits.style !== project.style) {
     if (!STYLES.includes(edits.style)) throw new HttpError(400, `Style is one of ${STYLES.join(", ")}.`);
     // Versus and deep-dive scenes are their own kind; other looks can't show them, and vice versa.
-    const own = ["versus", "deepdive"];
+    const own = ["versus", "deepdive", "marketing"];
     if (own.includes(edits.style) || own.includes(project.style ?? "")) throw new HttpError(400, "A versus or deep-dive video can't switch to another look. Start a new video instead.");
     project.style = edits.style;
   }
@@ -213,6 +228,17 @@ function applyEdits(project: Project, edits: Partial<Project>): Project {
     const query = edits.deepdive.cover?.query;
     // A new search drops the old photo; the next preview update finds one.
     if (typeof query === "string" && query.trim() !== project.deepdive.cover?.query) project.deepdive.cover = { query: query.trim() };
+  }
+  if (edits.marketing && project.marketing) {
+    if (typeof edits.marketing.captions === "boolean") project.marketing.captions = edits.marketing.captions;
+    const voice = edits.marketing.narrator?.voice;
+    if (typeof voice === "string" && /^[A-Za-z]+$/.test(voice)) project.marketing.narrator.voice = voice;
+    const colors = edits.marketing.brand?.colors;
+    if (colors) {
+      for (const key of Object.keys(project.marketing.brand.colors) as (keyof typeof colors)[]) {
+        if (/^#[0-9a-fA-F]{6}$/.test(String(colors[key]))) project.marketing.brand.colors[key] = String(colors[key]);
+      }
+    }
   }
   if (typeof edits.soundtrack === "boolean") project.soundtrack = edits.soundtrack;
 
@@ -348,21 +374,45 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     return job ? json(response, 200, job) : json(response, 404, { error: "No such job" });
   }
 
+  if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)\/usage$/)) && method === "GET") {
+    const entries = await readUsage(projectDir(match[1]));
+    return json(response, 200, { entries, summary: summarize(entries) });
+  }
+
+  if (path === "/api/usage" && method === "GET") {
+    // Every video's, chat's and channel job's costs; a chat copied into its videos counts once.
+    const seen = new Set<string>();
+    const folders = [...(await listProjects()).map((project) => projectDir(project.id)), ...(await listSessions()).map((session) => sessionDir(session.id)), STUDIO_LEDGER];
+    const entries = (await Promise.all(folders.map((folder) => readUsage(folder)))).flat().filter((entry) => {
+      if (!entry.generationId) return true;
+      if (seen.has(entry.generationId)) return false;
+      seen.add(entry.generationId);
+      return true;
+    });
+    const month = new Date().toISOString().slice(0, 7);
+    const videos = (await listProjects()).filter((project) => project.render).length;
+    const total = summarize(entries);
+    return json(response, 200, { total, month: summarize(entries.filter((entry) => entry.at.startsWith(month))), videos, perVideo: videos ? total.cost / videos : 0, balance: await gatewayBalance() });
+  }
+
   if (path === "/api/projects" && method === "GET") {
     const projects = await listProjects();
-    return json(response, 200, projects.map(({ scenes, ...rest }) => ({ ...rest, sceneCount: scenes.length, hasVideo: existsSync(join(projectDir(rest.id), "video.mp4")) })));
+    const costs = await Promise.all(projects.map(async (project) => (await readUsage(projectDir(project.id))).reduce((sum, entry) => sum + entry.cost, 0)));
+    return json(response, 200, projects.map(({ scenes, ...rest }, index) => ({ ...rest, sceneCount: scenes.length, hasVideo: existsSync(join(projectDir(rest.id), "video.mp4")), cost: costs[index] })));
   }
 
   if (path === "/api/projects" && method === "POST") {
-    const input = await body<{ channel: string; format: FormatId; topic: string; style?: StyleId }>(request);
+    const input = await body<{ channel: string; format: FormatId | "both"; topic: string; style?: StyleId }>(request);
     if (!input.topic?.trim()) throw new HttpError(400, "A topic is required.");
-    if (input.format !== "short" && input.format !== "long") throw new HttpError(400, "Format is short or long.");
+    if (input.format !== "short" && input.format !== "long" && input.format !== "both") throw new HttpError(400, "Format is short, long or both.");
     const style = input.style ?? "motion";
     if (!STYLES.includes(style)) throw new HttpError(400, `Style is one of ${STYLES.join(", ")}.`);
     if ((style === "versus" || style === "arena") && !productsOf(input.topic)) throw new HttpError(400, 'For a versus video, write the topic as "Product A vs Product B".');
     loadChannel(input.channel);
-    const job = enqueue(`Write script: ${input.topic}`, async () => (await createProject(input.channel, input.format, input.topic.trim(), style)).id);
-    return json(response, 202, job);
+    // "Both" writes two scripts: a long video for the laptop and a Short, each sized for its format.
+    const formats: FormatId[] = input.format === "both" ? ["long", "short"] : [input.format];
+    const jobs = formats.map((format) => enqueue(`Write script: ${input.topic}${formats.length > 1 ? ` (${format === "long" ? "16:9" : "9:16"})` : ""}`, async () => (await createProject(input.channel, format, input.topic.trim(), style)).id));
+    return json(response, 202, jobs[0]);
   }
 
   if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)$/))) {
@@ -413,6 +463,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
 
   if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)\/publish$/)) && method === "POST") {
     const id = match[1];
+    if ((await loadProject(id)).marketing) throw new HttpError(400, "A marketing video isn't uploaded to a YouTube channel. Download video.mp4 and post.txt instead.");
     const input = await body<{ privacy?: Privacy; publishAt?: string; force?: boolean }>(request);
     const privacy = input.privacy ?? "private";
     if (!["private", "unlisted", "public"].includes(privacy)) throw new HttpError(400, "Privacy is private, unlisted or public.");
@@ -470,6 +521,86 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)\/compose$/)) && method === "POST") {
     await compose(match[1]);
     return json(response, 200, { ok: true });
+  }
+
+  // ------------------------------------------------ marketing videos: website, chat, brief
+  if (path === "/api/marketing/script" && method === "GET") {
+    const language = url.searchParams.get("language") === "en" ? "en" : "ar";
+    return json(response, 200, { script: await defaultScript(language), voices: MARKETING_VOICES });
+  }
+
+  if (path === "/api/marketing" && method === "GET") return json(response, 200, await listSessions());
+
+  if (path === "/api/marketing" && method === "POST") {
+    const input = await body<{ url?: string; language?: string; format?: FormatId | "both"; creativity?: Creativity; script?: string }>(request);
+    const site = String(input.url ?? "").trim();
+    if (!/^(https?:\/\/)?[\w-]+(\.[\w-]+)+/i.test(site)) throw new HttpError(400, "Add the website address, e.g. https://example.com");
+    const language = input.language === "en" ? "en" : "ar";
+    if (input.format !== "short" && input.format !== "long" && input.format !== "both") throw new HttpError(400, "Format is short, long or both.");
+    const script = String(input.script ?? "").trim() || (await defaultScript(language));
+    const session = newSession({ url: /^https?:\/\//i.test(site) ? site : `https://${site}`, language, format: input.format, creativity: input.creativity === "faithful" || input.creativity === "bold" ? input.creativity : "creative", script });
+    await saveSession(session);
+    const job = enqueue(`Read website: ${session.url.replace(/^https?:\/\//, "")}`, async (log) => {
+      try {
+        session.brand = await readSite(session.url, sessionDir(session.id), log);
+        session.status = "chat";
+        await saveSession(session);
+        log("chat: preparing the first question ...");
+        await assistantTurn(session);
+        await saveSession(session);
+        return session.id;
+      } catch (error) {
+        session.status = "failed";
+        session.error = error instanceof Error ? error.message : String(error);
+        await saveSession(session);
+        throw error;
+      }
+    }, undefined, () => sessionDir(session.id));
+    return json(response, 202, { session, job });
+  }
+
+  if ((match = path.match(/^\/api\/marketing\/([a-z0-9-]+)$/))) {
+    const session = await loadSession(match[1]);
+    if (method === "GET") return json(response, 200, session);
+    if (method === "PUT") {
+      // Edits from the brief panel: the user can correct any field the chat filled.
+      const edits = await body<Partial<Pick<Session, "brief" | "script">> & { colors?: Record<string, string> }>(request);
+      if (edits.brief) session.brief = { ...session.brief, ...edits.brief, cta: { ...session.brief.cta, ...(edits.brief.cta ?? {}) } };
+      if (typeof edits.script === "string" && edits.script.trim()) session.script = edits.script;
+      if (edits.colors && session.brand) {
+        for (const [key, value] of Object.entries(edits.colors)) if (key in session.brand.colors && /^#[0-9a-fA-F]{6}$/.test(value)) session.brand.colors[key as keyof typeof session.brand.colors] = value;
+      }
+      await saveSession(session);
+      return json(response, 200, session);
+    }
+  }
+
+  if ((match = path.match(/^\/api\/marketing\/([a-z0-9-]+)\/messages$/)) && method === "POST") {
+    const session = await loadSession(match[1]);
+    if (session.status !== "chat" && session.status !== "done") throw new HttpError(409, "The website is still being read.");
+    const { text } = await body<{ text?: string }>(request);
+    if (!text?.trim()) throw new HttpError(400, "Write a message.");
+    session.messages.push({ role: "user", text: text.trim().slice(0, 4000) });
+    await saveSession(session);
+    const { error, entries } = await collectUsage("Chat", () => assistantTurn(session));
+    await appendUsage(sessionDir(session.id), entries.map((entry) => ({ ...entry, step: "chat" })));
+    if (error) session.messages.push({ role: "assistant", text: `⚠️ ${error instanceof Error ? error.message : String(error)}` });
+    await saveSession(session);
+    return json(response, 200, session);
+  }
+
+  if ((match = path.match(/^\/api\/marketing\/([a-z0-9-]+)\/create$/)) && method === "POST") {
+    const session = await loadSession(match[1]);
+    if (session.missing.length) throw new HttpError(400, `The brief still needs: ${session.missing.join(", ")}`);
+    const formats: FormatId[] = session.format === "both" ? ["short", "long"] : [session.format];
+    const jobs = formats.map((format) =>
+      enqueue(`Write script: ${session.brand?.name ?? "marketing"} marketing video (${format === "long" ? "16:9" : "9:16"})`, async (log) => (await createMarketing(session.id, log, format)).id),
+    );
+    return json(response, 202, jobs[0]);
+  }
+
+  if ((match = path.match(/^\/marketing-files\/([a-z0-9-]+)\/(.+)$/))) {
+    return sendFile(request, response, inside(sessionDir(match[1]), match[2]));
   }
 
   if ((match = path.match(/^\/files\/([a-z0-9-]+)\/(.+)$/))) {

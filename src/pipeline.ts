@@ -1,10 +1,10 @@
-import { execFile } from "node:child_process";
-import { copyFile, rename, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { copyFile, cp, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { copyBrand } from "./brand/brand.ts";
-import { loadChannel } from "./config.ts";
+import { loadChannel, type Channel } from "./config.ts";
 import { assertLlmRunning } from "./llm.ts";
 import { drawProject } from "./media/images.ts";
 import { audioSeconds, voiceProject } from "./media/voice.ts";
@@ -24,11 +24,105 @@ import { prepareProducts } from "./media/products.ts";
 import { buildVersus, chapters } from "./render/versus.ts";
 import { buildArena } from "./render/arena.ts";
 import { renderThumbnail } from "./render/thumbnail.ts";
+import { buildMarketing } from "./render/marketing.ts";
+import { loadSession, saveSession, sessionDir } from "./marketing/session.ts";
+import { writeMarketing } from "./marketing/write.ts";
+import { directArt, drawArt } from "./marketing/art.ts";
+import { reportProgress } from "./progress.ts";
+import { appendUsage, readUsage, recordLocal } from "./usage.ts";
 import type { FormatId, Project, StyleId, VersusLook } from "./types.ts";
 
 const run = promisify(execFile);
 
 export type Log = (message: string) => void;
+
+/** Gemini voices for a marketing video's narrator. */
+export const MARKETING_VOICES = { male: "Charon", female: "Sulafat" } as const;
+
+const MARKETING_STYLE = {
+  ar: "اقرأ باللهجة المصرية العامية، بصوت طبيعي وهادي وواثق، كأنك بتشرح فكرة لصاحب بيزنس، مش بتقرأ إعلان. إيقاع أسرع شوية في المشاكل، وأهدى عند الحل. انطق أسماء البراندات والمنصات بالإنجليزي.",
+  en: "Read naturally, calm and confident, like explaining an idea to a business owner, not reading an ad. A little quicker through the problems, calmer at the solution.",
+};
+
+/** Marketing videos belong to no YouTube channel: this is their owner in project ids and lists. */
+export const MARKETING_OWNER = "marketing";
+
+/**
+ * The channel a project is voiced and built with. A marketing video has
+ * none of its own: one is made from its brand and brief, so nothing of a
+ * YouTube channel (voice, logo, handle) leaks into a client's video.
+ */
+export function channelOf(project: Pick<Project, "channel" | "marketing">): Channel {
+  const m = project.marketing;
+  if (!m) return loadChannel(project.channel);
+  const { brand, brief } = m;
+  return {
+    id: MARKETING_OWNER,
+    name: brand.name,
+    language: m.language,
+    dialect: m.language === "ar" ? "Egyptian colloquial Arabic" : "English",
+    narrator: { provider: "gemini", voice: m.narrator.voice, style: m.narrator.style },
+    audience: brief.audience,
+    tone: brief.tone,
+    voiceId: "",
+    imageStyle: "",
+    mascot: { kind: "robot", name: "" },
+    colors: { background: brand.colors.background, panel: brand.colors.panel, text: brand.colors.text, accent: brand.colors.accent, muted: brand.colors.muted },
+    font: brand.fonts.body,
+  };
+}
+
+/** Step 1 for a marketing video: written from a finished chat; the website's screenshots move into the project. */
+export async function createMarketing(sessionId: string, log: Log = console.log, only?: FormatId): Promise<Project> {
+  const session = await loadSession(sessionId);
+  if (!session.brand) throw new Error("The website hasn't been read yet");
+  if (session.missing.length) throw new Error(`The brief still needs: ${session.missing.join(", ")}`);
+  session.status = "writing";
+  await saveSession(session);
+  try {
+    const { brand, brief, language } = session;
+    const format: FormatId = only ?? (session.format === "long" ? "long" : "short");
+    const creativity = session.creativity ?? "faithful";
+    const draft = await writeMarketing({ brand, brief, script: session.script, language, format, creativity }, log);
+    const now = new Date().toISOString();
+    const project: Project = {
+      id: newProjectId(MARKETING_OWNER, format, `${brand.name} marketing`),
+      channel: MARKETING_OWNER,
+      format,
+      style: "marketing",
+      topic: `Marketing video for ${brand.name} (${brand.url})`,
+      title: draft.title,
+      description: `${draft.caption}\n\n${draft.hashtags.map((tag) => `#${tag}`).join(" ")}`.trim(),
+      tags: draft.hashtags,
+      marketing: {
+        brand,
+        brief,
+        creativity,
+        language,
+        narrator: { voice: MARKETING_VOICES[brief.voice || "male"], style: MARKETING_STYLE[language] },
+        captions: Boolean(brief.captions),
+        post: { caption: draft.caption, hashtags: draft.hashtags },
+      },
+      scenes: draft.scenes,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await cp(join(sessionDir(sessionId), "shots"), join(projectDir(project.id), "shots"), { recursive: true });
+    await saveProject(project);
+    // What reading the website and the chat cost is part of what this video cost.
+    await appendUsage(projectDir(project.id), (await readUsage(sessionDir(sessionId))).map((entry) => ({ ...entry, fromChat: true })));
+    session.status = "done";
+    session.projectId = project.id;
+    await saveSession(session);
+    log(`script: ${project.scenes.length} scenes saved as ${project.id}`);
+    return project;
+  } catch (error) {
+    session.status = "chat";
+    session.error = error instanceof Error ? error.message : String(error);
+    await saveSession(session);
+    throw error;
+  }
+}
 
 /** Step 1: Bonsai writes the script into a new project. */
 export async function createProject(channelId: string, format: FormatId, topic: string, style: StyleId = "motion", log: Log = console.log): Promise<Project> {
@@ -131,7 +225,7 @@ function withChapters(project: Project, arabic: boolean): string {
 /** Steps 2-3: voices and pictures for every scene that changed since last time. */
 export async function prepareMedia(id: string, options: { images?: boolean } = {}, log: Log = console.log): Promise<Project> {
   const project = await loadProject(id);
-  const channel = loadChannel(project.channel);
+  const channel = channelOf(project);
   const dir = projectDir(id);
 
   const voiced = await voiceProject(dir, project.scenes, channel);
@@ -144,13 +238,23 @@ export async function prepareMedia(id: string, options: { images?: boolean } = {
     await saveProject(project);
   }
 
+  if (project.marketing) {
+    // The video's own pictures: planned once, then drawn wherever one is missing.
+    if (!project.marketing.art) {
+      await directArt(project, log);
+      await saveProject(project);
+    }
+    const drawn = await drawArt(dir, project, log);
+    if (drawn) await saveProject(project);
+  }
+
   if (project.style === "deepdive") {
     const found = await preparePhotos(dir, project, log);
     if (found) log(`photos: ${found} found; replace any on the project page`);
     await saveProject(project);
   }
 
-  if ((options.images ?? true) && project.style !== "versus" && project.style !== "deepdive") {
+  if ((options.images ?? true) && project.style !== "versus" && project.style !== "deepdive" && project.style !== "marketing") {
     const drawn = await drawProject(dir, project.scenes, channel, project.format, (scene) => lookOf(project, scene));
     log(`pictures: ${drawn} drawn, ${project.scenes.length - drawn} unchanged`);
     await saveProject(project);
@@ -162,11 +266,15 @@ export async function prepareMedia(id: string, options: { images?: boolean } = {
 /** Step 4: writes index.html (the HyperFrames composition) and youtube.txt. */
 export async function compose(id: string, log: Log = console.log): Promise<Project> {
   const project = await loadProject(id);
-  const channel = loadChannel(project.channel);
+  const channel = channelOf(project);
   const dir = projectDir(id);
-  await copyBrand(channel, dir);
+  if (!project.marketing) await copyBrand(channel, dir);
 
-  if (project.style === "versus" || project.style === "deepdive") {
+  if (project.style === "marketing") {
+    await writeFile(join(dir, "index.html"), buildMarketing(project));
+    const post = project.marketing?.post;
+    await writeFile(join(dir, "post.txt"), `${post?.caption ?? project.description}\n\n${(post?.hashtags ?? project.tags).map((tag) => `#${tag}`).join(" ")}\n`);
+  } else if (project.style === "versus" || project.style === "deepdive") {
     const html = project.style === "deepdive" ? buildDeepDive(project, channel) : project.versus?.look === "arena" ? buildArena(project, channel) : buildVersus(project, channel);
     await writeFile(join(dir, "index.html"), html);
     project.description = withChapters(project, channel.language === "ar");
@@ -190,7 +298,7 @@ export async function compose(id: string, log: Log = console.log): Promise<Proje
   } else {
     await writeFile(join(dir, "index.html"), buildComposition(project, channel));
   }
-  const hashtags = project.style === "versus" || project.style === "deepdive" ? `Tags: ${project.tags.join(", ")}` : project.tags.map((tag) => `#${tag.replace(/\s+/g, "")}`).join(" ");
+  const hashtags = project.style === "marketing" ? "" : project.style === "versus" || project.style === "deepdive" ? `Tags: ${project.tags.join(", ")}` : project.tags.map((tag) => `#${tag.replace(/\s+/g, "")}`).join(" ");
   await writeFile(join(dir, "youtube.txt"), `${project.title}\n\n${project.description}\n\n${hashtags}\n`);
   log("compose: index.html written");
   return project;
@@ -202,14 +310,38 @@ export async function render(id: string, quality: "draft" | "standard" | "high" 
   const started = Date.now();
 
   const project = await loadProject(id);
-  const hyperframes = (args: string[]) => run("npx", ["hyperframes", "render", ...args, "--quality", quality], { cwd: dir, maxBuffer: 256 * 1024 * 1024 });
+  // HyperFrames prints "@hf-progress {"code":…,"pct":…}" lines: they drive the progress bar.
+  const hyperframes = (args: string[], part = 0, parts = 1) =>
+    new Promise<void>((resolve, reject) => {
+      const child = spawn("npx", ["hyperframes", "render", ...args, "--quality", quality], { cwd: dir });
+      let tail = "";
+      const read = (chunk: Buffer) => {
+        const text = tail + chunk.toString("utf8");
+        const lines = text.split(/\r?\n/);
+        tail = lines.pop() ?? "";
+        for (const line of lines) {
+          const match = line.match(/@hf-progress (\{.*\})/);
+          if (!match) continue;
+          const pct = Number((JSON.parse(match[1]) as { pct?: number }).pct ?? 0);
+          reportProgress("render", Math.round(((part + pct / 100) / parts) * 100), 100);
+        }
+      };
+      let errors = "";
+      child.stdout.on("data", read);
+      child.stderr.on("data", (chunk: Buffer) => {
+        read(chunk);
+        errors = (errors + chunk.toString("utf8")).slice(-4000);
+      });
+      child.on("error", reject);
+      child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`HyperFrames stopped (${code}): ${errors.slice(-600)}`))));
+    });
 
   if (project.style === "mixed") {
     // Each segment renders on its own, then they are joined end to end.
     const segments = buildSegments(project, loadChannel(project.channel));
     for (const [index, segment] of segments.entries()) {
       log(`render: segment ${index + 1}/${segments.length} (${segment.look}, ${segment.duration.toFixed(1)}s) ...`);
-      await hyperframes(["-c", segment.file, "--output", `run-${index + 1}.mp4`]);
+      await hyperframes(["-c", segment.file, "--output", `run-${index + 1}.mp4`], index, segments.length);
     }
     const inputs = segments.flatMap((_, index) => ["-i", `run-${index + 1}.mp4`]);
     const joins = segments.map((_, index) => `[${index}:v][${index}:a]`).join("");
@@ -223,8 +355,9 @@ export async function render(id: string, quality: "draft" | "standard" | "high" 
     await hyperframes(["--output", "video-raw.mp4"]);
   }
 
+  reportProgress("render", 100, 100);
   if (project.soundtrack !== false) {
-    log("render: mixing music and sound effects ...");
+    log("mixing: music and sound effects ...");
     await addSoundtrack(project, join(dir, "video-raw.mp4"), join(dir, "video.mp4"));
   } else {
     await rename(join(dir, "video-raw.mp4"), join(dir, "video.mp4"));
@@ -232,6 +365,7 @@ export async function render(id: string, quality: "draft" | "standard" | "high" 
 
   const seconds = await audioSeconds(join(dir, "video.mp4"));
   project.render = { path: "video.mp4", seconds, renderedAt: new Date().toISOString() };
+  recordLocal("render", `HyperFrames (${quality}, this Mac)`, Date.now() - started, { audioSeconds: seconds });
   await saveProject(project);
   log(`render: ${seconds.toFixed(1)}s video in ${Math.round((Date.now() - started) / 1000)}s`);
   return project;
