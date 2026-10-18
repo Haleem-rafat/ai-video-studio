@@ -4,7 +4,8 @@ import type { FormatId, Project, Scene, StyleId } from "../src/types.ts";
 export type { Channel, FormatId, Project, Scene, StyleId };
 
 export type SceneState = Scene & { voiceCurrent: boolean; imageCurrent: boolean };
-export type ProjectState = Omit<Project, "scenes"> & { scenes: SceneState[]; hasComposition: boolean; hasVideo: boolean };
+/** `timing`: where each scene really sits in a versus or deep-dive video (they have an intro and gaps). */
+export type ProjectState = Omit<Project, "scenes"> & { scenes: SceneState[]; hasComposition: boolean; hasVideo: boolean; timing?: { starts: number[]; lengths: number[] } };
 export type ProjectSummary = Omit<Project, "scenes"> & { sceneCount: number; hasVideo: boolean };
 
 export type Job = {

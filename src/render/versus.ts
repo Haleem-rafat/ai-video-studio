@@ -1,4 +1,5 @@
 import { brandPaths } from "../brand/brand.ts";
+import { alignWords } from "./align.ts";
 import { FORMATS, type Channel } from "../config.ts";
 import type { Pose, Project, Scene, VersusRow } from "../types.ts";
 
@@ -24,16 +25,26 @@ function asVersus(scene: Scene): VersusScene["visual"] {
   return scene.visual.type === "versus" ? scene.visual : { type: "versus", title: "", rows: [] };
 }
 
+/**
+ * An arena video's beats: the montage starts on frame 0, each round gets a
+ * "ROUND n" card between voices, and the close has room for the K.O. and the
+ * subscribe click.
+ */
+const ARENA = { intro: 0.4, gap: 1.2, outro: 5 };
+
+const timingOf = (project: Pick<Project, "versus">) => (project.versus?.look === "arena" ? ARENA : { intro: INTRO, gap: GAP, outro: OUTRO });
+
 /** When each scene speaks, and when the closing subscribe beat starts. */
 export function placeVersus(project: Project): { scenes: VersusScene[]; outro: number; total: number } {
-  let t = INTRO;
+  const timing = timingOf(project);
+  let t = timing.intro;
   const scenes = project.scenes.map((scene) => {
     const seconds = scene.audio?.seconds ?? 3;
     const placed = { ...scene, start: r(t), seconds, visual: asVersus(scene) };
-    t += seconds + GAP;
+    t += seconds + timing.gap;
     return placed;
   });
-  return { scenes, outro: r(t), total: r(t + OUTRO) };
+  return { scenes, outro: r(t), total: r(t + timing.outro) };
 }
 
 /** When each row of a scene appears; the check mark lands 0.35s later. */
@@ -45,8 +56,9 @@ export function rowTimes(scene: VersusScene): number[] {
 
 /**
  * Caption lines from the script, timed by the voice's word times. Lines end
- * at punctuation; long phrases split evenly. The heard words can differ from
- * the script (digits for spoken numbers), so lines are placed proportionally.
+ * at punctuation; long phrases split evenly. The heard words differ from the
+ * script (numbers and English names come out as several words), so the two
+ * are aligned word by word rather than placed proportionally.
  */
 export function captionLines(scene: Pick<Scene, "narration" | "audio"> & { seconds: number }, perLine: number): { text: string; at: number }[] {
   const words = scene.narration.split(/\s+/).filter(Boolean);
@@ -75,9 +87,10 @@ export function captionLines(scene: Pick<Scene, "narration" | "audio"> & { secon
     else merged.push(line);
   }
 
+  const times = alignWords(words, heard, scene.seconds);
   let index = 0;
   return merged.map((line) => {
-    const position = heard.length ? heard[Math.min(heard.length - 1, Math.round((index / words.length) * heard.length))].start : (scene.seconds * index) / words.length;
+    const position = times[index] ?? 0;
     index += line.length;
     // "وmemory" draws the و beside a Latin word, where it reads like a "g"; a space keeps it legible.
     return { text: line.join(" ").replace(/(^|\s)([وب])(?=[A-Za-z0-9])/g, "$1$2 "), at: r(Math.max(0, position - 0.05)) };
@@ -348,7 +361,7 @@ window.__timelines.main = tl;
 /** "0:00 Intro" lines for the description, one per titled scene. */
 export function chapters(project: Project, introLabel: string): string {
   const { scenes } = placeVersus(project);
-  return chapterList(scenes.map((scene) => ({ start: scene.start, title: scene.visual.title })), GAP, introLabel);
+  return chapterList(scenes.map((scene) => ({ start: scene.start, title: scene.visual.title })), timingOf(project).gap, introLabel);
 }
 
 /** Chapter lines from placed scenes: the first at 0:00, the others just before their scene starts. */

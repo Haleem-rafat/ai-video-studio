@@ -7,7 +7,8 @@ import { ROOT } from "../config.ts";
 import { placeScenes, totalSeconds } from "../render/composition.ts";
 import { lookOf } from "../render/looks.ts";
 import { placeVersus, rowTimes } from "../render/versus.ts";
-import { itemTimes, photoBeat, placeDeep } from "../render/deepdive.ts";
+import { arenaRowTimes, hitDelay, meetAt, resultAt } from "../render/arena.ts";
+import { itemTimes, photoBeat, placeDeep, planMotion } from "../render/deepdive.ts";
 import type { Project } from "../types.ts";
 
 const run = promisify(execFile);
@@ -20,7 +21,7 @@ type Cue = { sound: "whoosh" | "pop" | "click" | "typing" | "pen" | "chime"; at:
 
 /** The beats of the video a viewer should hear: cuts, numbers landing, code typing, the pen. */
 export function cuesFor(project: Project): Cue[] {
-  if (project.style === "versus") return versusCues(project);
+  if (project.style === "versus") return project.versus?.look === "arena" ? arenaCues(project) : versusCues(project);
   if (project.style === "deepdive") return deepCues(project);
   const scenes = placeScenes(project.scenes);
   const total = totalSeconds(scenes);
@@ -56,11 +57,48 @@ function versusCues(project: Project): Cue[] {
   return cues.filter((cue) => cue.at >= 0 && existsSync(join(SFX_DIR, `${cue.sound}.mp3`)));
 }
 
+/**
+ * An arena video's beats: a whoosh per montage cut, the slam when the fighters
+ * meet, a whoosh per glitch cut and a pop on each round card, a pop as each
+ * duel lands and a hard pop with a chime when a hit lands, then the result.
+ */
+function arenaCues(project: Project): Cue[] {
+  const { scenes, outro, total } = placeVersus(project);
+  const cues: Cue[] = [];
+  const intro = scenes[0];
+  if (intro) {
+    const cuts = Math.min(10, (project.versus?.a.photos?.length ?? 0) + (project.versus?.b.photos?.length ?? 0));
+    const step = Math.max(0.7, Math.min(1.1, (intro.seconds + 0.4) / Math.max(1, cuts)));
+    for (let i = 0; i < cuts; i++) cues.push({ sound: "whoosh", at: i * step, gain: 0.28 });
+    const meet = meetAt(intro.seconds);
+    cues.push({ sound: "whoosh", at: meet, gain: 0.5 }, { sound: "pop", at: meet + 0.85, gain: 0.9 }, { sound: "chime", at: meet + 1, gain: 0.25 });
+  }
+  scenes.forEach((scene, index) => {
+    if (index === 0) return;
+    cues.push({ sound: "whoosh", at: scene.start - 1.15, gain: 0.5 }, { sound: "pop", at: scene.start - 0.85, gain: 0.55 });
+    arenaRowTimes(scene).forEach((at, row) => {
+      cues.push({ sound: "pop", at: scene.start + at, gain: 0.22 });
+      const line = scene.visual.rows[row];
+      if (line.winner) cues.push({ sound: "pop", at: scene.start + at + hitDelay(line), gain: 0.7 }, { sound: "chime", at: scene.start + at + hitDelay(line) + 0.1, gain: 0.16 });
+    });
+  });
+  const last = scenes.at(-1);
+  if (last) cues.push({ sound: "pop", at: resultAt(last) + 0.4, gain: 0.9 }, { sound: "chime", at: resultAt(last) + 0.5, gain: 0.35 });
+  cues.push({ sound: "pop", at: outro, gain: 0.35 }, { sound: "click", at: outro + 1.25, gain: 0.6 }, { sound: "chime", at: total - 2, gain: 0.3 });
+  return cues.filter((cue) => cue.at >= 0 && existsSync(join(SFX_DIR, `${cue.sound}.mp3`)));
+}
+
 /** A deep dive's beats: a whoosh per chapter wipe, a soft pop as each block, step or point lands, the subscribe click. */
 function deepCues(project: Project): Cue[] {
   const { scenes, outro, total } = placeDeep(project);
   const cues: Cue[] = [{ sound: "whoosh", at: 0.05, gain: 0.45 }];
+  const motions = planMotion(scenes);
   scenes.forEach((scene, index) => {
+    // A whoosh on each montage cut, a softer one when a gallery moves on.
+    const motion = motions[index];
+    if (motion.pictures.length > 1 || motion.tail !== null)
+      motion.cuts.slice(1).forEach((cut) => cues.push({ sound: "whoosh", at: scene.start + cut, gain: motion.montage ? 0.3 : 0.12 }));
+    if (motion.tail !== null) cues.push({ sound: "whoosh", at: scene.start + motion.tail, gain: 0.18 });
     if (index > 0) cues.push({ sound: "whoosh", at: scene.start - 0.6, gain: 0.4 });
     if (scene.visual.layout === "grid") {
       // The cards pop in as a wave; a tick on every other card keeps it light.

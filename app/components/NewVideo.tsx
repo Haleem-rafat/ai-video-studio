@@ -138,6 +138,14 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                   channel's language; makes its own thumbnail and chapters. Type the topic as "A vs B".
                 </span>
               </Choice>
+              <Choice active={style === "arena"} onClick={() => setStyle("arena")}>
+                <SwordsIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Arena</span>
+                <span className="text-xs text-muted-foreground">
+                  Versus as a fighting-game match: health bars drain as a product loses, a "ROUND" card and glitch cut per topic, numbers race as bars, real photos behind every round, karaoke
+                  captions and a winner reveal. Add each product's press photos on the project page. Type the topic as "A vs B".
+                </span>
+              </Choice>
               <Choice active={style === "deepdive"} onClick={() => setStyle("deepdive")}>
                 <MicroscopeIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Deep dive</span>
@@ -201,7 +209,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
             <Field label="What is the video about?" detail={topic.trim() ? `${topic.trim().split(/\s+/).length} words` : undefined}>
               <Textarea
                 rows={3}
-                placeholder={style === "deepdive" ? "e.g. How a smartphone SoC works, why it's a System on a Chip, and how chips are made" : style === "versus" ? "e.g. iPhone 17 Pro Max vs iPhone 18 Pro Max (add a question after a colon: Apple M5 vs Intel x86: why is M faster?)" : "e.g. How Isaac Newton lost a fortune in the South Sea Bubble"}
+                placeholder={style === "deepdive" ? "e.g. How a smartphone SoC works, why it's a System on a Chip, and how chips are made" : style === "versus" || style === "arena" ? "e.g. iPhone 17 Pro Max vs iPhone 18 Pro Max (add a question after a colon: Apple M5 vs Intel x86: why is M faster?)" : "e.g. How Isaac Newton lost a fortune in the South Sea Bubble"}
                 value={topic}
                 onChange={(event) => setTopic(event.target.value)}
               />
@@ -211,7 +219,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
               <p className="text-xs text-muted-foreground">
                 {style === "deepdive"
                   ? "Research and writing take 2–3 minutes, through the AI Gateway."
-                  : style === "versus"
+                  : style === "versus" || style === "arena"
                   ? /\s(vs\.?|versus|ضد|ولا|مقابل)\s/i.test(topic)
                     ? "Research and writing take about a minute, through the AI Gateway."
                     : 'Write it as "Product A vs Product B".'
@@ -221,7 +229,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                     ? "A long script takes Bonsai about 30–40 minutes: outline, chapters and fact-checks."
                     : "The project opens here as soon as the script is written and fact-checked."}
               </p>
-              <Button disabled={(style !== "versus" && style !== "deepdive" && !llmReady) || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
+              <Button disabled={(style !== "versus" && style !== "arena" && style !== "deepdive" && !llmReady) || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
                 {writing ? <Loader2Icon className="animate-spin" /> : <PenLineIcon />}
                 {writing ? "Writing script…" : "Write script"}
               </Button>

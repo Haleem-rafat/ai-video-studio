@@ -12,12 +12,13 @@ export type FormatId = "short" | "long";
  * scene as an app, with karaoke captions and no AI pictures at all. A project
  * without a style is "motion", so older projects keep theirs.
  */
-export type StyleId = "motion" | "whiteboard" | "explainer" | "mixed" | "versus" | "deepdive";
+/** "arena" only picks a look when a video is created: it is saved as a "versus" video with `versus.look` "arena". */
+export type StyleId = "motion" | "whiteboard" | "explainer" | "mixed" | "versus" | "arena" | "deepdive";
 
-export const STYLES = ["motion", "whiteboard", "explainer", "mixed", "versus", "deepdive"] as const;
+export const STYLES = ["motion", "whiteboard", "explainer", "mixed", "versus", "arena", "deepdive"] as const;
 
 /** The look of one scene. A "mixed" project gives every scene its own; "versus" and "deepdive" are whole-video formats. */
-export type Look = Exclude<StyleId, "mixed" | "versus" | "deepdive">;
+export type Look = Exclude<StyleId, "mixed" | "versus" | "arena" | "deepdive">;
 
 export const LOOKS = ["motion", "whiteboard", "explainer"] as const;
 
@@ -31,7 +32,7 @@ export type Visual =
   | { type: "compare"; left: { label: string; value: string }; right: { label: string; value: string } }
   | { type: "chart"; headline: string; bars: { label: string; value: number }[] }
   /** One round of a versus video: a topic and its spec rows, product A's value first; `winner` gets the check mark. */
-  | { type: "versus"; title: string; rows: VersusRow[]; pose?: Pose }
+  | { type: "versus"; title: string; rows: VersusRow[]; pose?: Pose; gallery?: Photo[] }
   /**
    * One chapter of a deep-dive explainer. `layout` picks the picture: a real
    * photo with points beside it, a chip map whose blocks light up in turn,
@@ -40,7 +41,7 @@ export type Visual =
    * pictures (`columns` across; an item with an empty label leaves its cell
    * empty).
    */
-  | { type: "deepdive"; title: string; layout: DeepLayout; items: DeepItem[]; heads?: string[]; columns?: number; photo?: Photo; pose?: Pose };
+  | { type: "deepdive"; title: string; layout: DeepLayout; items: DeepItem[]; heads?: string[]; columns?: number; photo?: Photo; gallery?: Photo[]; pose?: Pose };
 
 export type DeepLayout = "photo" | "blocks" | "steps" | "stat" | "table" | "grid";
 
@@ -56,7 +57,16 @@ export type DeepItem = { label: string; note?: string; cells?: string[]; image?:
  */
 export type Photo = { query: string; path?: string; credit?: string; url?: string; source?: "commons" | "upload" | "ai"; fit?: "cover" | "contain" };
 
-export type VersusRow = { a: string; b: string; winner?: "a" | "b" };
+/** `label` names what the row compares (Battery, Price); an arena video shows it above the values. */
+/**
+ * How a versus video looks. "classic": a spec table between the two products.
+ * "arena": a fighting-game match, health bars that drain as rounds are lost,
+ * real photos behind every round, numbers racing as bars, karaoke captions
+ * and a K.O. for the winner.
+ */
+export type VersusLook = "classic" | "arena";
+
+export type VersusRow = { label?: string; a: string; b: string; winner?: "a" | "b" };
 
 /** Which of the channel's character poses a versus scene shows. */
 export type Pose = "point" | "think" | "wave";
@@ -64,7 +74,7 @@ export type Pose = "point" | "think" | "wave";
 export const VISUAL_TYPES = ["title", "chapter", "stat", "list", "quote", "code", "compare", "chart", "versus", "deepdive"] as const;
 
 /** A product in a versus video. `image` is project-relative: a cut-out photo or an AI picture. */
-export type Product = { name: string; short: string; color: string; image?: string; imageSource?: "photo" | "ai" };
+export type Product = { name: string; short: string; color: string; image?: string; imageSource?: "photo" | "ai"; photos?: Photo[] };
 
 /** The text of a thumbnail: 2-3 huge words, the one in the accent colour, and a small sticker. */
 export type Thumbnail = { headline: string; highlight?: string; tag?: string };
@@ -94,7 +104,7 @@ export type Project = {
   /** Background music and sound effects mixed into the render; on unless false. */
   soundtrack?: boolean;
   /** The two products of a "versus" video. */
-  versus?: { a: Product; b: Product; hook?: string; thumbnail?: Thumbnail };
+  versus?: { a: Product; b: Product; hook?: string; thumbnail?: Thumbnail; look?: VersusLook };
   /** The intro hook and thumbnail of a "deepdive" video; `cover` is the thumbnail's photo. */
   deepdive?: { hook?: string; thumbnail?: Thumbnail; cover?: Photo };
   topic: string;

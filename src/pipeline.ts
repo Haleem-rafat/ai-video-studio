@@ -22,8 +22,9 @@ import { photoCredits, preparePhotos } from "./media/photos.ts";
 import { buildDeepDive, deepChapters } from "./render/deepdive.ts";
 import { prepareProducts } from "./media/products.ts";
 import { buildVersus, chapters } from "./render/versus.ts";
+import { buildArena } from "./render/arena.ts";
 import { renderThumbnail } from "./render/thumbnail.ts";
-import type { FormatId, Project, StyleId } from "./types.ts";
+import type { FormatId, Project, StyleId, VersusLook } from "./types.ts";
 
 const run = promisify(execFile);
 
@@ -32,7 +33,7 @@ export type Log = (message: string) => void;
 /** Step 1: Bonsai writes the script into a new project. */
 export async function createProject(channelId: string, format: FormatId, topic: string, style: StyleId = "motion", log: Log = console.log): Promise<Project> {
   const channel = loadChannel(channelId);
-  if (style === "versus") return createVersus(channelId, format, topic, log);
+  if (style === "versus" || style === "arena") return createVersus(channelId, format, topic, style === "arena" ? "arena" : "classic", log);
   if (style === "deepdive") return createDeepDive(channelId, format, topic, log);
   await assertLlmRunning();
 
@@ -59,7 +60,7 @@ export async function createProject(channelId: string, format: FormatId, topic: 
 }
 
 /** Step 1 for a versus video: researched on the web and written through the AI Gateway, not Bonsai. */
-async function createVersus(channelId: string, format: FormatId, topic: string, log: Log): Promise<Project> {
+async function createVersus(channelId: string, format: FormatId, topic: string, look: VersusLook, log: Log): Promise<Project> {
   const draft = await writeVersus(loadChannel(channelId), format, topic, log);
   const now = new Date().toISOString();
   const project: Project = {
@@ -71,7 +72,7 @@ async function createVersus(channelId: string, format: FormatId, topic: string, 
     title: draft.title,
     description: draft.description,
     tags: draft.tags,
-    versus: draft.versus,
+    versus: { ...draft.versus, look },
     scenes: draft.scenes,
     createdAt: now,
     updatedAt: now,
@@ -118,7 +119,7 @@ function withChapters(project: Project, arabic: boolean): string {
   const list = `⏱️ ${arabic ? "الفصول" : "Chapters"}\n${project.style === "deepdive" ? deepChapters(project, introLabel) : chapters(project, introLabel)}`;
   const base = project.description.replace(CHAPTERS, "\n").replace(CREDITS, "\n").trim();
   const [summary, ...rest] = base.split(/\n\n/);
-  const credits = project.style === "deepdive" ? photoCredits(project, arabic) : "";
+  const credits = photoCredits(project, arabic);
   if (credits) {
     // Credits go before the closing hashtags line, if there is one.
     const tail = rest.length && /^#/.test(rest.at(-1)!) ? rest.splice(-1) : [];
@@ -166,7 +167,8 @@ export async function compose(id: string, log: Log = console.log): Promise<Proje
   await copyBrand(channel, dir);
 
   if (project.style === "versus" || project.style === "deepdive") {
-    await writeFile(join(dir, "index.html"), project.style === "versus" ? buildVersus(project, channel) : buildDeepDive(project, channel));
+    const html = project.style === "deepdive" ? buildDeepDive(project, channel) : project.versus?.look === "arena" ? buildArena(project, channel) : buildVersus(project, channel);
+    await writeFile(join(dir, "index.html"), html);
     project.description = withChapters(project, channel.language === "ar");
     await saveProject(project);
     await renderThumbnail(project, channel, dir).then(

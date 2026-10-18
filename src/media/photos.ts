@@ -185,7 +185,13 @@ export async function addScenePhoto(dir: string, project: Project, target: strin
 
 /** "Photos:" lines for the description, one per Commons photo used. */
 export function photoCredits(project: Project, arabic: boolean): string {
-  const photos = [...project.scenes.map((scene) => (scene.visual.type === "deepdive" ? scene.visual.photo : undefined)), project.deepdive?.cover];
-  const credits = [...new Set(photos.filter((photo) => photo?.source === "commons" && photo.credit).map((photo) => `- ${photo!.credit}`))];
+  const photos = [
+    ...project.scenes.flatMap((scene) => (scene.visual.type === "deepdive" ? [scene.visual.photo, ...(scene.visual.gallery ?? [])] : scene.visual.type === "versus" ? (scene.visual.gallery ?? []) : [])),
+    project.deepdive?.cover,
+    ...(project.versus?.a.photos ?? []),
+    ...(project.versus?.b.photos ?? []),
+  ];
+  // Commons licences ask for a credit; press photos (uploads) carry one when their maker is named.
+  const credits = [...new Set(photos.filter((photo) => photo?.source !== "ai" && photo?.credit).map((photo) => `- ${photo!.credit}`))];
   return credits.length ? `${arabic ? "الصور" : "Photos"}:\n${credits.join("\n")}` : "";
 }

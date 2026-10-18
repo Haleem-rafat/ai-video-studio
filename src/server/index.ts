@@ -14,6 +14,8 @@ import { completeSignIn, connectionStatus, signIn, uploadVideo, type Privacy } f
 import { lookOf } from "../render/looks.ts";
 import { suggestTopics } from "../script/topics.ts";
 import { productsOf } from "../script/versus.ts";
+import { placeVersus } from "../render/versus.ts";
+import { placeDeep } from "../render/deepdive.ts";
 import { addProductPhoto } from "../media/products.ts";
 import { addScenePhoto } from "../media/photos.ts";
 import { LOOKS, STYLES, VISUAL_TYPES, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
@@ -149,6 +151,18 @@ function inside(base: string, relative: string): string {
   return full;
 }
 
+/**
+ * Where each scene sits in a versus, arena or deep-dive video, which open on
+ * an intro and leave gaps between scenes: the timeline uses these instead of
+ * laying scenes end to end.
+ */
+function timingOf(project: Project): { starts: number[]; lengths: number[] } | undefined {
+  if (project.style !== "versus" && project.style !== "deepdive") return undefined;
+  const { scenes, total } = project.style === "deepdive" ? placeDeep(project) : placeVersus(project);
+  const starts = scenes.map((scene) => scene.start);
+  return { starts, lengths: starts.map((start, index) => (starts[index + 1] ?? total) - start) };
+}
+
 /** What the studio shows per scene beyond the project file itself. */
 function withState(project: Project) {
   const dir = projectDir(project.id);
@@ -158,6 +172,7 @@ function withState(project: Project) {
     ...project,
     hasComposition: existsSync(join(dir, "index.html")),
     hasVideo: existsSync(join(dir, "video.mp4")),
+    timing: timingOf(project),
     scenes: project.scenes.map((scene) => ({
       ...scene,
       voiceCurrent: voiceIsCurrent(dir, scene, narratorKey(channel)),
@@ -344,7 +359,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     if (input.format !== "short" && input.format !== "long") throw new HttpError(400, "Format is short or long.");
     const style = input.style ?? "motion";
     if (!STYLES.includes(style)) throw new HttpError(400, `Style is one of ${STYLES.join(", ")}.`);
-    if (style === "versus" && !productsOf(input.topic)) throw new HttpError(400, 'For a versus video, write the topic as "Product A vs Product B".');
+    if ((style === "versus" || style === "arena") && !productsOf(input.topic)) throw new HttpError(400, 'For a versus video, write the topic as "Product A vs Product B".');
     loadChannel(input.channel);
     const job = enqueue(`Write script: ${input.topic}`, async () => (await createProject(input.channel, input.format, input.topic.trim(), style)).id);
     return json(response, 202, job);

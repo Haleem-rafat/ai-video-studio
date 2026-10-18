@@ -138,6 +138,7 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
   };
 
   const { starts, lengths } = useMemo(() => {
+    if (project?.timing && project.timing.starts.length === project.scenes.length) return project.timing;
     const lengths = (project?.scenes ?? []).map(sceneSeconds);
     let cursor = 0;
     const starts = lengths.map((length) => {
@@ -146,7 +147,7 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
       return start;
     });
     return { starts, lengths };
-  }, [project?.scenes]);
+  }, [project?.scenes, project?.timing]);
 
   // Follow the playhead: the scene being played becomes the selected one.
   const onTime = useCallback((t: number) => setTime(t), []);

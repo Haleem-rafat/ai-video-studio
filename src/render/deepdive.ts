@@ -1,6 +1,7 @@
 import { brandPaths } from "../brand/brand.ts";
 import { FORMATS, type Channel } from "../config.ts";
-import type { DeepItem, Pose, Project, Scene } from "../types.ts";
+import type { DeepItem, Photo, Pose, Project, Scene } from "../types.ts";
+import { alignWords } from "./align.ts";
 import { captionLines, chapterList } from "./versus.ts";
 
 /**
@@ -20,7 +21,11 @@ const OUTRO = 3.2;
 type DeepVisual = Extract<Scene["visual"], { type: "deepdive" }>;
 export type DeepScene = Scene & { start: number; seconds: number; visual: DeepVisual };
 
-const esc = (text: unknown) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+// "وA17" draws the و beside a Latin word, where it reads like a "g"; a space keeps it legible.
+const esc = (text: unknown) =>
+  String(text ?? "")
+    .replace(/(^|\s)([وب])(?=[A-Za-z0-9])/g, "$1$2 ")
+    .replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const r = (n: number) => Math.round(n * 1000) / 1000;
 
 function asDeep(scene: Scene): DeepVisual {
@@ -65,24 +70,73 @@ export function itemTimes(scene: DeepScene): number[] {
   return times.map((time) => r(Math.min(time + shift, scene.seconds - 0.3)));
 }
 
+/**
+ * Each item lands when the narrator names it. The label is searched in the
+ * script (which has "S10", "Sound Glow" written as they appear on screen),
+ * and the script word's spoken time comes from the word alignment.
+ */
 function heardTimes(scene: DeepScene): number[] {
   const items = scene.visual.items;
   const step = Math.max(0.6, (scene.seconds * 0.85 - 0.4) / items.length);
   const even = items.map((_, index) => r(0.4 + index * step));
-  const heard = (scene.audio?.words ?? []).map((word) => ({ key: simplify(word.text), start: word.start }));
-  if (!heard.length) return even;
+  const words = scene.narration.split(/\s+/).filter(Boolean);
+  const times = alignWords(words, scene.audio?.words ?? [], scene.seconds);
+  const keys = words.map(simplify);
 
   let from = 0;
-  return items.map((item, index) => {
-    const keys = item.label.split(/[\s·/+,-]+/).map(simplify).filter((key) => key.length >= 2);
-    const found = heard.findIndex((word, position) => position >= from && keys.some((key) => word.key.includes(key) || (word.key.length >= 3 && key.includes(word.key))));
-    // A match far past the even slot of the next item is likely a later mention; keep the order sane.
-    if (found >= 0 && heard[found].start < (even[index + 1] ?? scene.seconds) + 4) {
-      from = found + 1;
-      return r(Math.max(0.2, heard[found].start - 0.15));
-    }
-    return even[index];
-  }).map((time, index, all) => (index && time < all[index - 1] + 0.5 ? r(all[index - 1] + 0.5) : time));
+  return items
+    .map((item, index) => {
+      const label = (item.cells?.length ? item.cells[0] : item.label) ?? "";
+      const wanted = label.split(/[\s·/+,()-]+/).map(simplify).filter((key) => key.length >= 2);
+      const found = keys.findIndex((key, position) => position >= from && wanted.some((w) => key === w || (w.length >= 3 && key.includes(w)) || (key.length >= 3 && w.includes(key))));
+      // A match far past the even slot of the next item is likely a later mention; keep the order sane.
+      if (found >= 0 && times[found] < (even[index + 1] ?? scene.seconds) + 6) {
+        from = found + 1;
+        return r(Math.max(0.2, times[found] - 0.2));
+      }
+      return even[index];
+    })
+    .reduce<number[]>((kept, time) => [...kept, kept.length && time < kept.at(-1)! + 0.6 ? r(kept.at(-1)! + 0.6) : time], []);
+}
+
+/** Every scene's motion; the intro montage borrows every chapter's pictures. */
+export function planMotion(scenes: DeepScene[]): Motion[] {
+  const pool = scenes.slice(1).flatMap((scene) => [scene.visual.photo, ...(scene.visual.gallery ?? [])]).filter((photo): photo is Photo => Boolean(photo?.path));
+  const unique = pool.filter((photo, index) => pool.findIndex((other) => other.path === photo.path) === index);
+  return scenes.map((scene, k) => motionOf(scene, k, unique));
+}
+
+export type Motion = { pictures: Photo[]; cuts: number[]; tail: number | null; montage: boolean };
+
+/**
+ * How a scene keeps moving while the narrator talks. The intro is a fast
+ * montage of the video's pictures (a cut a second); a photo chapter cycles
+ * through its gallery; a table, chip map or list, once fully built, gives way
+ * to its gallery for the rest of the chapter. Times are relative to the scene.
+ */
+export function motionOf(scene: DeepScene, k: number, pool: Photo[]): Motion {
+  const v = scene.visual;
+  const own = v.photo?.path ? [v.photo] : [];
+  const gallery = (v.gallery ?? []).filter((photo) => photo.path);
+  if (k === 0) {
+    const all = [...own, ...gallery, ...pool];
+    const pictures = all.filter((photo, index) => all.findIndex((other) => other.path === photo.path) === index).slice(0, 8);
+    const cuts = pictures.map((_, j) => r(j * 1.05)).filter((t) => t < scene.seconds - 0.8);
+    return { pictures: pictures.slice(0, cuts.length), cuts, tail: null, montage: true };
+  }
+  if (!gallery.length) return { pictures: own, cuts: own.length ? [0] : [], tail: null, montage: false };
+  if (v.layout === "photo") {
+    const pictures = [...own, ...gallery];
+    const slot = Math.max(4.5, scene.seconds / pictures.length);
+    const cuts = pictures.map((_, j) => r(j * slot)).filter((t) => t < scene.seconds - 1.5);
+    return { pictures: pictures.slice(0, cuts.length), cuts, tail: null, montage: false };
+  }
+  // Diagrams: hold the finished diagram a few seconds, then show pictures until the chapter ends.
+  const built = Math.max(photoBeat(scene), ...itemTimes(scene), 0) + 4;
+  if (scene.seconds - built < 5) return { pictures: own, cuts: own.length ? [0] : [], tail: null, montage: false };
+  const slot = Math.max(4, (scene.seconds - built) / gallery.length);
+  const cuts = gallery.map((_, j) => r(built + j * slot)).filter((t) => t < scene.seconds - 1.5);
+  return { pictures: gallery.slice(0, cuts.length), cuts, tail: r(built), montage: false };
 }
 
 /** "19B" -> 0..19 then "B"; "3nm" -> 3 then "nm"; null when there's no number to count. */
@@ -134,11 +188,26 @@ function shortCredit(credit?: string): string {
   return rest.replace(/, Wikimedia Commons$/, "").trim();
 }
 
-function photoHtml(scene: DeepScene, big: boolean): string {
-  const photo = scene.visual.photo;
-  if (!photo?.path) return `<div class="ph${big ? " big" : ""} empty"></div>`;
-  const credit = photo.source === "ai" ? "AI" : photo.source === "commons" ? shortCredit(photo.credit) : "";
-  return `<div class="ph${big ? " big" : ""}${photo.fit === "contain" ? " fit" : ""}"><img src="${photo.path}" />${credit ? `<span class="credit">📷 ${esc(credit)}</span>` : ""}</div>`;
+function creditOf(photo: Photo): string {
+  return photo.source === "ai" ? "AI" : photo.source === "commons" ? shortCredit(photo.credit) : "";
+}
+
+/** A photo frame; with several pictures they are stacked and cross-faded by the timeline (class "gi"). */
+function photoHtml(scene: DeepScene, big: boolean, pictures?: Photo[]): string {
+  const list = pictures?.length ? pictures : scene.visual.photo?.path ? [scene.visual.photo] : [];
+  if (!list.length) return `<div class="ph${big ? " big" : ""} empty"></div>`;
+  if (list.length === 1 && !pictures) {
+    const photo = list[0];
+    const credit = creditOf(photo);
+    return `<div class="ph${big ? " big" : ""}${photo.fit === "contain" ? " fit" : ""}"><img src="${photo.path}" />${credit ? `<span class="credit">📷 ${esc(credit)}</span>` : ""}</div>`;
+  }
+  const layers = list
+    .map((photo) => {
+      const credit = creditOf(photo);
+      return `<div class="gi${photo.fit === "contain" ? " fit" : ""}"><img src="${photo.path}" />${credit ? `<span class="credit">📷 ${esc(credit)}</span>` : ""}</div>`;
+    })
+    .join("");
+  return `<div class="ph gal${big ? " big" : ""}">${layers}</div>`;
 }
 
 function itemCard(item: DeepItem, index: number, k: number): string {
@@ -146,12 +215,13 @@ function itemCard(item: DeepItem, index: number, k: number): string {
 }
 
 /** The markup of one chapter's picture, with its opening photo on top for diagram layouts. */
-function sceneHtml(scene: DeepScene, k: number, hook: string, L: Layout): string {
+function sceneHtml(scene: DeepScene, k: number, hook: string, L: Layout, motion: Motion): string {
   const beat = photoBeat(scene) ? `<div class="beat" id="pb${k}">${photoHtml(scene, true)}</div>` : "";
-  return diagramHtml(scene, k, hook, L) + beat;
+  const tail = motion.tail !== null ? `<div class="tail" id="tl${k}">${photoHtml(scene, true, motion.pictures)}</div>` : "";
+  return diagramHtml(scene, k, hook, L, motion) + beat + tail;
 }
 
-function diagramHtml(scene: DeepScene, k: number, hook: string, L: Layout): string {
+function diagramHtml(scene: DeepScene, k: number, hook: string, L: Layout, motion: Motion): string {
   const v = scene.visual;
   const items = v.items;
   switch (v.layout) {
@@ -178,7 +248,13 @@ function diagramHtml(scene: DeepScene, k: number, hook: string, L: Layout): stri
       // Rows share the frame's height, so a short table isn't squeezed and a 9-row one still fits.
       const rowCount = items.length + (v.heads?.some(Boolean) ? 1 : 0);
       const rowHeight = Math.min(L.short ? 130 : 108, Math.floor((L.box.height - 10) / Math.max(1, rowCount)));
-      const fontSize = columns > 2 ? (rowHeight >= 80 ? 30 : 27) : L.short ? 36 : 34;
+      // Long sentences in many short rows wrap; a smaller font keeps them inside their row.
+      const longest = Math.max(0, ...items.flatMap((item) => cells(item).map((cell) => cell.length)));
+      // The biggest size at which the longest cell still fits in two lines of its column.
+      const columnWidth = (L.short ? 980 : 1700) / (columns + 0.3);
+      const lines = rowHeight >= 80 ? 2 : 1.6;
+      const wide = [30, 27, 24, 21].find((size) => longest * size * 0.5 <= columnWidth * lines) ?? 21;
+      const fontSize = columns > 2 ? wide : L.short ? 36 : 34;
       const template = `grid-template-columns:${columns > 2 ? "1.3fr " : ""}repeat(${columns > 2 ? columns - 1 : columns},1fr);min-height:${rowHeight}px;font-size:${fontSize}px`;
       const row = (values: string[]) => Array.from({ length: columns }, (_, c) => `<div><bdi>${esc(values[c] ?? "")}</bdi></div>`).join("");
       const rows = items.map((item, i) => `<div class="trow" id="it${k}_${i}" style="${template}">${row(cells(item))}</div>`).join("");
@@ -199,8 +275,11 @@ function diagramHtml(scene: DeepScene, k: number, hook: string, L: Layout): stri
     }
     default: {
       const intro = k === 0;
-      if (intro || !items.length) return `${photoHtml(scene, true)}${intro && hook ? `<div class="hook" id="hook"><span>${esc(hook)}</span></div>` : ""}`;
-      return `<div class="photo-row">${photoHtml(scene, false)}<div class="points">${items.slice(0, 3).map((item, i) => itemCard(item, i, k)).join("")}</div></div>`;
+      const pictures = motion.tail === null && motion.pictures.length > 1 ? motion.pictures : undefined;
+      // The hook comes in word by word, so each word is its own span.
+      const words = esc(hook).split(/\s+/).map((word) => `<span class="hw">${word}</span>`).join(" ");
+      if (intro || !items.length) return `${photoHtml(scene, true, pictures)}${intro && hook ? `<div class="hook" id="hook"><span>${words}</span></div>` : ""}`;
+      return `<div class="photo-row">${photoHtml(scene, false, pictures)}<div class="points">${items.slice(0, 3).map((item, i) => itemCard(item, i, k)).join("")}</div></div>`;
     }
   }
 }
@@ -222,9 +301,11 @@ export function buildDeepDive(project: Project, channel: Channel): string {
 
   const blocks: string[] = [];
   let chapter = 0;
+  const motions = planMotion(scenes);
   const data = scenes.map((scene, k) => {
     const v = scene.visual;
-    blocks.push(`<div class="sc" id="sc${k}">${sceneHtml(scene, k, hook, L)}</div>`);
+    const motion = motions[k];
+    blocks.push(`<div class="sc" id="sc${k}">${sceneHtml(scene, k, hook, L, motion)}</div>`);
     if (v.title) {
       chapter++;
       blocks.push(`<div class="title" id="tt${k}"><em>${String(chapter).padStart(2, "0")}</em><span>${esc(v.title)}</span><i></i></div>`);
@@ -241,6 +322,9 @@ export function buildDeepDive(project: Project, channel: Channel): string {
       caps: caps.map((cap) => cap.at),
       items: itemTimes(scene),
       beat: photoBeat(scene),
+      cuts: motion.pictures.length > 1 || motion.tail !== null ? motion.cuts : [],
+      tail: motion.tail,
+      montage: motion.montage,
       stat,
     };
   });
@@ -298,6 +382,13 @@ export function buildDeepDive(project: Project, channel: Channel): string {
   .card .nt { font: 700 ${L.short ? 20 : 17}px/1.2 ${font}; color: ${c.muted}; text-align: center; }
   .card.none { background: transparent; border: 2px dashed #ffffff14; }
   .beat { position: absolute; inset: 0; z-index: 5; }
+  .tail { position: absolute; inset: 0; z-index: 6; opacity: 0; }
+  .ph.gal { background: #050507; }
+  .gi { position: absolute; inset: 0; opacity: 0; overflow: hidden; }
+  .gi img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gi.fit { background: radial-gradient(circle at 50% 45%, #ffffff1c, #050507 70%); }
+  .gi.fit img { object-fit: contain; padding: 30px; }
+  .hook .hw { display: inline-block; opacity: 0; }
   .ph.big::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, #000b); }
   .hook { position: absolute; left: 0; right: 0; bottom: ${L.short ? 60 : 50}px; text-align: center; z-index: 3; opacity: 0; }
   .hook span { font: 900 ${L.short ? 76 : 84}px/1.2 ${font}; color: #fff; text-shadow: 0 6px 30px #000; unicode-bidi: plaintext; }
@@ -419,12 +510,41 @@ D.forEach((s, k) => {
   if (k > 0) tl.fromTo('#wipe', { left: '-80%' }, { left: '120%', duration: .55, ease: 'power2.inOut', immediateRender: false }, s.start - .55);
   tl.fromTo(sc, { opacity: 0, y: k ? 40 : 0, scale: k ? 1 : 1.15 }, { opacity: 1, y: 0, scale: 1, duration: k ? .35 : .9, ease: 'power3.out' }, k ? s.start - .2 : .05);
   tl.to(sc, { opacity: 0, duration: .25 }, leave);
-  const img = document.querySelector(sc + ' .ph img');
-  if (img) tl.fromTo(img, { scale: 1.02 }, { scale: 1.12, x: dir * 20, duration: (s.beat || s.dur) + 1, ease: 'none' }, s.start - .2);
+  const layers = document.querySelectorAll((s.tail !== null ? '#tl' + k : sc) + ' .gi');
+  if (s.cuts.length && layers.length) {
+    // Cross-fade through the pictures; each one drifts and zooms the other way to the last.
+    if (s.tail !== null) {
+      tl.fromTo('#tl' + k, { opacity: 0, scale: 1.04 }, { opacity: 1, scale: 1, duration: .5, ease: 'power2.out' }, s.start + s.tail);
+      tl.to(sc + ' > :not(.tail):not(.beat)', { opacity: 0, duration: .4 }, s.start + s.tail);
+    }
+    s.cuts.forEach((c, j) => {
+      const layer = layers[j], img = layer && layer.querySelector('img');
+      if (!layer) return;
+      // The montage is on screen from the very first frame, before the voice starts.
+      const t = s.montage && j === 0 ? 0 : s.start + c, next = j + 1 < s.cuts.length ? s.start + s.cuts[j + 1] : s.start + s.dur + .5;
+      if (s.montage) {
+        tl.fromTo(layer, { opacity: 0 }, { opacity: 1, duration: .08 }, t);
+        tl.fromTo(img, { scale: 1.35, rotation: (j % 2 ? 2 : -2) }, { scale: 1.08, rotation: 0, duration: .45, ease: 'power3.out', immediateRender: false }, t);
+        tl.to(img, { scale: 1.0, duration: Math.max(.3, next - t - .45), ease: 'none' }, t + .45);
+        if (j) tl.fromTo('#flash', { opacity: .45 }, { opacity: 0, duration: .22, immediateRender: false }, t);
+      } else {
+        tl.fromTo(layer, { opacity: 0 }, { opacity: 1, duration: j ? .6 : .3 }, j ? t : t - .2);
+        tl.fromTo(img, { scale: 1.04, x: 0 }, { scale: 1.14, x: (j % 2 ? 1 : -1) * dir * 30, duration: next - t + .6, ease: 'none', immediateRender: false }, j ? t : t - .2);
+      }
+      if (j + 1 < s.cuts.length) tl.to(layer, { opacity: 0, duration: s.montage ? .05 : .6 }, s.start + s.cuts[j + 1] + (s.montage ? .05 : .3));
+    });
+  } else {
+    const img = document.querySelector(sc + ' .ph img');
+    if (img) tl.fromTo(img, { scale: 1.02 }, { scale: 1.12, x: dir * 20, duration: (s.beat || s.dur) + 1, ease: 'none' }, s.start - .2);
+  }
   // The opening photo flies off to reveal the diagram.
   if (s.beat) tl.to('#pb' + k, { opacity: 0, scale: .85, y: -40, duration: .45, ease: 'power2.in' }, s.start + s.beat - .3);
   const b0 = s.start + s.beat;
-  if (k === 0 && document.querySelector('#hook')) tl.fromTo('#hook', { y: 40, opacity: 0, scale: .9 }, { y: 0, opacity: 1, scale: 1, duration: .5, ease: 'back.out(2)' }, s.start + Math.min(2.5, s.dur * .3));
+  if (k === 0 && document.querySelector('#hook')) {
+    tl.set('#hook', { opacity: 1 }, .3);
+    document.querySelectorAll('#hook .hw').forEach((w, i) => tl.fromTo(w, { opacity: 0, y: 50, scale: 1.6 }, { opacity: 1, y: 0, scale: 1, duration: .35, ease: 'back.out(3)', immediateRender: false }, .35 + i * .16));
+    tl.to('#hook', { scale: 1.06, duration: .18, yoyo: true, repeat: 1 }, .35 + document.querySelectorAll('#hook .hw').length * .16 + .2);
+  }
   if (s.title) {
     tl.fromTo('#tt' + k, { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: .35, ease: 'back.out(2)' }, s.start - .25);
     tl.from('#tt' + k + ' i', { scaleX: 0, duration: .45, ease: 'power3.out' }, s.start);
@@ -432,8 +552,25 @@ D.forEach((s, k) => {
   }
   const at = (i) => s.start + s.items[i];
   if (s.layout === 'photo') s.items.forEach((_, i) => tl.fromTo('#it' + k + '_' + i, { opacity: 0, x: 50 * dir }, { opacity: 1, x: 0, duration: .35, ease: 'power2.out' }, at(i)));
-  if (s.layout === 'grid') document.querySelectorAll(sc + ' .card').forEach((card, i) => tl.fromTo(card, { opacity: 0, scale: .6, y: 30 }, { opacity: 1, scale: 1, y: 0, duration: .35, ease: 'back.out(2)' }, b0 + .2 + i * Math.min(.18, (s.dur * .5) / Math.max(1, s.items.length))));
-  if (s.layout === 'table') s.items.forEach((_, i) => tl.fromTo('#it' + k + '_' + i, { opacity: 0, x: 50 * dir }, { opacity: 1, x: 0, duration: .3, ease: 'power2.out' }, at(i)));
+  if (s.layout === 'grid') {
+    const cards = document.querySelectorAll(sc + ' .card');
+    const step = Math.min(.12, 2.4 / Math.max(1, cards.length));
+    cards.forEach((card, i) => tl.fromTo(card, { opacity: 0, scale: .6, y: 30 }, { opacity: 1, scale: 1, y: 0, duration: .35, ease: 'back.out(2)' }, b0 + .2 + i * step));
+    // Then a tour: each card lights up when the narrator names it, the others dim.
+    const ready = b0 + .2 + cards.length * step + .3;
+    s.items.forEach((t, i) => {
+      const card = cards[i];
+      if (!card || card.classList.contains('none')) return;
+      const when = Math.max(ready, s.start + t), until = i + 1 < s.items.length ? Math.max(when + .5, s.start + s.items[i + 1]) : s.start + s.dur;
+      tl.to(card, { scale: 1.12, borderColor: '${accent}', boxShadow: '0 0 40px ${accent}aa', backgroundColor: '${accent}22', zIndex: 5, duration: .25 }, when);
+      tl.to(card, { scale: 1, borderColor: '#ffffff20', boxShadow: '0 0 0 #0000', backgroundColor: '#ffffff0b', zIndex: 1, duration: .25 }, Math.min(until, s.start + s.dur) - .05);
+    });
+  }
+  if (s.layout === 'table') s.items.forEach((_, i) => {
+    tl.fromTo('#it' + k + '_' + i, { opacity: 0, x: 50 * dir }, { opacity: 1, x: 0, duration: .3, ease: 'power2.out' }, at(i));
+    // The row being read glows for a moment.
+    tl.fromTo('#it' + k + '_' + i, { backgroundColor: '${accent}44' }, { backgroundColor: '${accent}00', duration: 1.6, ease: 'power1.in', immediateRender: false }, at(i) + .3);
+  });
   if (s.layout === 'blocks') {
     tl.from(sc + ' .chip', { rotationY: dir * 25, scale: .85, duration: .7, ease: 'power3.out' }, b0 - .2);
     s.items.forEach((_, i) => {

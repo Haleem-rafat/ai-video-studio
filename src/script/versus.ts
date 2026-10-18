@@ -9,6 +9,18 @@ import type { FormatId, Product, Scene } from "../types.ts";
 const RESEARCH_MODEL = "anthropic/claude-sonnet-5.5";
 const WRITER_MODEL = "anthropic/claude-sonnet-5.5";
 
+/**
+ * What makes a title, description and tags work on YouTube search and
+ * suggested videos: the searched words first, both names, a reason to click.
+ */
+export const SEO = {
+  title:
+    "YouTube title in the channel's language, 45-70 characters: the exact words people search (both product names in Latin script) in the first 40 characters, then a curiosity gap or bold claim; no clickbait the video doesn't pay off",
+  description:
+    "YouTube description in the channel's language: the first sentence (shown in search, under 150 characters) repeats the title's search words naturally; then a 2-line summary, the key points as bullets, a comment question, a subscribe line, and sources. No chapters (added later), no hashtags",
+  tags: "Search phrases people type, 10-15: both names alone and together, 'X vs Y', the category (e.g. best laptop 2026), each in English and in the channel's language",
+} as const;
+
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
 const PRODUCT = z.object({
@@ -18,9 +30,9 @@ const PRODUCT = z.object({
 });
 
 const DRAFT = z.object({
-  title: z.string().describe("YouTube title in the channel's language, under 90 characters, curiosity + both names"),
-  description: z.string().describe("YouTube description in the channel's language: 2-line summary, key differences as bullets, a comment question, a subscribe line, sources. No chapters (added later), no hashtags"),
-  tags: z.array(z.string()).max(15),
+  title: z.string().describe(SEO.title),
+  description: z.string().describe(SEO.description),
+  tags: z.array(z.string()).max(15).describe(SEO.tags),
   hashtags: z.array(z.string()).max(5).describe("Without #"),
   hook: z.string().describe("A 3-6 word on-screen hook for the intro, e.g. «الفرق $100 بس… يستاهل؟»"),
   thumbnail: z.object({
@@ -36,9 +48,9 @@ const DRAFT = z.object({
         title: z.string().describe("Topic name on screen, 1-3 words; empty for the intro"),
         pose: z.enum(["point", "think", "wave"]),
         rows: z
-          .array(z.object({ a: z.string(), b: z.string(), winner: z.enum(["a", "b", "none"]) }))
+          .array(z.object({ label: z.string().describe("What the row compares, 1-3 words, e.g. Battery, Price, GPU cores"), a: z.string(), b: z.string(), winner: z.enum(["a", "b", "none"]) }))
           .max(3)
-          .describe("Spec rows, product A first; values under 30 characters; winner gets a check mark, none when equal"),
+          .describe("Spec rows, product A first; values under 30 characters, the number first when there is one (e.g. 6144 CUDA, 24h); winner gets a check mark, none when equal"),
         narration: z.string().describe("What the narrator says in this section"),
       }),
     )
@@ -146,9 +158,10 @@ Compare: A = ${a}, B = ${b}. Product A is always the left value of each row.
 ${angle ? `The video answers this question, so the sections must build up to a clear answer: "${angle}". Explain the why in plain words a non-engineer gets (an analogy per idea), while each section still shows rows comparing A and B.\n` : ""}
 Structure:
 - First section is the intro: empty title, no rows, pose "point". Hook the viewer with the most surprising difference (often the price gap) and promise an honest answer.
-- Then ${short ? "4-5" : "8-10"} topic sections (for phones: performance, cooling, camera, video, battery, charging, display & design, colours, price; for chips: design, process, speed, efficiency, heat, battery, history … whichever matter here), each with 1-3 rows. Alternate poses point/think.
+- Then ${short ? "4-5" : "10-12"} topic sections (for phones: performance, cooling, camera, video, battery, charging, display & design, colours, price; for chips: design, process, speed, efficiency, heat, battery, history … whichever matter here), each with 1-3 rows. Alternate poses point/think.
 - Last section: title like "my honest verdict" in the channel's language, one row (who should buy A | who should buy B, winner none; or the one-line answer per side when the video answers a question), pose "wave". Give the answer, ask viewers to comment, and to subscribe.
-- ${short ? "Whole video 55-70 seconds spoken: each narration 1-2 short sentences." : "Whole video about 2 minutes spoken: each narration 2-3 sentences."}
+- The intro is at most 15 seconds spoken (2-3 short sentences): the first sentence is the hook. Background goes in later sections.
+- ${short ? "Whole video 55-70 seconds spoken: each narration 1-2 short sentences." : "Whole video about 6-8 minutes spoken: each narration 4-6 sentences that explain what the difference means in real use (an everyday example per section)."}
 
 Rules:
 - Use ONLY facts from the research below. If a spec is unconfirmed, leave it out; never say "reportedly" about a launched product.
@@ -176,7 +189,7 @@ ${research.text}`,
       type: "versus",
       title: section.title.trim(),
       pose: section.pose,
-      rows: section.rows.map((row) => ({ a: row.a, b: row.b, ...(row.winner === "none" ? {} : { winner: row.winner }) })),
+      rows: section.rows.map((row) => ({ ...(row.label.trim() ? { label: row.label.trim() } : {}), a: row.a, b: row.b, ...(row.winner === "none" ? {} : { winner: row.winner }) })),
     },
     imagePrompt: "",
   }));

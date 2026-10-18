@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import type { Channel } from "../config.ts";
 import { DEEP_LAYOUTS, type FormatId, type Photo, type Scene, type Thumbnail } from "../types.ts";
-import { checkNumbers } from "./versus.ts";
+import { checkNumbers, SEO } from "./versus.ts";
 
 // Same models as a versus video: researched on the web, so nothing comes from a model's stale memory.
 const RESEARCH_MODEL = "anthropic/claude-sonnet-5.5";
@@ -16,9 +16,9 @@ const PHOTO_QUERY = z
   );
 
 const DRAFT = z.object({
-  title: z.string().describe("YouTube title in the channel's language, under 90 characters, a curiosity gap"),
-  description: z.string().describe("YouTube description in the channel's language: 2-line summary, what the viewer learns as bullets, a comment question, a subscribe line, sources. No chapters (added later), no hashtags"),
-  tags: z.array(z.string()).max(15),
+  title: z.string().describe(SEO.title),
+  description: z.string().describe(SEO.description),
+  tags: z.array(z.string()).max(15).describe(SEO.tags),
   hashtags: z.array(z.string()).max(5).describe("Without #"),
   hook: z.string().describe("A 3-6 word on-screen hook for the intro"),
   thumbnail: z.object({
@@ -92,7 +92,7 @@ Topic: ${topic}
 When the topic asks for a structure (an overview first, one chapter per generation, a chapter count), follow it over the defaults below.
 
 Structure:
-- First section is the intro: empty title, layout "photo" with no items, pose "point". Open with a surprising fact or question that makes the viewer need the answer, and say what they'll understand by the end.
+- First section is the intro: empty title, layout "photo" with no items, pose "point". 2-3 short sentences, at most 15 seconds spoken: the first sentence is the hook (the most surprising fact, number or question), then promise what they'll know by the end. Background and caveats go in later chapters, never in the intro.
 - Then ${short ? "4-5" : "12-16"} chapters that build the idea from zero, each answering one question a curious viewer would ask next. Pick the layout that shows it best and vary them: a real photo of the real thing (photo), the parts of a chip lighting up as you name them (blocks), a process (steps), one striking number (stat), a comparison (table), or an overview of a whole family of products (grid).
 - Explain every idea in plain words a non-engineer gets, with one everyday analogy per idea (a city, a kitchen, a factory). Name real current examples.
 - Last section: title like "the summary" in the channel's language, layout "steps" recapping the 3-5 key ideas, pose "wave". Ask viewers to comment, and to subscribe.
