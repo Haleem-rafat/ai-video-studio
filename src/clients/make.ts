@@ -77,7 +77,9 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   await savePost(post);
   try {
     if (idea.format === "reel") {
-      post.projectId = await createReel(client, idea, log, history);
+      const reel = await createReel(client, idea, log, history);
+      post.projectId = reel.projectId;
+      if (reel.review) post.review = reel.review;
       post.status = "rendering";
       await savePost(post);
       await build(post.projectId, { quality: "standard" }, log);
@@ -88,6 +90,7 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
       const pastTitles = history.filter((made) => made.kind === "carousel" || made.kind === "single").flatMap((made) => [made.title, ...made.lines.slice(0, 6)]);
       const written = await writeCarousel(client, idea, log, pictures, pastTitles);
       post.caption = written.caption;
+      if (written.review) post.review = written.review;
       post.hashtags = cleanHashtags(written.hashtags);
       post.status = "drawing";
       await savePost(post);

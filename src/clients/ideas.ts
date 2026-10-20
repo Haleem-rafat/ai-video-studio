@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { extractJson } from "../llm.ts";
 import { duplicateOf, loadHistory, type Made } from "./history.ts";
+import { knowledgeText } from "./knowledge.ts";
 import { ideaProblems } from "./rules.ts";
 import { loadClient, loadIdeas, localDate, recentIdeas, saveIdeas } from "./store.ts";
 import { IDEA_ANGLES, IDEA_FORMATS, IDEA_GOALS, type Client, type Idea, type IdeaDay, type Trend } from "./types.ts";
@@ -21,6 +22,8 @@ const IDEA = z.object({
   hook: z.string().describe("The first line the viewer reads or hears, in the client's language, under 120 characters"),
   outline: z.array(z.string()).describe("3-7 beats: the slides of a carousel or the scenes of a reel, one short line each"),
   why: z.string().describe("One sentence: why this reaches the niche and can travel (saves, shares, comments)"),
+  persona: z.string().describe("Which customer type from the client knowledge it speaks to (its name), or the audience in a few words"),
+  step: z.string().describe("Which real step of how the product works it shows, or empty for pure awareness"),
   trend: z.string().describe("The url of the trend it rides, or empty"),
 });
 const IDEAS = z.object({ ideas: z.array(IDEA) });
@@ -51,6 +54,8 @@ export function numberIdeas(date: string, existing: number, drafts: IdeaDraft[])
     hook: draft.hook.trim(),
     outline: draft.outline.map((line) => line.trim()).filter(Boolean),
     why: draft.why.trim(),
+    ...(draft.persona.trim() ? { persona: draft.persona.trim() } : {}),
+    ...(draft.step.trim() ? { step: draft.step.trim() } : {}),
     ...(draft.trend.trim() ? { trend: draft.trend.trim() } : {}),
     status: "new" as const,
   }));
@@ -102,7 +107,7 @@ Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}
 Tone: ${client.brief.tone}
 Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, client counts or guarantees.
 
-THIS WEEK'S TRENDS (ride one where it fits; cite its url in "trend")
+${knowledgeText(client.knowledge) ? `${knowledgeText(client.knowledge)}\n\n` : ""}THIS WEEK'S TRENDS (ride one where it fits; cite its url in "trend")
 ${trends.length ? trends.map((t) => `- ${t.title}: ${t.summary} (${t.url})`).join("\n") : "none found today: use evergreen angles"}
 
 ALREADY MADE AND PAID FOR (never repeat these messages, angles or examples; each new idea must say something these don't)
@@ -114,6 +119,7 @@ ${pastHooks.length ? pastHooks.map((h) => `- ${h}`).join("\n") : "none"}
 RULES
 - Exactly 5 ideas: at least 1 reel and at least 2 carousels; the goals awareness, details and offer each at least once; every idea a different angle.
 - Language of hook and outline: ${arabic ? "Egyptian colloquial Arabic, natural, like talking to a business owner. Brand and platform names in Latin script" : "simple, natural English"}.
+- Each idea speaks to ONE customer type, in their words, about their real situation, and (except pure awareness) shows ONE real step of how the product works for them. No generic marketing ideas.
 - Hooks stop the scroll: a pain the audience recognises, a surprising number, a bold claim or a direct question. Under 120 characters.
 - Carousels are infographic: each outline line is one slide (cover first, call to action last). Reels: each line is a scene; the hook is said in the first 2 seconds.`;
 

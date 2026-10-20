@@ -8,7 +8,9 @@ import { recordImage } from "../usage.ts";
 import { proofread } from "./arabic.ts";
 import { FLAT_SLIDE, fitSlides, slideProblems, toSlide } from "./slides.ts";
 import { styleOf, withPictures, type PictureAmount } from "./styles.ts";
-import type { Client, Idea, Slide } from "./types.ts";
+import { knowledgeText } from "./knowledge.ts";
+import { needsRewrite, reviewScript, rewriteNotes, scriptOf } from "./review.ts";
+import type { Client, Idea, ScriptReview, Slide } from "./types.ts";
 
 const WRITER_MODEL = "anthropic/claude-sonnet-5.5";
 const ART_MODEL = "bfl/flux-3-image";
@@ -20,12 +22,12 @@ const CAROUSEL = z.object({
 });
 
 /** The slides and caption of a carousel (5-8 slides) or a single image (1 cover), checked and fitted to the limits. */
-export async function writeCarousel(client: Client, idea: Idea, log: (message: string) => void, pictures: PictureAmount = "light", pastTitles: string[] = []): Promise<{ slides: Slide[]; caption: string; hashtags: string[] }> {
+export async function writeCarousel(client: Client, idea: Idea, log: (message: string) => void, pictures: PictureAmount = "light", pastTitles: string[] = []): Promise<{ slides: Slide[]; caption: string; hashtags: string[]; review?: ScriptReview }> {
   const kind = idea.format === "single" ? "single" : "carousel";
   const arabic = client.language === "ar";
   const prompt = `You design Instagram ${kind === "single" ? "single-image posts" : "infographic carousels"} for ${client.name} (${client.url}).
 
-THE IDEA (goal: ${idea.goal}, angle: ${idea.angle})
+THE IDEA (goal: ${idea.goal}, angle: ${idea.angle}${idea.persona ? `, for: ${idea.persona}` : ""}${idea.step ? `, shows: ${idea.step}` : ""})
 Hook: ${idea.hook}
 Outline: ${idea.outline.map((line, i) => `${i + 1}. ${line}`).join("  ")}
 
@@ -38,8 +40,9 @@ Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}
 Tone: ${client.brief.tone}
 Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, client counts or guarantees.
 
-${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
+${knowledgeText(client.knowledge) ? `${knowledgeText(client.knowledge)}\n\n` : ""}${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
 - ${kind === "single" ? "Exactly 1 slide: a cover whose title is the hook, sharpened, and a subtitle with the one takeaway." : "5-8 slides. Slide 1 is the cover (the hook as a title that makes people swipe). The last slide is the cta. Between them, one idea per slide, using the layouts that fit the content: stat, list, myth-fact, before-after, steps, quote, chart."}
+- Write like someone who knows this product: show how it really works for the customer (a real step, a real screen, a real moment), in the customer's own words, about their own situation. No generic marketing lines.
 - Very short text: a title under 70 characters, list items under 70, a stat value like "3x" or "15".
 - Numbers not given in the client's facts are examples: put "${arabic ? "مثال" : "example"}" in the note or the chart unit.
 - Art: ${pictures === "rich" ? "an English picture prompt for EVERY slide" : "an English picture prompt for the cover and at most 2 other slides"}: the subject only (a phone with a calendar, a tangle of chat bubbles), never text, never logos; the art style is added later.
@@ -47,24 +50,38 @@ ${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reus
 
   const write = (extra = "") => generateText({ telemetry: { functionId: "carousel" }, model: WRITER_MODEL, output: Output.object({ schema: CAROUSEL }), prompt: prompt + extra });
   const toSlides = (output: z.infer<typeof CAROUSEL>) => output.slides.map((flat) => toSlide(flat, client.brief.cta)).filter((slide): slide is Slide => slide !== null);
+
+  /** One draft: written, its layout problems fixed once, opened on a cover and closed on the call to action. */
+  const draft = async (extra = "") => {
+    let { output } = await write(extra);
+    let slides = toSlides(output);
+    const problems = slideProblems(slides, kind);
+    if (problems.length) {
+      log(`carousel: fixing ${problems.length} problem(s) ...`);
+      ({ output } = await write(`${extra}\n\nYOUR ANSWER HAD THESE PROBLEMS:\n${problems.map((p) => `- ${p}`).join("\n")}\nWrite the slides again without them.`));
+      slides = toSlides(output);
+    }
+    if (kind === "single") slides = slides.filter((slide) => slide.layout === "cover").slice(0, 1);
+    if (slides[0]?.layout !== "cover") slides = [{ layout: "cover", title: idea.hook }, ...slides.filter((slide) => slide.layout !== "cover")];
+    if (kind === "carousel" && slides.at(-1)?.layout !== "cta") slides.push({ layout: "cta", title: client.brief.cta.label, button: client.brief.cta.label, url: client.brief.cta.url });
+    slides = withPictures(slides, pictures, (slide) => `An illustration of: ${"title" in slide ? slide.title : "text" in slide ? slide.text : "myth" in slide ? slide.fact : idea.hook}`);
+    return { slides: fitSlides(slides), caption: output.caption.trim(), hashtags: output.hashtags };
+  };
+
   log(`carousel: writing "${idea.hook}" ...`);
-  let { output } = await write();
-  let slides = toSlides(output);
-  const problems = slideProblems(slides, kind);
-  if (problems.length) {
-    log(`carousel: fixing ${problems.length} problem(s) ...`);
-    ({ output } = await write(`\n\nYOUR FIRST ANSWER HAD THESE PROBLEMS:\n${problems.map((p) => `- ${p}`).join("\n")}\nWrite the slides again without them.`));
-    slides = toSlides(output);
+  let result = await draft();
+  // Checked before any picture is paid for; a weak script is written once more with the reviewer's notes.
+  let review = await reviewScript(client, { kind, idea, script: `${scriptOf(result)}\nCAPTION: ${result.caption}` }, log);
+  let rewritten = false;
+  if (review && needsRewrite(review)) {
+    log("carousel: rewriting with the reviewer's notes ...");
+    result = await draft(rewriteNotes(review));
+    review = (await reviewScript(client, { kind, idea, script: `${scriptOf(result)}\nCAPTION: ${result.caption}` }, log)) ?? review;
+    rewritten = true;
   }
-  // Whatever the writer did, the post opens on a cover and a carousel ends on the client's call to action.
-  if (kind === "single") slides = slides.filter((slide) => slide.layout === "cover").slice(0, 1);
-  if (slides[0]?.layout !== "cover") slides = [{ layout: "cover", title: idea.hook }, ...slides.filter((slide) => slide.layout !== "cover")];
-  if (kind === "carousel" && slides.at(-1)?.layout !== "cta") slides.push({ layout: "cta", title: client.brief.cta.label, button: client.brief.cta.label, url: client.brief.cta.url });
-  slides = withPictures(slides, pictures, (slide) => `An illustration of: ${"title" in slide ? slide.title : "text" in slide ? slide.text : "myth" in slide ? slide.fact : idea.hook}`);
-  const result = { slides: fitSlides(slides), caption: output.caption.trim(), hashtags: output.hashtags };
   await proofread(result, log);
   // A fix can make a text longer than its slide allows.
-  return { ...result, slides: fitSlides(result.slides) };
+  return { ...result, slides: fitSlides(result.slides), ...(review ? { review: { ...review, rewritten } } : {}) };
 }
 
 /** Draws every slide picture that has no file yet, in one style, into `dir`/art/. */

@@ -13,7 +13,7 @@ test("parseTrends returns no trends for a reply that is not JSON", () => {
 });
 
 test("numberIdeas continues the day's numbering and starts every idea as new", () => {
-  const draft: IdeaDraft = { format: "reel", goal: "offer", angle: "story", hook: "h", outline: ["a"], why: "w", trend: "" };
+  const draft: IdeaDraft = { format: "reel", goal: "offer", angle: "story", hook: "h", outline: ["a"], why: "w", persona: "", step: "", trend: "" };
   const ideas = numberIdeas("2026-10-20", 5, [draft, draft]);
   assert.deepEqual(ideas.map((i) => i.id), ["2026-10-20-6", "2026-10-20-7"]);
   assert.equal(ideas[0].status, "new");

@@ -8,8 +8,10 @@ import { newProjectId, projectDir, saveProject } from "../project.ts";
 import type { MarketingBrief, Project } from "../types.ts";
 import { prepareSpeech, proofread } from "./arabic.ts";
 import { nextCreativity, nextVoice, reelProblems, type Made } from "./history.ts";
+import { knowledgeText } from "./knowledge.ts";
+import { needsRewrite, reviewScript, rewriteNotes, scriptOf } from "./review.ts";
 import { clientDir } from "./store.ts";
-import type { Client, Idea } from "./types.ts";
+import type { Client, Idea, ScriptReview } from "./types.ts";
 
 const GOAL_DIRECTION: Record<Idea["goal"], string> = {
   awareness: "reach people who don't know the brand yet; lead with their pain, mention the brand late",
@@ -52,10 +54,21 @@ export function avoidNotes(history: Made[]): string {
 }
 
 /** Writes a reel as an ordinary 9:16 marketing project (the same writer as Marketing mode) and returns its id. */
-export async function createReel(client: Client, idea: Idea, log: (message: string) => void, history: Made[] = []): Promise<string> {
+export async function createReel(client: Client, idea: Idea, log: (message: string) => void, history: Made[] = []): Promise<{ projectId: string; review?: ScriptReview }> {
   const base = reelBrief(client, idea);
   const avoid = avoidNotes(history);
-  const brief = { ...base, notes: [base.notes, avoid].filter(Boolean).join("\n\n") };
+  const knowledge = knowledgeText(client.knowledge);
+  const brief = {
+    ...base,
+    notes: [
+      base.notes,
+      idea.persona ? `Speak to: ${idea.persona}, in their own words. Show this real step of how the product works: ${idea.step ?? "one concrete step"}.` : "",
+      knowledge ? `${knowledge}\nWrite like someone who knows this product: show how it really works for this customer, in their words. No generic marketing lines; claim only what the knowledge says.` : "",
+      avoid,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  };
   // Reels take turns between creative and bold, and between the narrators of the brief's voice.
   const creativity = nextCreativity(history);
   const voice = nextVoice(history, brief.voice === "female" ? "female" : "male");
@@ -67,6 +80,15 @@ export async function createReel(client: Client, idea: Idea, log: (message: stri
     draft = await write(`${brief.notes}\n\nYOUR FIRST DRAFT REPEATED EARLIER VIDEOS:\n${problems.map((p) => `- ${p}`).join("\n")}`);
     const still = reelProblems({ beats: draft.scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? ""), lines: draft.scenes.map((scene) => scene.narration) }, history);
     if (still.length) log(`script: still close to earlier videos: ${still.join(" ")}`);
+  }
+  // Checked before any voice or picture is paid for; a weak script is written once more with the reviewer's notes.
+  let review = await reviewScript(client, { kind: "reel", idea, script: scriptOf({ scenes: draft.scenes }) }, log);
+  let rewritten = false;
+  if (review && needsRewrite(review)) {
+    log("script: rewriting with the reviewer's notes ...");
+    draft = await write(`${brief.notes}${rewriteNotes(review)}`);
+    review = (await reviewScript(client, { kind: "reel", idea, script: scriptOf({ scenes: draft.scenes }) }, log)) ?? review;
+    rewritten = true;
   }
   // Spelling is checked before anything is voiced or drawn; then the voice gets its own spoken text.
   const text = { scenes: draft.scenes, caption: draft.caption, hashtags: draft.hashtags };
@@ -100,5 +122,5 @@ export async function createReel(client: Client, idea: Idea, log: (message: stri
   if (existsSync(join(clientDir(client.id), "shots"))) await cp(join(clientDir(client.id), "shots"), join(projectDir(project.id), "shots"), { recursive: true });
   await saveProject(project);
   log(`script: reel saved as ${project.id}`);
-  return project.id;
+  return { projectId: project.id, ...(review ? { review: { ...review, rewritten } } : {}) };
 }
