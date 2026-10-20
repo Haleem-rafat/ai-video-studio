@@ -1,4 +1,5 @@
 import type { MarketingBrief, SiteBrand } from "../types.ts";
+import type { Knowledge } from "./knowledge.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "./styles.ts";
 
 /**
@@ -19,6 +20,8 @@ export type Client = {
   niche: string;
   /** Claims or topics never to use. */
   avoid: string;
+  /** What writers must know about the product and its customers; built from the website and an interview. */
+  knowledge?: Knowledge;
   /** How the voice says names written in Latin letters, e.g. { "Risero": "رايزرو" }. */
   pronounce?: Record<string, string>;
   dailyIdeas: boolean;
@@ -48,10 +51,15 @@ export type Idea = {
   hook: string;
   outline: string[];
   why: string;
+  /** Which customer type it speaks to, and which "how it works" step it shows. */
+  persona?: string;
+  step?: string;
   trend?: string;
   status: "new" | "making" | "made" | "skipped";
   postId?: string;
 };
+
+export type ScriptReview = { understand: number; feel: number; truthful: number; notes: string[]; rewritten: boolean };
 
 export type IdeaDay = { date: string; trends: Trend[]; ideas: Idea[] };
 
@@ -85,6 +93,8 @@ export type Post = {
   /** The art style and picture amount it was made with; unset means flat and light. */
   artStyle?: ArtStyleId;
   pictures?: PictureAmount;
+  /** The quality check of its script (1-5 each) and what the reviewer noted. */
+  review?: ScriptReview;
   status: "writing" | "drawing" | "rendering" | "done" | "failed";
   error?: string;
   createdAt: string;
