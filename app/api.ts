@@ -5,8 +5,10 @@ import type { UsageEntry, UsageSummary } from "../src/usage.ts";
 import type { Progress } from "../src/server/jobs.ts";
 import type { Client, Idea, IdeaDay, Post, Slide, Trend } from "../src/clients/types.ts";
 import type { Library, LibraryItem } from "../src/clients/library.ts";
+import type { Knowledge } from "../src/clients/knowledge.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
 
+export type { Knowledge };
 export type { ArtStyleChoice, ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
 export type ArtStyleInfo = { id: ArtStyleId; label: string; preview: boolean };
 export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
@@ -99,7 +101,7 @@ export const api = {
   clients: () => call<Client[]>("GET", "/api/clients"),
   client: (id: string) => call<Client>("GET", `/api/clients/${id}`),
   newClient: (input: { fromProject?: string; url?: string }) => call<Job>("POST", "/api/clients", input),
-  editClient: (id: string, edits: Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce">>) => call<Client>("PUT", `/api/clients/${id}`, edits),
+  editClient: (id: string, edits: Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce" | "knowledge">>) => call<Client>("PUT", `/api/clients/${id}`, edits),
   ideas: (id: string, date?: string) => call<IdeaDay>("GET", `/api/clients/${id}/ideas${date ? `?date=${date}` : ""}`),
   moreIdeas: (id: string) => call<Job>("POST", `/api/clients/${id}/ideas`),
   makeIdea: (id: string, ideaId: string, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; force?: boolean } = {}) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`, options),
@@ -108,6 +110,8 @@ export const api = {
   skipIdea: (id: string, ideaId: string) => call<IdeaDay>("POST", `/api/clients/${id}/ideas/${ideaId}/skip`),
   posts: (id: string) => call<Post[]>("GET", `/api/clients/${id}/posts`),
   library: (id: string) => call<Library>("GET", `/api/clients/${id}/library`),
+  draftKnowledge: (id: string) => call<Job>("POST", `/api/clients/${id}/knowledge/draft`),
+  answerKnowledge: (id: string, questionId: string, answer: string) => call<Job>("POST", `/api/clients/${id}/knowledge/answer`, { questionId, answer }),
   editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[] }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
 };
 

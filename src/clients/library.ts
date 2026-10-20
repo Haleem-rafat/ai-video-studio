@@ -22,6 +22,8 @@ export type LibraryItem = {
   format?: "short" | "long";
   /** A carousel's first slide, relative to the client's folder. */
   cover?: string;
+  /** The quality check of its script, for posts made since checks began. */
+  review?: Post["review"];
 };
 
 export type Library = {
@@ -87,6 +89,7 @@ export function buildLibrary(input: {
       cost: post.projectId ? (projectCosts[post.projectId] ?? 0) + (postCosts[post.id] ?? 0) : (postCosts[post.id] ?? 0),
       status: post.status,
       postId: post.id,
+      ...(post.review ? { review: post.review } : {}),
       ...(post.projectId ? { projectId: post.projectId, format: project?.format } : {}),
       ...(post.kind !== "reel" && post.slides?.length ? { cover: `posts/${post.id}/slides/01.png` } : {}),
     };

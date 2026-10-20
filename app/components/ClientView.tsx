@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "./shared.tsx";
 import { JobProgress } from "./JobProgress.tsx";
+import { KnowledgePanel } from "./KnowledgePanel.tsx";
 
 type Props = { id: string; jobs: Job[]; onOpenProject: (id: string) => void; onChanged: (client: Client) => void };
 
@@ -102,6 +103,7 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
         <TabsList>
           <TabsTrigger value="ideas">Ideas</TabsTrigger>
           <TabsTrigger value="library">Library {library?.items.length ? `(${library.items.length})` : ""}</TabsTrigger>
+          <TabsTrigger value="knowledge">Knowledge {client.knowledge ? "" : "·"}</TabsTrigger>
           <TabsTrigger value="profile">Profile</TabsTrigger>
         </TabsList>
 
@@ -173,6 +175,19 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
                 );
               })}
           </div>
+        </TabsContent>
+
+        <TabsContent value="knowledge" className="pt-2">
+          <KnowledgePanel
+            key={client.knowledge?.updatedAt ?? "none"}
+            client={client}
+            working={working.some((job) => job.label.startsWith("Knowledge"))}
+            onJob={refresh}
+            onSaved={(next) => {
+              setClient(next);
+              onChanged(next);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="profile" className="pt-2">
@@ -320,6 +335,7 @@ function PostCard({ client, post, cost, onOpenProject, onSaved }: { client: Clie
             {formatCost(cost)}
           </Badge>
         )}
+        {post.review && <ReviewBadge review={post.review} />}
         <span className="ms-auto text-xs text-muted-foreground">{new Date(post.createdAt).toLocaleString()}</span>
       </div>
       {post.error && <p className="text-xs text-destructive">{post.error}</p>}
@@ -384,6 +400,20 @@ function PostCard({ client, post, cost, onOpenProject, onSaved }: { client: Clie
   );
 }
 
+/** The script's quality check: the lowest score shows; hover for all three and the notes. */
+function ReviewBadge({ review }: { review: NonNullable<Post["review"]> }) {
+  const low = Math.min(review.understand, review.feel, review.truthful);
+  return (
+    <Badge
+      variant="outline"
+      className={low >= 4 ? "border-success/50 text-success" : "border-destructive/50 text-destructive"}
+      title={`Understands it ${review.understand}/5 · feels personal ${review.feel}/5 · true ${review.truthful}/5${review.rewritten ? " · rewritten once" : ""}\n${review.notes.join("\n")}`}
+    >
+      Script {low}/5{review.rewritten ? " ↻" : ""}
+    </Badge>
+  );
+}
+
 /** A reel or an earlier marketing video: plays inline, opens its project. */
 function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: (id: string) => void }) {
   return (
@@ -394,6 +424,7 @@ function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: 
         <Badge variant="outline" className="font-mono">
           {formatCost(item.cost)}
         </Badge>
+        {item.review && <ReviewBadge review={item.review} />}
         <span className="ms-auto text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</span>
       </div>
       <p className="font-medium" dir="auto">

@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { makeIdeas } from "../clients/ideas.ts";
 import { claimIdea, makePost, recoverInterrupted, rerenderPost } from "../clients/make.ts";
 import { loadLibrary } from "../clients/library.ts";
+import { draftKnowledge, foldAnswer, type Knowledge } from "../clients/knowledge.ts";
 import { drawPreviews, previewPath, previewsMade } from "../clients/previews.ts";
 import { ART_STYLE_IDS, ART_STYLES, type ArtStyleChoice, type PictureAmount } from "../clients/styles.ts";
 import { duplicateOf, loadHistory } from "../clients/history.ts";
@@ -106,7 +107,8 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       return true;
     }
     if (method === "PUT") {
-      const edits = await body<Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce">>>(request);
+      const edits = await body<Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce" | "knowledge">>>(request);
+      if (edits.knowledge && typeof edits.knowledge === "object" && Array.isArray(edits.knowledge.howItWorks)) client.knowledge = { ...edits.knowledge, updatedAt: new Date().toISOString() } as Knowledge;
       if (edits.pronounce && typeof edits.pronounce === "object")
         client.pronounce = Object.fromEntries(Object.entries(edits.pronounce).filter(([word, said]) => typeof said === "string" && word.trim() && said.trim()).map(([word, said]) => [word.trim(), String(said).trim()]));
       if (isStyle(edits.artStyle)) client.artStyle = edits.artStyle;
@@ -171,6 +173,28 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       undefined,
       // A reel returns its project id (costs go to the project), a carousel its post id.
       (result) => (typeof result !== "string" ? null : /^\d{12}-/.test(result) ? projectDir(result) : postDir(clientId, result)),
+    );
+    job.link = clientPage(clientId);
+    json(response, 202, job);
+    return true;
+  }
+
+  if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/knowledge\/(draft|answer)$/)) && method === "POST") {
+    const [, clientId, action] = match;
+    const client = await find(clientId);
+    const input = await body<{ questionId?: string; answer?: string }>(request);
+    if (action === "answer" && (!input.questionId || !input.answer?.trim())) throw fail(400, "Write an answer.");
+    if (action === "answer" && !client.knowledge) throw fail(409, "Draft the knowledge first.");
+    const job = enqueue(
+      action === "draft" ? `Knowledge: ${client.name}` : `Knowledge answer: ${client.name}`,
+      async (log) => {
+        const fresh = await loadClient(clientId);
+        fresh.knowledge = action === "draft" ? await draftKnowledge(fresh, log) : await foldAnswer(fresh, fresh.knowledge!, input.questionId!, input.answer!, log);
+        await saveClient(fresh);
+        return clientId;
+      },
+      undefined,
+      clientTarget,
     );
     job.link = clientPage(clientId);
     json(response, 202, job);
