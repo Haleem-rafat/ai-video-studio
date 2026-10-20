@@ -405,6 +405,7 @@ function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: 
 function ProfileForm({ client, styles, onPreviews, onSaved }: { client: Client; styles: ArtStyleInfo[]; onPreviews: () => void; onSaved: (client: Client) => void }) {
   const [draft, setDraft] = useState(client);
   const brief = draft.brief;
+  const [names, setNames] = useState(() => Object.entries(client.pronounce ?? {}).map(([word, said]) => `${word} = ${said}`).join("\n"));
   const setBrief = (change: Partial<Client["brief"]>) => setDraft({ ...draft, brief: { ...brief, ...change } });
   const save = () =>
     api
@@ -416,6 +417,7 @@ function ProfileForm({ client, styles, onPreviews, onSaved }: { client: Client; 
         avoid: draft.avoid,
         dailyIdeas: draft.dailyIdeas,
         artStyle: draft.artStyle ?? "flat",
+        pronounce: Object.fromEntries(names.split("\n").map((line) => line.split("=").map((part) => part.trim())).filter((pair) => pair.length === 2 && pair[0] && pair[1])),
         pictures: draft.pictures ?? "light",
         brief: { ...brief, problems: brief.problems.map((line) => line.trim()).filter(Boolean), features: brief.features.map((line) => line.trim()).filter(Boolean) },
       })
@@ -460,6 +462,9 @@ function ProfileForm({ client, styles, onPreviews, onSaved }: { client: Client; 
       </div>
       <Field label="Tone">
         <Input dir="auto" value={brief.tone} onChange={(e) => setBrief({ tone: e.target.value })} />
+      </Field>
+      <Field label="How the voice says names" detail="One per line, e.g. Risero = رايزرو">
+        <Textarea dir="auto" rows={2} value={names} placeholder="Risero = رايزرو" onChange={(e) => setNames(e.target.value)} />
       </Field>
       <Field label="Never say">
         <Textarea dir="auto" value={draft.avoid} onChange={(e) => setDraft({ ...draft, avoid: e.target.value })} />

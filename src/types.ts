@@ -139,6 +139,12 @@ export type Scene = {
   /** In a "mixed" project, this scene's look; unset picks one from the visual (see looks.ts). */
   look?: Look;
   audio?: { path: string; text: string; voiceId: string; seconds: number; words: Word[] };
+  /**
+   * What the voice reads instead of the narration (brand names as said, numbers
+   * as words, vowel marks on words that get misread); used only while `for`
+   * still equals the narration, so editing the narration drops it.
+   */
+  speech?: { for: string; text: string };
 };
 
 export type Project = {

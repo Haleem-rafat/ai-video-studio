@@ -19,6 +19,8 @@ export type Client = {
   niche: string;
   /** Claims or topics never to use. */
   avoid: string;
+  /** How the voice says names written in Latin letters, e.g. { "Risero": "رايزرو" }. */
+  pronounce?: Record<string, string>;
   dailyIdeas: boolean;
   /** Default art style ("rotate" takes one not used lately) and picture amount for new posts; unset means flat and light. */
   artStyle?: ArtStyleChoice;

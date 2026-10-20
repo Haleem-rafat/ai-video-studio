@@ -13,6 +13,7 @@ import { requireEnv, type Channel } from "../config.ts";
 import type { Scene, Word } from "../types.ts";
 import { recordElevenLabs } from "../usage.ts";
 import { reportProgress } from "../progress.ts";
+import { spokenOf } from "./spoken.ts";
 
 const run = promisify(execFile);
 const MODEL_ID = "eleven_multilingual_v2";
@@ -58,16 +59,17 @@ export function wordsFromAlignment(alignment: Alignment): Word[] {
 
 /** True when the scene's audio still matches its narration and voice. */
 export function voiceIsCurrent(projectDir: string, scene: Scene, voiceId: string): boolean {
-  return Boolean(scene.audio && scene.audio.text === scene.narration && scene.audio.voiceId === voiceId && existsSync(join(projectDir, scene.audio.path)));
+  return Boolean(scene.audio && scene.audio.text === spokenOf(scene) && scene.audio.voiceId === voiceId && existsSync(join(projectDir, scene.audio.path)));
 }
 
 /** Speaks one scene with ElevenLabs and stores the mp3 and word timings on it. */
 export async function voiceScene(projectDir: string, scene: Scene, voiceId: string, previousText?: string, nextText?: string): Promise<void> {
+  const spoken = spokenOf(scene);
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`, {
     method: "POST",
     headers: { "xi-api-key": requireEnv("ELEVENLABS_API_KEY"), "Content-Type": "application/json" },
     body: JSON.stringify({
-      text: scene.narration,
+      text: spoken,
       model_id: MODEL_ID,
       // Neighbouring lines keep intonation flowing across scene cuts.
       previous_text: previousText,
@@ -79,9 +81,9 @@ export async function voiceScene(projectDir: string, scene: Scene, voiceId: stri
   if (!response.ok) throw new Error(`ElevenLabs ${response.status} on ${scene.id}: ${(await response.text()).slice(0, 300)}`);
 
   const data = (await response.json()) as { audio_base64: string; alignment: Alignment };
-  recordElevenLabs(scene.narration.length);
+  recordElevenLabs(spoken.length);
   // Named by content so the studio never plays a cached old take.
-  const take = createHash("sha1").update(`${voiceId}:${scene.narration}`).digest("hex").slice(0, 8);
+  const take = createHash("sha1").update(`${voiceId}:${spoken}`).digest("hex").slice(0, 8);
   const path = `audio/${scene.id}-${take}.mp3`;
 
   await mkdir(join(projectDir, "audio"), { recursive: true });
@@ -89,7 +91,7 @@ export async function voiceScene(projectDir: string, scene: Scene, voiceId: stri
 
   scene.audio = {
     path,
-    text: scene.narration,
+    text: spoken,
     voiceId,
     seconds: await audioSeconds(join(projectDir, path)),
     words: wordsFromAlignment(data.alignment),
@@ -109,14 +111,15 @@ export function narratorKey(channel: Channel): string {
  */
 export async function voiceSceneGemini(projectDir: string, scene: Scene, channel: Channel): Promise<void> {
   const narrator = channel.narrator!;
+  const spoken = spokenOf(scene);
   const { audio } = await generateSpeech({
     model: "google/gemini-3.8-flash-tts",
     voice: narrator.voice,
-    text: scene.narration,
+    text: spoken,
     instructions: narrator.style ?? `Read naturally in ${channel.dialect ?? (channel.language === "ar" ? "Arabic" : "English")}: ${channel.tone}`,
   });
   const key = narratorKey(channel);
-  const take = createHash("sha1").update(`${key}:${scene.narration}`).digest("hex").slice(0, 8);
+  const take = createHash("sha1").update(`${key}:${spoken}`).digest("hex").slice(0, 8);
   const path = `audio/${scene.id}-${take}.mp3`;
   const raw = join(projectDir, `audio/${scene.id}-${take}.raw`);
 
@@ -135,7 +138,7 @@ export async function voiceSceneGemini(projectDir: string, scene: Scene, channel
 
   scene.audio = {
     path,
-    text: scene.narration,
+    text: spoken,
     voiceId: key,
     seconds: await audioSeconds(join(projectDir, path)),
     words: heard.segments.map((word) => ({ text: word.text, start: word.startSecond, end: word.endSecond })),

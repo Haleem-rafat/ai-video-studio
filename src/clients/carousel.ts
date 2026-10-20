@@ -5,6 +5,7 @@ import { generateImage, generateText, Output } from "ai";
 import { z } from "zod";
 
 import { recordImage } from "../usage.ts";
+import { proofread } from "./arabic.ts";
 import { FLAT_SLIDE, fitSlides, slideProblems, toSlide } from "./slides.ts";
 import { styleOf, withPictures, type PictureAmount } from "./styles.ts";
 import type { Client, Idea, Slide } from "./types.ts";
@@ -42,7 +43,7 @@ ${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reus
 - Very short text: a title under 70 characters, list items under 70, a stat value like "3x" or "15".
 - Numbers not given in the client's facts are examples: put "${arabic ? "مثال" : "example"}" in the note or the chart unit.
 - Art: ${pictures === "rich" ? "an English picture prompt for EVERY slide" : "an English picture prompt for the cover and at most 2 other slides"}: the subject only (a phone with a calendar, a tangle of chat bubbles), never text, never logos; the art style is added later.
-- Language: ${arabic ? "Egyptian colloquial Arabic, natural; brand and platform names in Latin script" : "simple, natural English"}.`;
+- Language: ${arabic ? "Egyptian colloquial Arabic, natural, correctly spelled (hamza, ة/ه, ى/ي), also in hashtags; brand and platform names in Latin script" : "simple, natural English"}.`;
 
   const write = (extra = "") => generateText({ telemetry: { functionId: "carousel" }, model: WRITER_MODEL, output: Output.object({ schema: CAROUSEL }), prompt: prompt + extra });
   const toSlides = (output: z.infer<typeof CAROUSEL>) => output.slides.map((flat) => toSlide(flat, client.brief.cta)).filter((slide): slide is Slide => slide !== null);
@@ -60,7 +61,10 @@ ${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reus
   if (slides[0]?.layout !== "cover") slides = [{ layout: "cover", title: idea.hook }, ...slides.filter((slide) => slide.layout !== "cover")];
   if (kind === "carousel" && slides.at(-1)?.layout !== "cta") slides.push({ layout: "cta", title: client.brief.cta.label, button: client.brief.cta.label, url: client.brief.cta.url });
   slides = withPictures(slides, pictures, (slide) => `An illustration of: ${"title" in slide ? slide.title : "text" in slide ? slide.text : "myth" in slide ? slide.fact : idea.hook}`);
-  return { slides: fitSlides(slides), caption: output.caption.trim(), hashtags: output.hashtags };
+  const result = { slides: fitSlides(slides), caption: output.caption.trim(), hashtags: output.hashtags };
+  await proofread(result, log);
+  // A fix can make a text longer than its slide allows.
+  return { ...result, slides: fitSlides(result.slides) };
 }
 
 /** Draws every slide picture that has no file yet, in one style, into `dir`/art/. */

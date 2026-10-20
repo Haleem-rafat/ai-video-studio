@@ -104,7 +104,9 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       return true;
     }
     if (method === "PUT") {
-      const edits = await body<Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures">>>(request);
+      const edits = await body<Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce">>>(request);
+      if (edits.pronounce && typeof edits.pronounce === "object")
+        client.pronounce = Object.fromEntries(Object.entries(edits.pronounce).filter(([word, said]) => typeof said === "string" && word.trim() && said.trim()).map(([word, said]) => [word.trim(), String(said).trim()]));
       if (isStyle(edits.artStyle)) client.artStyle = edits.artStyle;
       if (isAmount(edits.pictures)) client.pictures = edits.pictures;
       if (typeof edits.name === "string" && edits.name.trim()) client.name = edits.name.trim();

@@ -6,6 +6,7 @@ import { MARKETING_OWNER, MARKETING_STYLE } from "../pipeline.ts";
 import { writeMarketing } from "../marketing/write.ts";
 import { newProjectId, projectDir, saveProject } from "../project.ts";
 import type { MarketingBrief, Project } from "../types.ts";
+import { prepareSpeech, proofread } from "./arabic.ts";
 import { nextCreativity, nextVoice, reelProblems, type Made } from "./history.ts";
 import { clientDir } from "./store.ts";
 import type { Client, Idea } from "./types.ts";
@@ -26,6 +27,7 @@ export function reelBrief(client: Client, idea: Idea): MarketingBrief {
       `Goal of this reel: ${idea.goal} (${GOAL_DIRECTION[idea.goal]}).`,
       `Say the hook in the first 2 seconds: ${idea.hook}`,
       `Beats: ${idea.outline.join(" → ")}`,
+      "Narration is read by a voice: use short, common, easy-to-say words; avoid tongue-twisters and rare words (not «ميعادين يتداخلوا», say «ميعادين في نفس الوقت»).",
       client.avoid ? `Never: ${client.avoid}` : "",
     ]
       .filter(Boolean)
@@ -66,6 +68,11 @@ export async function createReel(client: Client, idea: Idea, log: (message: stri
     const still = reelProblems({ beats: draft.scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? ""), lines: draft.scenes.map((scene) => scene.narration) }, history);
     if (still.length) log(`script: still close to earlier videos: ${still.join(" ")}`);
   }
+  // Spelling is checked before anything is voiced or drawn; then the voice gets its own spoken text.
+  const text = { scenes: draft.scenes, caption: draft.caption, hashtags: draft.hashtags };
+  await proofread(text, log);
+  draft = { ...draft, caption: text.caption, hashtags: text.hashtags };
+  await prepareSpeech(draft.scenes, client, log);
   const now = new Date().toISOString();
   const project: Project = {
     id: newProjectId(MARKETING_OWNER, "short", `${client.name} reel ${idea.goal}`),
