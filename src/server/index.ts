@@ -23,6 +23,7 @@ import { addProductPhoto } from "../media/products.ts";
 import { addScenePhoto } from "../media/photos.ts";
 import { LOOKS, STYLES, VISUAL_TYPES, type Creativity, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
 import { enqueue, getJob, recentJobs } from "./jobs.ts";
+import { handleClients, startClientSchedule } from "./clients.ts";
 import { appendUsage, collectUsage, readUsage, STUDIO_LEDGER, summarize } from "../usage.ts";
 import { gateway } from "ai";
 
@@ -278,6 +279,12 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   const path = url.pathname;
   const method = request.method ?? "GET";
   let match: RegExpMatchArray | null;
+
+  // Instagram clients: daily ideas, carousels and reels (src/server/clients.ts).
+  if (path.startsWith("/api/clients") || path.startsWith("/client-files/")) {
+    const handled = await handleClients({ path, method, url, request, response, json, body, sendFile, inside, fail: (status, message) => new HttpError(status, message) });
+    if (handled) return;
+  }
 
   if (path === "/api/status") {
     const [llm, credit] = await Promise.all([llmRunning(), elevenCredit()]);
@@ -630,6 +637,7 @@ createServer((request, response) => {
 }).listen(PORT, "127.0.0.1", () => {
   console.log(`AI Video Studio: http://localhost:${PORT}`);
   if (process.env.OPEN) spawn("open", [`http://localhost:${PORT}`]);
+  startClientSchedule();
 });
 
 /**
