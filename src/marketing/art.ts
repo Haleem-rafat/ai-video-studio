@@ -46,7 +46,8 @@ export async function directArt(project: Project, log: (message: string) => void
 Audience: ${m.brief.audience}
 Brand colours: background ${c.background}, accent ${c.accent}, call to action ${c.cta}, text ${c.text}.
 
-Plan pictures made for this video; the website's screenshots are never shown, so every picture is yours to invent. Rules:
+Plan pictures made for this video; the website's screenshots are never shown, so every picture is yours to invent.${m.artDirection ? `\nTHE PRODUCER ASKS FOR THIS ART STYLE — use it as the style: ${m.artDirection}` : ""}
+Rules:
 - One consistent art style across the whole video, lit and coloured in the brand's palette (deep ${c.background} shadows, ${c.accent} and ${c.cta} light).
 - Every scene's backdrop is a different picture that tells that scene's idea. Never repeat a subject.
 - Pictures never contain text, letters, numbers, logos, user interfaces or screenshots.

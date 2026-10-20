@@ -1,4 +1,4 @@
-import { CheckIcon, ClapperboardIcon, DownloadIcon, FilmIcon, Loader2Icon, RefreshCwIcon, ShieldCheckIcon, Trash2Icon, VideoOffIcon } from "lucide-react";
+import { CalendarIcon, CheckIcon, ClockIcon, ClapperboardIcon, Redo2Icon, Undo2Icon, DownloadIcon, FilmIcon, Loader2Icon, RefreshCwIcon, ShieldCheckIcon, Trash2Icon, VideoOffIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, newSceneId, sceneSeconds, type Channel, type Job, type ProjectState, type ProjectSummary, type SceneState, type StyleId } from "../api.ts";
@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { lookOf } from "../../src/render/looks.ts";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Preview } from "./Preview.tsx";
 import { PublishDialog } from "./PublishDialog.tsx";
 import { SceneCard } from "./SceneCard.tsx";
@@ -22,7 +23,8 @@ import { DeepDivePanel } from "./DeepDivePanel.tsx";
 import { MarketingPanel } from "./MarketingPanel.tsx";
 import { CostPanel } from "./CostPanel.tsx";
 import { JobProgress } from "./JobProgress.tsx";
-import { formatCost } from "../api.ts";
+import { formatCost, formatDate, formatTime, formatWhen } from "../api.ts";
+import { ProjectInfo } from "./ProjectInfo.tsx";
 
 type Props = {
   id: string;
@@ -32,6 +34,7 @@ type Props = {
   jobs: Job[];
   llmReady: boolean;
   onDeleted: () => void;
+  onOpen: (id: string) => void;
 };
 
 /** A button with a tooltip that still shows while the button is disabled. */
@@ -46,12 +49,13 @@ function Action({ tip, children }: { tip: string; children: React.ReactNode }) {
   );
 }
 
-export function ProjectView({ id, version, channels, projects, jobs, llmReady, onDeleted }: Props) {
+export function ProjectView({ id, version, channels, projects, jobs, llmReady, onDeleted, onOpen }: Props) {
   const [project, setProject] = useState<ProjectState | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<"preview" | "video" | "cost">("preview");
+  const [side, setSide] = useState<"scenes" | "setup" | "details" | "info">("scenes");
   const [nonce, setNonce] = useState(0);
   const [time, setTime] = useState(0);
   const [seekTo, setSeekTo] = useState<{ time: number; at: number } | null>(null);
@@ -59,6 +63,11 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
   const pendingSave = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef<ProjectState | null>(null);
   const cards = useRef(new Map<string, HTMLDivElement>());
+  // Undo and redo: the project before each edit. Typing within a second counts as one edit.
+  const past = useRef<ProjectState[]>([]);
+  const future = useRef<ProjectState[]>([]);
+  const lastPush = useRef(0);
+  const [, setHistoryTick] = useState(0);
 
   const busy = jobs.some((job) => job.status === "running" || job.status === "queued");
   const channel = channels.find((candidate) => candidate.id === project?.channel);
@@ -108,6 +117,12 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
   const edit = useCallback(
     (change: (project: ProjectState) => ProjectState) => {
       if (!latest.current) return;
+      if (Date.now() - lastPush.current > 1000) {
+        past.current = [...past.current.slice(-59), latest.current];
+        future.current = [];
+        setHistoryTick((tick) => tick + 1);
+      }
+      lastPush.current = Date.now();
       const next = change(latest.current);
       latest.current = next;
       edits.current++;
@@ -117,6 +132,26 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
     },
     [save],
   );
+
+  /** Puts back a project from the history, and saves it like any edit. */
+  const restore = useCallback(
+    (from: React.RefObject<ProjectState[]>, to: React.RefObject<ProjectState[]>) => {
+      const previous = from.current.at(-1);
+      if (!previous || !latest.current) return;
+      from.current = from.current.slice(0, -1);
+      to.current = [...to.current, latest.current];
+      lastPush.current = 0;
+      latest.current = previous;
+      edits.current++;
+      setProject(previous);
+      setHistoryTick((tick) => tick + 1);
+      if (pendingSave.current) clearTimeout(pendingSave.current);
+      pendingSave.current = setTimeout(save, 600);
+    },
+    [save],
+  );
+  const undo = useCallback(() => restore(past, future), [restore]);
+  const redo = useCallback(() => restore(future, past), [restore]);
 
   const updateScene = (scene: SceneState) => edit((current) => ({ ...current, scenes: current.scenes.map((candidate) => (candidate.id === scene.id ? scene : candidate)) }));
 
@@ -161,9 +196,40 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
 
   const selectScene = (sceneId: string, start?: number) => {
     setSelected(sceneId);
-    cards.current.get(sceneId)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    setSide("scenes");
+    requestAnimationFrame(() => cards.current.get(sceneId)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
     if (start !== undefined) setSeekTo({ time: start + 0.05, at: Date.now() });
   };
+
+  // Editing keys; inside a text field the browser's own undo and arrows win.
+  useEffect(() => {
+    const keys = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
+      const mod = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (mod && key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+      } else if (mod && key === "y") {
+        event.preventDefault();
+        redo();
+      } else if (!mod && (event.key === "ArrowUp" || event.key === "ArrowDown") && latest.current) {
+        event.preventDefault();
+        const scenes = latest.current.scenes;
+        const at = Math.max(0, scenes.findIndex((scene) => scene.id === (selected ?? scenes[playingIndex]?.id)));
+        const nextIndex = Math.max(0, Math.min(scenes.length - 1, at + (event.key === "ArrowUp" ? -1 : 1)));
+        selectScene(scenes[nextIndex].id, starts[nextIndex]);
+      } else if (!mod && (event.key === "Delete" || event.key === "Backspace") && selected && latest.current && latest.current.scenes.length > 1) {
+        event.preventDefault();
+        edit((current) => ({ ...current, scenes: current.scenes.filter((scene) => scene.id !== selected) }));
+        setSelected(null);
+      }
+    };
+    window.addEventListener("keydown", keys);
+    return () => window.removeEventListener("keydown", keys);
+  });
 
   if (!project) {
     if (error) return <div className="flex flex-1 items-center justify-center p-6 text-sm text-destructive">{error}</div>;
@@ -196,10 +262,12 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
   const voiceChars = project.scenes.filter((scene) => !scene.voiceCurrent).reduce((sum, scene) => sum + scene.narration.length, 0);
   const running = jobs.find((job) => job.status === "running") ?? jobs.find((job) => job.status === "queued");
   const renderBlocked = busy || stale > 0 || !project.hasComposition;
+  const hasSetup = Boolean(project.versus || project.marketing || project.deepdive);
+  const total = starts.length ? starts[starts.length - 1] + lengths[lengths.length - 1] : 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-start gap-3 border-b px-4 py-3">
+      <div className="flex flex-wrap items-start gap-3 border-b px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-300">
         <div className="grid min-w-0 flex-1 gap-1.5">
           <Input
             aria-label="Video title"
@@ -241,10 +309,24 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
               {saving ? <Loader2Icon className="size-3 animate-spin" /> : <CheckIcon className="size-3" />}
               {saving ? "Saving" : "Saved"}
             </span>
+            <span className="flex items-center gap-1.5 font-mono text-[11px] tabular-nums" title={`Edited ${formatDate(project.updatedAt)}`}>
+              <CalendarIcon className="size-3" /> Made {formatDate(project.createdAt)}
+              {project.render && <span>· rendered {formatWhen(project.render.renderedAt)}</span>}
+            </span>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          <Action tip="Undo (⌘Z)">
+            <Button variant="ghost" size="icon" disabled={!past.current.length} onClick={undo} aria-label="Undo">
+              <Undo2Icon />
+            </Button>
+          </Action>
+          <Action tip="Redo (⇧⌘Z)">
+            <Button variant="ghost" size="icon" disabled={!future.current.length} onClick={redo} aria-label="Redo">
+              <Redo2Icon />
+            </Button>
+          </Action>
           {project.style !== "versus" && project.style !== "deepdive" && project.style !== "marketing" && (
             <Action tip={llmReady ? "Bonsai re-checks every claim, date and number" : "Start Bonsai first"}>
               <Button variant="outline" disabled={busy || !llmReady} onClick={() => runJob(() => api.factCheck(id))}>
@@ -324,80 +406,117 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
       )}
       {error && <div className="border-b bg-destructive/10 px-4 py-1.5 text-xs text-destructive">{error}</div>}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(340px,40%)]">
-        <div className="min-h-0 overflow-y-auto">
-          <div className="grid gap-3 p-4">
-            {project.versus && (
-              <VersusPanel
-                project={project}
-                busy={busy}
-                onEdit={(change) => edit((current) => ({ ...current, versus: change(current.versus!) }))}
-                onUploaded={(saved) => {
-                  setProject(saved);
-                  latest.current = saved;
-                }}
-              />
-            )}
-            {project.marketing && <MarketingPanel project={project} busy={busy} onEdit={(change) => edit((current) => ({ ...current, marketing: change(current.marketing!) }))} />}
-            {project.deepdive && (
-              <DeepDivePanel
-                project={project}
-                busy={busy}
-                onEdit={(change) => edit((current) => ({ ...current, deepdive: change(current.deepdive!) }))}
-                onUploaded={(saved) => {
-                  setProject(saved);
-                  latest.current = saved;
-                }}
-              />
-            )}
-            {project.scenes.map((scene, index) => (
-              <SceneCard
-                key={scene.id}
-                ref={(element) => {
-                  if (element) cards.current.set(scene.id, element);
-                  else cards.current.delete(scene.id);
-                }}
-                projectId={id}
-                format={project.format}
-                square={lookOf(project, scene) === "whiteboard"}
-                look={project.style === "mixed" ? lookOf(project, scene) : null}
-                scene={scene}
-                index={index}
-                start={starts[index]}
-                seconds={lengths[index]}
-                selected={selected === scene.id || (selected === null && index === playingIndex)}
-                isFirst={index === 0}
-                isLast={index === project.scenes.length - 1}
-                canDelete={project.scenes.length > 1}
-                onSelect={() => selectScene(scene.id, starts[index])}
-                onChange={updateScene}
-                onMove={(delta) => moveScene(index, index + delta)}
-                onAddAfter={() => addAfter(index)}
-                onDelete={() => edit((current) => ({ ...current, scenes: current.scenes.filter((candidate) => candidate.id !== scene.id) }))}
-                busy={busy}
-                onUploaded={(saved) => {
-                  setProject(saved);
-                  latest.current = saved;
-                }}
-              />
-            ))}
-
-            <div className="grid gap-3 rounded-xl border bg-card p-4">
-              <div className="text-sm font-medium">YouTube details</div>
-              <Field label="Description">
-                <Textarea rows={3} value={project.description} onChange={(event) => edit((current) => ({ ...current, description: event.target.value }))} />
-              </Field>
-              <Field label="Tags" detail="comma separated">
-                <Input
-                  value={project.tags.join(", ")}
-                  onChange={(event) => edit((current) => ({ ...current, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) }))}
-                />
-              </Field>
-            </div>
+      {/* Scenes | preview above, the timeline below; every edge can be dragged, and the scenes and timeline fold away. */}
+      <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+        <ResizablePanel defaultSize="74" minSize="35">
+      <ResizablePanelGroup orientation="horizontal" className="h-full">
+        <ResizablePanel defaultSize="58" minSize="22" collapsible collapsedSize="0">
+        <Tabs value={side} onValueChange={(value) => setSide(value as typeof side)} className="flex h-full min-h-0 flex-col gap-0 animate-in fade-in slide-in-from-left-3 duration-300 delay-100 fill-mode-both">
+          <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+            <TabsList>
+              <TabsTrigger value="scenes">
+                Scenes <span className="ml-1 font-mono text-[11px] text-muted-foreground">{project.scenes.length}</span>
+              </TabsTrigger>
+              {hasSetup && <TabsTrigger value="setup">{project.marketing ? "Brand & voice" : "Setup"}</TabsTrigger>}
+              {!project.marketing && <TabsTrigger value="details">YouTube</TabsTrigger>}
+              <TabsTrigger value="info">Info</TabsTrigger>
+            </TabsList>
+            <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground tabular-nums" title={`Edited ${formatDate(project.updatedAt)}`}>
+              <ClockIcon className="size-3" /> {formatTime(total)}
+            </span>
           </div>
-        </div>
-
-        <div className="flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l">
+          <TabsContent value="scenes" className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid gap-3 p-4">
+                {project.scenes.map((scene, index) => (
+                  <SceneCard
+                    key={scene.id}
+                    ref={(element) => {
+                      if (element) cards.current.set(scene.id, element);
+                      else cards.current.delete(scene.id);
+                    }}
+                    projectId={id}
+                    format={project.format}
+                    square={lookOf(project, scene) === "whiteboard"}
+                    look={project.style === "mixed" ? lookOf(project, scene) : null}
+                    scene={scene}
+                    index={index}
+                    start={starts[index]}
+                    seconds={lengths[index]}
+                    selected={selected === scene.id || (selected === null && index === playingIndex)}
+                    isFirst={index === 0}
+                    isLast={index === project.scenes.length - 1}
+                    canDelete={project.scenes.length > 1}
+                    onSelect={() => selectScene(scene.id, starts[index])}
+                    onChange={updateScene}
+                    onMove={(delta) => moveScene(index, index + delta)}
+                    onAddAfter={() => addAfter(index)}
+                    onDelete={() => edit((current) => ({ ...current, scenes: current.scenes.filter((candidate) => candidate.id !== scene.id) }))}
+                    busy={busy}
+                    onUploaded={(saved) => {
+                      setProject(saved);
+                      latest.current = saved;
+                    }}
+                  />
+                ))}
+            </div>
+          </TabsContent>
+          {hasSetup && (
+            <TabsContent value="setup" className="min-h-0 flex-1 overflow-y-auto">
+              <div className="grid gap-3 p-4">
+                  {project.versus && (
+                    <VersusPanel
+                      project={project}
+                      busy={busy}
+                      onEdit={(change) => edit((current) => ({ ...current, versus: change(current.versus!) }))}
+                      onUploaded={(saved) => {
+                        setProject(saved);
+                        latest.current = saved;
+                      }}
+                    />
+                  )}
+                  {project.marketing && <MarketingPanel project={project} busy={busy} onEdit={(change) => edit((current) => ({ ...current, marketing: change(current.marketing!) }))} />}
+                  {project.deepdive && (
+                    <DeepDivePanel
+                      project={project}
+                      busy={busy}
+                      onEdit={(change) => edit((current) => ({ ...current, deepdive: change(current.deepdive!) }))}
+                      onUploaded={(saved) => {
+                        setProject(saved);
+                        latest.current = saved;
+                      }}
+                    />
+                  )}
+              </div>
+            </TabsContent>
+          )}
+          {!project.marketing && (
+            <TabsContent value="details" className="min-h-0 flex-1 overflow-y-auto">
+              <div className="grid gap-3 p-4">
+                <div className="grid gap-3 rounded-xl border bg-card p-4">
+                  <div className="text-sm font-medium">YouTube details</div>
+                  <Field label="Description">
+                    <Textarea rows={3} value={project.description} onChange={(event) => edit((current) => ({ ...current, description: event.target.value }))} />
+                  </Field>
+                  <Field label="Tags" detail="comma separated">
+                    <Input
+                      value={project.tags.join(", ")}
+                      onChange={(event) => edit((current) => ({ ...current, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) }))}
+                    />
+                  </Field>
+                </div>
+              </div>
+            </TabsContent>
+          )}
+          <TabsContent value="info" className="min-h-0 flex-1 overflow-y-auto">
+            <div className="p-4">
+              <ProjectInfo project={project} projects={projects} seconds={total} onOpen={onOpen} />
+            </div>
+          </TabsContent>
+        </Tabs>
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize="42" minSize="22">
+        <div className="flex h-full min-h-0 flex-col animate-in fade-in slide-in-from-right-3 duration-300 delay-200 fill-mode-both">
           <Tabs value={tab} onValueChange={(value) => setTab(value as "preview" | "video" | "cost")} className="flex min-h-0 flex-1 flex-col gap-0">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <TabsList>
@@ -443,8 +562,11 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
             </TabsContent>
           </Tabs>
         </div>
-      </div>
-
+        </ResizablePanel>
+      </ResizablePanelGroup>
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize="26" minSize="12" collapsible collapsedSize="0" className="animate-in fade-in slide-in-from-bottom-3 duration-300 delay-300 fill-mode-both">
       <Timeline
         projectId={id}
         scenes={project.scenes}
@@ -456,6 +578,8 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
         onSeek={(seconds) => setSeekTo({ time: seconds, at: Date.now() })}
         onReorder={moveScene}
       />
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

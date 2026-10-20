@@ -1,3 +1,5 @@
+import { siFacebook, siInstagram, siPinterest, siSnapchat, siTelegram, siThreads, siTiktok, siWhatsapp, siX, siYoutube } from "simple-icons";
+
 import { alignWords } from "./align.ts";
 import { FORMATS } from "../config.ts";
 import type { MarketingSetup, Project, Scene, SiteBrand } from "../types.ts";
@@ -5,7 +7,7 @@ import type { MarketingSetup, Project, Scene, SiteBrand } from "../types.ts";
 /** What every marketing beat shares: timing, layout boxes, icons and small text helpers. */
 
 export const INTRO = 0.25;
-export const GAP = 0.6;
+export const GAP = 0.3;
 /** The call to action holds after the last word. */
 export const OUTRO = 3;
 
@@ -116,20 +118,37 @@ export function iconFor(label: string): string {
   return ICONS.post;
 }
 
-export const PLATFORMS: Record<string, { color: string; glyph: string }> = {
-  instagram: { color: "linear-gradient(45deg,#f9ce34,#ee2a7b,#6228d7)", glyph: "◎" },
-  facebook: { color: "#1877f2", glyph: "f" },
-  tiktok: { color: "#111", glyph: "♪" },
-  youtube: { color: "#ff0000", glyph: "▶" },
-  linkedin: { color: "#0a66c2", glyph: "in" },
-  snapchat: { color: "#fffc00", glyph: "👻" },
-  x: { color: "#000", glyph: "𝕏" },
-};
-/** A platform's badge: its glyph, in the brand's colours rather than the platform's own. */
-export const platformOf = (label: string) => {
-  const glyph = PLATFORMS[Object.keys(PLATFORMS).find((key) => label.toLowerCase().replace(/\s/g, "").includes(key)) ?? ""]?.glyph ?? label.trim()[0] ?? "•";
-  return { color: "linear-gradient(135deg, var(--accent), var(--cta))", glyph };
-};
+/** The real platform icons (simple-icons, CC0), matched by name, link or Arabic spelling. */
+const SOCIAL: { match: RegExp; path?: string; bg: string; fg: string }[] = [
+  { match: /instagram|instagr\.am|انستجرام|انستغرام|إنستغرام|انستا/i, path: siInstagram.path, bg: "radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285aeb 90%)", fg: "#fff" },
+  { match: /facebook|fb\.com|فيسبوك|فيس بوك/i, path: siFacebook.path, bg: `#${siFacebook.hex}`, fg: "#fff" },
+  { match: /tiktok|تيك ?توك/i, path: siTiktok.path, bg: "#000", fg: "#fff" },
+  { match: /youtube|youtu\.be|يوتيوب/i, path: siYoutube.path, bg: `#${siYoutube.hex}`, fg: "#fff" },
+  { match: /whatsapp|wa\.me|واتساب|واتس/i, path: siWhatsapp.path, bg: `#${siWhatsapp.hex}`, fg: "#fff" },
+  { match: /snapchat|سناب/i, path: siSnapchat.path, bg: `#${siSnapchat.hex}`, fg: "#000" },
+  { match: /threads/i, path: siThreads.path, bg: "#000", fg: "#fff" },
+  { match: /pinterest/i, path: siPinterest.path, bg: `#${siPinterest.hex}`, fg: "#fff" },
+  { match: /telegram|t\.me|تيليجرام/i, path: siTelegram.path, bg: `#${siTelegram.hex}`, fg: "#fff" },
+  { match: /twitter|(^|[^a-z])x\.com|(^|\s)X(\s|$)|تويتر/i, path: siX.path, bg: "#000", fg: "#fff" },
+  // simple-icons dropped LinkedIn; its "in" is drawn here.
+  { match: /linkedin|لينكد ?إن/i, bg: "#0a66c2", fg: "#fff" },
+];
+
+/** The icon of the platform a label or link names, as a badge's colours and SVG, or null. */
+export function socialOf(text: string | undefined): { bg: string; fg: string; svg: string } | null {
+  const found = SOCIAL.find((social) => social.match.test(text ?? ""));
+  if (!found) return null;
+  const svg = found.path
+    ? `<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><path d="${found.path}"/></svg>`
+    : `<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><text x="12" y="17.5" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="15">in</text></svg>`;
+  return { bg: found.bg, fg: found.fg, svg };
+}
+
+/** A small round badge with a platform's real icon, or "" when the text names no platform. */
+export function socialBadge(text: string | undefined, className = "soc"): string {
+  const social = socialOf(text);
+  return social ? `<span class="${className}" style="background:${social.bg};color:${social.fg}">${social.svg}</span>` : "";
+}
 
 /** The next five weekdays after `from`, for the booking widget. */
 export function nextDays(from: Date, locale: string): { day: string; date: string }[] {

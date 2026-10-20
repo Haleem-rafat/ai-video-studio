@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
-import { MonitorPlayIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, MaximizeIcon, MonitorPlayIcon, PauseIcon, PlayIcon } from "lucide-react";
 
 import { formatTime, type FormatId } from "../api.ts";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+/** One frame at the 30fps HyperFrames renders. */
+const FRAME = 1 / 30;
+const ZOOMS = ["0.5", "0.75", "1", "1.5", "2"];
 
 type Props = {
   projectId: string;
@@ -26,7 +31,11 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [scale, setScale] = useState(0.3);
+  const [fit, setFit] = useState(0.3);
+  /** Relative to fitting the panel: 1 fits, 2 is twice that (scroll to look around). */
+  const [zoom, setZoom] = useState("1");
+  const scale = fit * Number(zoom);
+  const stage = useRef<HTMLDivElement>(null);
   const [width, height] = format === "short" ? [1080, 1920] : [1920, 1080];
 
   const send = (message: object) => frame.current?.contentWindow?.postMessage(message, "*");
@@ -48,7 +57,7 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
     if (!box.current) return;
     const observer = new ResizeObserver(([entry]) => {
       const { width: boxWidth, height: boxHeight } = entry.contentRect;
-      setScale(Math.min(boxWidth / width, boxHeight / height));
+      setFit(Math.min(boxWidth / width, boxHeight / height));
     });
     observer.observe(box.current);
     return () => observer.disconnect();
@@ -58,16 +67,29 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
     if (seekTo) send({ type: "seek", time: seekTo.time });
   }, [seekTo]);
 
+  const seek = (to: number) => send({ type: "seek", time: Math.max(0, Math.min(duration || to, to)) });
+  const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : stage.current?.requestFullscreen());
+
+  // Space plays and pauses; ←/→ step a frame (with Shift, a second); J/K/L rewind, stop, play; F goes fullscreen.
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
-      if (event.code !== "Space" || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable || event.metaKey || event.ctrlKey) return;
+      const key = event.key.toLowerCase();
+      const step = event.shiftKey ? 1 : FRAME;
+      if (event.code === "Space") send({ type: playing ? "pause" : "play" });
+      else if (event.key === "ArrowLeft") (send({ type: "pause" }), seek(time - step));
+      else if (event.key === "ArrowRight") (send({ type: "pause" }), seek(time + step));
+      else if (key === "j") seek(time - 5);
+      else if (key === "k") send({ type: "pause" });
+      else if (key === "l") send({ type: "play" });
+      else if (key === "f") fullscreen();
+      else return;
       event.preventDefault();
-      send({ type: playing ? "pause" : "play" });
     };
     window.addEventListener("keydown", keys);
     return () => window.removeEventListener("keydown", keys);
-  }, [playing]);
+  }, [playing, time, duration]);
 
   if (!available) {
     return (
@@ -79,9 +101,10 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg bg-neutral-950" ref={box}>
-        <div className="overflow-hidden" style={{ width: width * scale, height: height * scale }}>
+    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3" ref={stage}>
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-neutral-950" ref={box}>
+        <div className="absolute inset-0 flex overflow-auto">
+        <div className="m-auto shrink-0 overflow-hidden" style={{ width: width * scale, height: height * scale }}>
           <iframe
             ref={frame}
             key={nonce}
@@ -91,10 +114,17 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
             style={{ width, height, transform: `scale(${scale})` }}
           />
         </div>
+        </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon-sm" onClick={() => send({ type: playing ? "pause" : "play" })} aria-label={playing ? "Pause" : "Play"}>
+        <Button variant="ghost" size="icon-sm" onClick={() => seek(time - FRAME)} aria-label="Previous frame" title="Previous frame (←)">
+          <ChevronLeftIcon />
+        </Button>
+        <Button variant="outline" size="icon-sm" onClick={() => send({ type: playing ? "pause" : "play" })} aria-label={playing ? "Pause" : "Play"} title="Play / pause (Space)">
           {playing ? <PauseIcon /> : <PlayIcon />}
+        </Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => seek(time + FRAME)} aria-label="Next frame" title="Next frame (→)">
+          <ChevronRightIcon />
         </Button>
         <input
           className="scrubber h-1 flex-1 cursor-pointer"
@@ -109,6 +139,21 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
         <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
           {formatTime(time)} / {formatTime(duration)}
         </span>
+        <Select value={zoom} onValueChange={setZoom}>
+          <SelectTrigger size="sm" className="h-7 w-[84px] text-xs" aria-label="Zoom">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ZOOMS.map((value) => (
+              <SelectItem key={value} value={value}>
+                {value === "1" ? "Fit" : `${Number(value) * 100}%`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="ghost" size="icon-sm" onClick={fullscreen} aria-label="Fullscreen" title="Fullscreen (F)">
+          <MaximizeIcon />
+        </Button>
       </div>
     </div>
   );

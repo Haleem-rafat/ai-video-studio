@@ -1,5 +1,5 @@
 import { alignWords } from "./align.ts";
-import { postPictures, seeded, bdi, boxFor, esc, ICONS, iconFor, itemTimes, nextDays, phraseTimes, placeMarketing, platformOf, r, saidAt, type Beat, type Ctx } from "./marketing-kit.ts";
+import { postPictures, seeded, bdi, boxFor, esc, ICONS, iconFor, itemTimes, nextDays, phraseTimes, placeMarketing, r, saidAt, socialBadge, type Beat, type Ctx } from "./marketing-kit.ts";
 import { ARABIC, karaoke } from "./arena.ts";
 import { FULL_FRAME, MOTION, motionCss } from "./marketing-motion.ts";
 import type { MarketingItem, MarketingSetup, Project, Scene, SiteBrand } from "../types.ts";
@@ -205,9 +205,8 @@ function traffic({ s, k, B, brand, example, arabic, m }: Ctx): Beat {
   });
   const html = `${items
     .map((item, i) => {
-      const p = platformOf(item.label);
       const box = posts[i];
-      return `<div class="pcard${B.short ? "" : " wide"}" id="po${k}_${i}" style="left:${box.x}px;top:${box.y}px;width:${box.w}px;height:${box.h}px"><div class="pic" style="background-image:url('${pictures[i % Math.max(1, pictures.length)] ?? ""}')"></div><div class="pinfo"><span class="pl" style="background:${p.color}">${p.glyph}</span><b>${esc(item.label)}</b><code dir="ltr" id="lk${k}_${i}">${esc(item.value ?? "")}</code></div></div>`;
+      return `<div class="pcard${B.short ? "" : " wide"}" id="po${k}_${i}" style="left:${box.x}px;top:${box.y}px;width:${box.w}px;height:${box.h}px"><div class="pic" style="background-image:url('${pictures[i % Math.max(1, pictures.length)] ?? ""}')"></div><div class="pinfo">${socialBadge(`${item.label} ${item.value ?? ""}`, "pl") || `<span class="pl">${esc(item.label.trim()[0] ?? "•")}</span>`}<b>${esc(item.label)}</b><code dir="ltr" id="lk${k}_${i}">${esc(item.value ?? "")}</code></div></div>`;
     })
     .join("")}
   <div class="phone sm" id="ds${k}" style="left:${dest.x}px;top:${dest.y}px;width:${pw}px;height:${phH + 16}px"><div class="scr minip">${brand.logo ? `<img src="${brand.logo}" />` : "<i></i>"}<b>${esc(brand.name)}</b><i class="mp1"></i><i class="mp2"></i><i class="mp3"></i><i class="mpb"></i></div><div class="cnt" id="cn${k}"><b id="cv${k}">0</b><small>${arabic ? "زيارة" : "visits"}${example ? (arabic ? " · مثال" : " · example") : ""}</small></div></div>
@@ -236,7 +235,8 @@ function dashboard({ s, k, B, brand, example, arabic }: Ctx): Beat {
   const values = items.map((item) => Number(String(item.value ?? "").replace(/[^\d.]/g, "")) || 0);
   const max = Math.max(1, ...values);
   const best = values.indexOf(Math.max(...values));
-  const sections = brand.shots.filter((shot) => shot.id.startsWith("section-")).slice(0, 3);
+  // The page's parts, not the website's own headings.
+  const sections = (arabic ? ["خدماتك", "آراء عملائك", "قصتك"] : ["Your services", "Client reviews", "Your story"]).map((label) => ({ label }));
   const times = itemTimes(s, 0.12, 0.55);
   const html = `<div class="stage flex"><div class="dash" id="db${k}" style="width:${B.short ? 940 : 1240}px">
     <div class="dhead">${brand.logo ? `<img src="${brand.logo}" />` : ""}<b>${bdi(s.visual.headline || (arabic ? "لوحة الأرقام" : "Your dashboard"))}</b>${example ? `<span class="ex">${arabic ? "أرقام توضيحية" : "Example numbers"}</span>` : ""}</div>
@@ -244,7 +244,7 @@ function dashboard({ s, k, B, brand, example, arabic }: Ctx): Beat {
       <div class="dcol"><h4>${arabic ? "الزيارات جاية منين" : "Where visits come from"}</h4>${items
         .map(
           (item, i) =>
-            `<div class="brow${i === best ? " best" : ""}" id="br${k}_${i}"><bdi class="bl">${esc(item.label)}</bdi><div class="btrack"><i id="bi${k}_${i}" style="--w:${r(values[i] / max)}"></i></div><b class="bv" id="bv${k}_${i}">0%</b></div>`,
+            `<div class="brow${i === best ? " best" : ""}" id="br${k}_${i}"><span class="bl">${socialBadge(item.label)}<bdi>${esc(item.label)}</bdi></span><div class="btrack"><i id="bi${k}_${i}" style="--w:${r(values[i] / max)}"></i></div><b class="bv" id="bv${k}_${i}">0%</b></div>`,
         )
         .join("")}</div>
       ${sections.length ? `<div class="dcol"><h4>${arabic ? "أكتر أقسام اتشافت" : "Most viewed sections"}</h4>${sections.map((shot, i) => `<div class="srow" id="sr${k}_${i}"><bdi>${esc(shot.label)}</bdi><div class="btrack thin"><i style="--w:${[0.92, 0.68, 0.45][i]}"></i></div></div>`).join("")}</div>` : ""}
@@ -517,7 +517,12 @@ export function buildMarketing(project: Project): string {
   .pic { flex: 1; background: center / cover; } .pcard.wide .pic { flex: none; width: 42%; }
   .pinfo { padding: 16px; display: flex; flex-direction: column; gap: 10px; } .pcard.wide .pinfo { justify-content: center; flex: 1; }
   .pinfo b { font: 700 ${B.short ? 30 : 28}px var(--head); }
-  .pl { width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center; color: #fff; font: 700 28px Inter, sans-serif; }
+  .pl { width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--accent), var(--cta)); font: 700 28px Inter, sans-serif; }
+  .pl svg { width: 30px; height: 30px; }
+  /* A platform's real icon beside its name. */
+  .soc { flex: none; display: inline-grid; place-items: center; width: 1.3em; height: 1.3em; border-radius: 28%; vertical-align: middle; margin-inline-end: .35em; }
+  .soc svg { width: 72%; height: 72%; }
+  .bl { display: flex; align-items: center; }
   .pinfo code { opacity: 0; font: 500 ${B.short ? 24 : 22}px 'IBM Plex Mono', monospace; color: var(--accent); background: #0005; padding: 6px 12px; border-radius: 10px; align-self: flex-start; }
   .dot { position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 18px var(--accent); opacity: 0; z-index: 7; }
   /* The page the visitors land on, drawn rather than screenshotted. */
@@ -598,13 +603,13 @@ export function buildMarketing(project: Project): string {
  ${captions.join("\n")}
  <div id="particles">${particles}</div>
  <div id="leak"></div><div id="grain"></div>
- <div id="wipe"></div><div id="iris"></div>
+ <div id="wipe"></div><div id="iris"></div><div id="slices">${Array.from({ length: 6 }, () => "<i></i>").join("")}</div>
  ${audio}
 </div>
 <script>
 window.__timelines = window.__timelines || {};
 const D_ = ${JSON.stringify(timeline)};
-const TOTAL = ${total}, OUTRO = ${outro}, ACCENT = '${c.accent}', BG = '${c.background}', W = ${B.W}, H = ${B.H}, DIR = ${B.dir};
+const TOTAL = ${total}, OUTRO = ${outro}, ACCENT = '${c.accent}', CTA = '${c.cta}', BG = '${c.background}', W = ${B.W}, H = ${B.H}, DIR = ${B.dir};
 // "faithful" cuts softly; "creative" sweeps a brand-colour bar across; "bold" alternates the bar and an iris.
 const TRANS = '${m.creativity ?? "faithful"}';
 const tl = gsap.timeline({ paused: true });
@@ -626,7 +631,7 @@ tl.to('#grain', { x: 60, y: -40, duration: TOTAL, ease: 'steps(' + Math.round(TO
 D_.forEach((s, k) => {
   // Zoom-through cuts: the old scene rushes past the camera, the new one settles in.
   if (TRANS === 'faithful' || k === 0) tl.fromTo('#sc' + k, { opacity: 0, scale: .92, filter: 'blur(10px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: .5, ease: 'power3.out', immediateRender: false }, Math.max(0, s.start - .25));
-  if (s.next !== null && TRANS === 'faithful') tl.to('#sc' + k, { opacity: 0, scale: 1.1, filter: 'blur(12px)', duration: .35, ease: 'power2.in' }, s.next - .5);
+  if (s.next !== null && TRANS === 'faithful') tl.to('#sc' + k, { opacity: 0, scale: 1.1, filter: 'blur(12px)', duration: .3, ease: 'power2.in' }, s.next - .35);
   const end = (s.next ?? TOTAL) + .4, root = document.querySelector('#sc' + k);
   // The camera never stops: a slow push-in on every scene.
   tl.fromTo('#sc' + k + ' .stage', { scale: 1 }, { scale: 1.045, duration: end - s.start + .3, ease: 'none', immediateRender: false }, s.start - .3);
@@ -642,8 +647,13 @@ D_.forEach((s, k) => {
   root.querySelectorAll('.phone, .pmap, .book, .dash, .chat, .order, .splitw, .week, .lchat, .ringbox, .cals').forEach((el, i) => tl.to(el, { y: '-=12', duration: 1.8 + i * .3, yoyo: true, repeat: Math.max(1, Math.floor((end - s.start - 1.2) / (1.8 + i * .3))), ease: 'sine.inOut' }, s.start + 1.2));
   if (s.next !== null && TRANS !== 'faithful') {
     // The cover lands, the scenes swap behind it, the cover leaves.
-    const cut = s.next - .3, iris = TRANS === 'bold' && k % 2 === 1;
-    if (iris) {
+    // Bold cuts take turns: a bar wipe, an iris, a glitch.
+    const cut = s.next - .3, kind = TRANS === 'bold' ? ['wipe', 'iris', 'glitch'][k % 3] : 'wipe', iris = kind === 'iris';
+    if (kind === 'glitch') {
+      tl.fromTo('#slices i', { xPercent: -110 * DIR }, { xPercent: 110 * DIR, duration: .42, stagger: .03, ease: 'power3.inOut', immediateRender: false }, cut - .22);
+      tl.fromTo('#root', { filter: 'drop-shadow(14px 0 0 ' + CTA + ') drop-shadow(-14px 0 0 ' + ACCENT + ')' }, { filter: 'drop-shadow(0px 0 0 ' + CTA + ') drop-shadow(0px 0 0 ' + ACCENT + ')', duration: .4, ease: 'power2.out', immediateRender: false }, cut);
+      tl.fromTo('#sc' + (k + 1), { skewX: 10 * DIR, scale: 1.08 }, { skewX: 0, scale: 1, duration: .35, ease: 'power3.out', immediateRender: false }, cut);
+    } else if (iris) {
       tl.fromTo('#iris', { clipPath: 'circle(0% at 50% 50%)' }, { clipPath: 'circle(80% at 50% 50%)', duration: .28, ease: 'power3.in', immediateRender: false }, cut - .28);
       tl.to('#iris', { clipPath: 'circle(0% at 50% 50%)', duration: .32, ease: 'power3.out' }, cut + .02);
     } else {

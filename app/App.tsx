@@ -12,15 +12,17 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/hooks/use-theme";
+import { useRoute } from "./router.ts";
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(location.search).get("project"));
-  const [openChannel, setOpenChannel] = useState<string | null>(() => new URLSearchParams(location.search).get("channel"));
+  const [route, navigate] = useRoute();
+  const selected = route.page === "project" ? route.id : null;
+  const openChannel = route.page === "channel" ? route.id : null;
   /** The marketing page: "new" for the start form, else a chat's id; null when another page is open. */
-  const [marketing, setMarketing] = useState<string | null>(() => new URLSearchParams(location.search).get("marketing"));
+  const marketing = route.page === "marketing" ? (route.session ?? "new") : null;
   /** Bumped whenever a job touching the open project finishes. */
   const [projectVersion, setProjectVersion] = useState(0);
   const seen = useRef(new Map<string, Job["status"]>());
@@ -28,26 +30,11 @@ export function App() {
 
   const refreshProjects = useCallback(() => api.projects().then(setProjects).catch(() => {}), []);
 
-  const select = useCallback((id: string | null) => {
-    setSelected(id);
-    setOpenChannel(null);
-    setMarketing(null);
-    history.replaceState(null, "", id ? `?project=${id}` : "/");
-  }, []);
+  const select = useCallback((id: string | null) => navigate(id ? { page: "project", id } : { page: "new" }), [navigate]);
 
-  const showChannel = useCallback((id: string) => {
-    setSelected(null);
-    setMarketing(null);
-    setOpenChannel(id);
-    history.replaceState(null, "", `?channel=${id}`);
-  }, []);
+  const showChannel = useCallback((id: string) => navigate({ page: "channel", id }), [navigate]);
 
-  const showMarketing = useCallback((id: string) => {
-    setSelected(null);
-    setOpenChannel(null);
-    setMarketing(id);
-    history.replaceState(null, "", `?marketing=${id}`);
-  }, []);
+  const showMarketing = useCallback((id: string) => navigate({ page: "marketing", session: id === "new" ? null : id }), [navigate]);
 
   const refreshChannels = useCallback(() => api.channels().then(setChannels).catch(() => {}), []);
 
@@ -135,6 +122,7 @@ export function App() {
                 projects={projects}
                 jobs={jobs.filter((job) => job.projectId === selected)}
                 llmReady={Boolean(status?.llm)}
+                onOpen={select}
                 onDeleted={() => {
                   select(null);
                   refreshProjects();
@@ -145,7 +133,7 @@ export function App() {
             )}
           </main>
         </SidebarInset>
-        <JobPanel jobs={jobs} />
+        <JobPanel jobs={jobs} projects={projects} onOpen={select} />
         <Toaster theme={theme} position="bottom-right" />
       </SidebarProvider>
     </TooltipProvider>

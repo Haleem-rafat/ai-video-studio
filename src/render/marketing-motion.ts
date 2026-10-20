@@ -1,6 +1,6 @@
 import { alignWords } from "./align.ts";
 import { ARABIC } from "./arena.ts";
-import { postPictures, bdi, esc, iconByWord, ICONS, itemTimes, r, saidAt, seeded, type Beat, type Box, type Ctx, type MarketingScene } from "./marketing-kit.ts";
+import { postPictures, socialBadge, bdi, esc, iconByWord, ICONS, itemTimes, r, saidAt, seeded, type Beat, type Box, type Ctx, type MarketingScene } from "./marketing-kit.ts";
 
 /**
  * The motion-graphics beats of a marketing video: no screenshots, only the
@@ -281,7 +281,7 @@ function orbit({ s, k, B, brand }: Ctx): Beat {
     <div class="ospin" id="os${k}">${items
       .map((item, i) => {
         const angle = r((360 / Math.max(1, items.length)) * i);
-        return `<div class="ochip" id="oc${k}_${i}" style="--r:${radius}px;--a:${angle}deg"><span class="oin">${bdi(item.label)}</span></div>`;
+        return `<div class="ochip" id="oc${k}_${i}" style="--r:${radius}px;--a:${angle}deg"><span class="oin">${socialBadge(item.label)}${bdi(item.label)}</span></div>`;
       })
       .join("")}</div>
     <div class="ocore" id="ok${k}">${brand.logo ? `<img src="${brand.logo}" />` : `<b>${esc(brand.name.slice(0, 1))}</b>`}</div>
@@ -359,7 +359,7 @@ function links({ s, k, B, brand, arabic, m }: Ctx): Beat {
   const html = `<div class="lchat" id="lc${k}" style="left:${chatX}px;width:${chatW}px">
     <div class="lmsg in" id="lq${k}"><span class="typing" id="lt${k}"><b></b><b></b><b></b></span><span class="txt" id="lqt${k}">${bdi(s.visual.headline || (arabic ? "ممكن أعرف الأسعار والخدمات؟" : "Can I see your prices and services?"))}</span></div>
     ${items
-      .map((item, i) => `<div class="lmsg out" id="lm${k}_${i}"><span class="licon">${ICONS.link}</span><div><b>${bdi(item.label)}</b>${item.value ? `<small dir="ltr">${esc(item.value)}</small>` : ""}</div></div>`)
+      .map((item, i) => `<div class="lmsg out" id="lm${k}_${i}">${socialBadge(`${item.label} ${item.value ?? ""}`, "licon") || `<span class="licon">${ICONS.link}</span>`}<div><b>${bdi(item.label)}</b>${item.value ? `<small dir="ltr">${esc(item.value)}</small>` : ""}</div></div>`)
       .join("")}
     <div class="lmsg in last" id="lz${k}"><span class="txt">؟</span></div>
   </div>
@@ -650,5 +650,9 @@ export function motionCss(B: Box, arabic: boolean): string {
   /* transitions between scenes */
   #wipe { position: absolute; top: -10%; bottom: -10%; left: -15%; width: 130%; z-index: 90; background: linear-gradient(90deg, var(--accent), var(--cta)); transform: translateX(-120%); }
   #iris { position: absolute; inset: 0; z-index: 90; background: var(--accent); clip-path: circle(0% at 50% 50%); }
+  #slices { position: absolute; inset: 0; z-index: 91; pointer-events: none; overflow: hidden; }
+  #slices i { position: absolute; left: 0; width: 100%; height: ${100 / 6}%; transform: translateX(-110%) skewX(-20deg); }
+  #slices i:nth-child(odd) { background: var(--accent); } #slices i:nth-child(even) { background: var(--cta); }
+  ${Array.from({ length: 6 }, (_, i) => `#slices i:nth-child(${i + 1}) { top: ${((100 / 6) * i).toFixed(3)}%; }`).join(" ")}
   `;
 }

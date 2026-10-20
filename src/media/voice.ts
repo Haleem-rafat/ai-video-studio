@@ -98,7 +98,8 @@ export async function voiceScene(projectDir: string, scene: Scene, voiceId: stri
 
 /** What a channel's narration is spoken with: an ElevenLabs voice id, or "gemini:<voice>". */
 export function narratorKey(channel: Channel): string {
-  return channel.narrator ? `gemini:${channel.narrator.voice}` : channel.voiceId;
+  const speed = channel.narrator?.speed;
+  return channel.narrator ? `gemini:${channel.narrator.voice}${speed && speed !== 1 ? `@${speed}` : ""}` : channel.voiceId;
 }
 
 /**
@@ -121,8 +122,9 @@ export async function voiceSceneGemini(projectDir: string, scene: Scene, channel
 
   await mkdir(join(projectDir, "audio"), { recursive: true });
   await writeFile(raw, audio.uint8Array);
-  // Trims the silence Gemini leaves at both ends.
-  await run("ffmpeg", ["-v", "error", "-y", "-i", raw, "-af", "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse", "-ar", "44100", "-b:a", "160k", join(projectDir, path)]);
+  // Trims the silence Gemini leaves at both ends, then speeds the take up if asked (atempo keeps the pitch).
+  const tempo = narrator.speed && narrator.speed !== 1 ? `,atempo=${narrator.speed}` : "";
+  await run("ffmpeg", ["-v", "error", "-y", "-i", raw, "-af", `silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse${tempo}`, "-ar", "44100", "-b:a", "160k", join(projectDir, path)]);
   await run("rm", ["-f", raw]);
 
   const heard = await transcribe({

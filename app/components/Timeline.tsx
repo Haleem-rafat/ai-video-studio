@@ -1,5 +1,5 @@
 import { ArrowLeftRightIcon, BookmarkIcon, ChartColumnIcon, CodeIcon, HashIcon, HeadingIcon, ListIcon, QuoteIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { formatTime, type SceneState } from "../api.ts";
 import { Button } from "@/components/ui/button";
@@ -35,19 +35,45 @@ export function Timeline({ projectId, scenes, starts, lengths, time, selected, o
   const track = useRef<HTMLDivElement>(null);
   const tickEvery = total / zoom > 240 ? 30 : total / zoom > 60 ? 10 : 5;
 
-  const seekFromClick = (event: React.MouseEvent) => {
+  const scroller = useRef<HTMLDivElement>(null);
+  const seekAt = (clientX: number) => {
     const rect = track.current!.getBoundingClientRect();
-    onSeek(Math.max(0, Math.min(total, ((event.clientX - rect.left) / rect.width) * total)));
+    onSeek(Math.max(0, Math.min(total, ((clientX - rect.left) / rect.width) * total)));
+  };
+  // Press on the ruler or the playhead and drag to scrub.
+  const scrub = (event: React.PointerEvent) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    seekAt(event.clientX);
+    const move = (moveEvent: PointerEvent) => seekAt(moveEvent.clientX);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   };
 
+  // Ctrl/⌘ + scroll zooms around the pointer; plain scroll still scrolls.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const wheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      setZoom((current) => Math.max(1, Math.min(12, current * (event.deltaY < 0 ? 1.15 : 1 / 1.15))));
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, []);
+
   return (
-    <div className="shrink-0 border-t bg-sidebar">
+    <div className="flex h-full min-h-0 flex-col border-t bg-sidebar">
       <div className="flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">Timeline</span>
         <span className="font-mono tabular-nums">
           {formatTime(Math.min(time, total))} / {formatTime(total)}
         </span>
-        <span>{scenes.length} scenes · drag to reorder</span>
+        <span>{scenes.length} scenes · drag to reorder · ⌘ + scroll to zoom</span>
         <div className="ml-auto flex items-center gap-0.5">
           <Button variant="ghost" size="icon-xs" onClick={() => setZoom(Math.max(1, zoom / 1.5))} aria-label="Zoom out">
             <ZoomOutIcon />
@@ -57,9 +83,9 @@ export function Timeline({ projectId, scenes, starts, lengths, time, selected, o
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto px-3 pb-3">
+      <div className="min-h-0 flex-1 overflow-auto px-3 pb-3" ref={scroller}>
         <div className="relative" ref={track} style={{ width: `${zoom * 100}%` }}>
-          <div className="relative h-5 cursor-pointer border-b" onClick={seekFromClick}>
+          <div className="relative h-5 cursor-ew-resize touch-none border-b select-none" onPointerDown={scrub}>
             {Array.from({ length: Math.floor(total / tickEvery) + 1 }, (_unused, index) => (
               <span
                 key={index}
@@ -116,8 +142,8 @@ export function Timeline({ projectId, scenes, starts, lengths, time, selected, o
               </div>
             ))}
           </div>
-          <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-foreground" style={{ left: `${(Math.min(time, total) / total) * 100}%` }}>
-            <span className="absolute -top-0.5 -left-[3px] size-[7px] rounded-full bg-foreground" />
+          <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-primary" style={{ left: `${(Math.min(time, total) / total) * 100}%` }}>
+            <span className="pointer-events-auto absolute -top-1 -left-[6px] size-[13px] cursor-ew-resize touch-none rounded-full border-2 border-background bg-primary" onPointerDown={scrub} />
           </div>
         </div>
       </div>

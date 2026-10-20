@@ -132,7 +132,42 @@ export function formatCost(dollars: number): string {
   return `$${dollars < 10 ? dollars.toFixed(2) : dollars.toFixed(1)}`;
 }
 
+/** Which day bucket a date falls in, for grouping lists: Today, Yesterday, This week, This month or the month's name. */
+export function dayGroup(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(now) - day(date)) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return "This week";
+  if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) return "This month";
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+/** A short date and time: "14:32" today, "Mon 14:32" this week, "18 Oct 14:32" before that. */
+export function formatWhen(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const group = dayGroup(iso, now);
+  if (group === "Today") return time;
+  if (group === "Yesterday" || group === "This week") return `${date.toLocaleDateString(undefined, { weekday: "short" })} ${time}`;
+  return `${date.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
+}
+
+/** The full date and time, for tooltips and headers. */
+export const formatDate = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
 export function formatTime(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/** How long ago: "just now", "5 min ago", "3 h ago", "2 days ago". */
+export function formatAgo(iso: string, now = Date.now()): string {
+  const minutes = Math.round((now - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`;
+  const days = Math.round(minutes / (24 * 60));
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }

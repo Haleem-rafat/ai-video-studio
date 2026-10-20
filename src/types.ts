@@ -214,8 +214,8 @@ export type MarketingSetup = {
   creativity?: Creativity;
   brief: MarketingBrief;
   language: "en" | "ar";
-  /** Gemini voice and how it reads. */
-  narrator: { voice: string; style: string };
+  /** Gemini voice and how it reads; `speed` speeds the take up (1.15 = 15% faster) without changing the voice's pitch. */
+  narrator: { voice: string; style: string; speed?: number };
   captions: boolean;
   /** The social post text written with the script. */
   post?: { caption: string; hashtags: string[] };
@@ -225,4 +225,6 @@ export type MarketingSetup = {
    * and link previews. Each scene's backdrop and floating object live on its visual.
    */
   art?: { style: string; cards: Photo[] };
+  /** A style asked for by the producer (e.g. to make a new version look different); the art director follows it. */
+  artDirection?: string;
 };

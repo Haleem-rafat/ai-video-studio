@@ -18,6 +18,7 @@ const STAGE_NAMES: Record<string, string> = {
   products: "Product pictures",
   photos: "Finding real photos",
   pictures: "Drawing pictures",
+  art: "Drawing the art",
   compose: "Building the animation",
   render: "Rendering video",
   mixing: "Music and sound",

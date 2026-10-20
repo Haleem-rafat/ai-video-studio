@@ -61,7 +61,8 @@ export function channelOf(project: Pick<Project, "channel" | "marketing">): Chan
     name: brand.name,
     language: m.language,
     dialect: m.language === "ar" ? "Egyptian colloquial Arabic" : "English",
-    narrator: { provider: "gemini", voice: m.narrator.voice, style: m.narrator.style },
+    // Marketing reads brisker than a channel's explainers: a calm voice at 1.15x keeps an ad moving.
+    narrator: { provider: "gemini", voice: m.narrator.voice, style: m.narrator.style, speed: m.narrator.speed ?? 1.15 },
     audience: brief.audience,
     tone: brief.tone,
     voiceId: "",
