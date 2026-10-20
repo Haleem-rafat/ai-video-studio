@@ -17,6 +17,7 @@
     "topics": "node src/cli/topics.ts",
     "upload": "node src/cli/upload.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p app",
+    "test": "node --test \"src/**/*.test.ts\"",
     "mcp": "node src/mcp/server.ts"
   },
   "devDependencies": {
