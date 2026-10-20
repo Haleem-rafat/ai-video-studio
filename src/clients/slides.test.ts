@@ -44,7 +44,7 @@ test("a single image is one cover", () => {
 test("over-long text is reported, then cut with an ellipsis", () => {
   const long: Slide = { layout: "list", title: "ع".repeat(LIMITS.title + 10), items: ["a", "b"] };
   assert.match(slideProblems([cover, long, list, list, end], "carousel").join("\n"), /title/);
-  const [fitted] = fitSlides([long]) as [{ title: string }];
+  const [fitted] = fitSlides([long]) as unknown as [{ title: string }];
   assert.equal(fitted.title.length, LIMITS.title);
   assert.ok(fitted.title.endsWith("…"));
   assert.equal((long as { title: string }).title.length, LIMITS.title + 10, "the original is left alone");

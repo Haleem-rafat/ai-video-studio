@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 process.env.CLIENTS_DIR = mkdtempSync(join(tmpdir(), "clients-"));
 const store = await import("./store.ts");
+type Idea = import("./types.ts").Idea;
 
 const project = {
   id: "202610182235-marketing-short-risero-v2",
@@ -34,7 +35,7 @@ test("a client round-trips through its folder", async () => {
 
 test("ideas: a missing day is null, and recentIdeas reads the last days only", async () => {
   assert.equal(await store.loadIdeas("risero", "2026-10-20"), null);
-  const idea = (id: string, hook: string) => ({ id, format: "carousel", goal: "awareness", angle: "list", hook, outline: [], why: "", status: "new" }) as const;
+  const idea = (id: string, hook: string): Idea => ({ id, format: "carousel", goal: "awareness", angle: "list", hook, outline: [], why: "", status: "new" });
   await store.saveIdeas("risero", { date: "2026-10-01", trends: [], ideas: [idea("2026-10-01-1", "old")] });
   await store.saveIdeas("risero", { date: "2026-10-15", trends: [], ideas: [idea("2026-10-15-1", "recent")] });
   const recent = await store.recentIdeas("risero", "2026-10-20", 14);
