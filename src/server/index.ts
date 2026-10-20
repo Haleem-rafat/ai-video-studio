@@ -564,6 +564,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         throw error;
       }
     }, undefined, () => sessionDir(session.id));
+    job.link = `/marketing/${session.id}`;
     return json(response, 202, { session, job });
   }
 

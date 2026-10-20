@@ -24,6 +24,8 @@ export type Job = {
   id: string;
   label: string;
   projectId?: string;
+  /** The studio page that shows this job's work. */
+  link?: string;
   status: "queued" | "running" | "done" | "failed";
   log: string[];
   /** Every stage reached so far; the last one is current. */
@@ -121,6 +123,17 @@ export function hostOf(url: string): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * The page a job's work shows up on: what it made once it is done (a new
+ * project or client), else the page it was started from, else its project.
+ */
+export function jobLink(job: Job): string | undefined {
+  const made = job.status === "done" && typeof job.result === "string" && /^[a-z0-9-]+$/.test(job.result) ? job.result : undefined;
+  if (made && job.label.startsWith("Write script")) return `/projects/${made}`;
+  if (made && job.label.startsWith("New client")) return `/marketing/clients/${made}`;
+  return job.link ?? (job.projectId ? `/projects/${job.projectId}` : undefined);
 }
 
 /** A client's file: its logo, or a post's slides and art. */

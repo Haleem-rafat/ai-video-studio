@@ -1,7 +1,7 @@
 import { CheckIcon, ChevronDownIcon, CircleXIcon, CopyIcon, EyeOffIcon, HistoryIcon, Loader2Icon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { formatWhen, type Job, type ProjectSummary } from "../api.ts";
+import { formatWhen, jobLink, type Job, type ProjectSummary } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { JobProgress } from "./JobProgress.tsx";
@@ -30,7 +30,7 @@ const stored = {
  * never covers the preview. Open, it lists jobs with filters and their logs.
  * "Hide" shrinks the pill to an icon until a job needs attention.
  */
-export function JobPanel({ jobs, projects, onOpen }: { jobs: Job[]; projects: ProjectSummary[]; onOpen: (id: string) => void }) {
+export function JobPanel({ jobs, projects, onNavigate }: { jobs: Job[]; projects: ProjectSummary[]; onNavigate: (path: string) => void }) {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(() => stored.get("activity:hidden") === "1");
   const [filter, setFilter] = useState<Filter>("all");
@@ -160,18 +160,31 @@ export function JobPanel({ jobs, projects, onOpen }: { jobs: Job[]; projects: Pr
       <div className="min-h-0 flex-1 divide-y overflow-y-auto">
         {shown.length === 0 && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{filter === "all" ? "Nothing here. Finished jobs were cleared." : `No ${filter} jobs.`}</p>}
         {shown.map((job) => {
-          const title = titleOf(job.projectId);
+          const title = titleOf(job.projectId) ?? job.label;
+          const link = jobLink(job);
           const showLog = logs.has(job.id);
           return (
             <div key={job.id} className="grid gap-1.5 px-3 py-2.5">
               <JobProgress job={job} compact />
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                {title ? (
-                  <button type="button" className="min-w-0 truncate hover:text-foreground hover:underline" dir="auto" onClick={() => (onOpen(job.projectId!), setOpen(false))}>
+                {link ? (
+                  // A real link: a click opens the page here, a middle-click or right-click can open a new tab.
+                  <a
+                    href={link}
+                    className="min-w-0 truncate text-primary hover:underline"
+                    dir="auto"
+                    title={`Open ${link}`}
+                    onClick={(event) => {
+                      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                      event.preventDefault();
+                      onNavigate(link);
+                      setOpen(false);
+                    }}
+                  >
                     {title}
-                  </button>
+                  </a>
                 ) : (
-                  <span className="min-w-0 truncate">{job.label}</span>
+                  <span className="min-w-0 truncate">{title}</span>
                 )}
                 <span className="shrink-0 font-mono tabular-nums">{formatWhen(new Date(job.createdAt).toISOString())}</span>
                 <span className="flex-1" />

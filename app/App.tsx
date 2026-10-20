@@ -13,7 +13,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/hooks/use-theme";
-import { useRoute } from "./router.ts";
+import { parseRoute, useRoute } from "./router.ts";
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -149,7 +149,7 @@ export function App() {
             )}
           </main>
         </SidebarInset>
-        <JobPanel jobs={jobs} projects={projects} onOpen={select} />
+        <JobPanel jobs={jobs} projects={projects} onNavigate={(path) => navigate(parseRoute(path, ""))} />
         <Toaster theme={theme} position="bottom-right" />
       </SidebarProvider>
     </TooltipProvider>

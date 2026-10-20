@@ -28,10 +28,12 @@ type Ctx = {
 };
 
 const ideasLabel = (client: Pick<Client, "name">) => `Ideas: ${client.name}`;
+/** The client's page in the studio: where its jobs' work shows up. */
+const clientPage = (clientId: string) => `/marketing/clients/${clientId}`;
 
 /** Queues a client's ideas job: by the morning schedule or "Get 5 more". */
 function queueIdeas(client: Pick<Client, "id" | "name">) {
-  return enqueue(ideasLabel(client), async (log) => (await makeIdeas(client.id, log)).date, undefined, () => clientDir(client.id));
+  return Object.assign(enqueue(ideasLabel(client), async (log) => (await makeIdeas(client.id, log)).date, undefined, () => clientDir(client.id)), { link: clientPage(client.id) });
 }
 
 /** Whether a client's ideas job is already waiting or running. */
@@ -88,7 +90,7 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
     const input = await body<{ fromProject?: string; url?: string }>(request);
     const from = input.fromProject;
     if (from) {
-      json(response, 202, enqueue("New client from a marketing project", async () => (await clientFromMarketingProject(from)).id, undefined, clientTarget));
+      json(response, 202, Object.assign(enqueue("New client from a marketing project", async () => (await clientFromMarketingProject(from)).id, undefined, clientTarget), { link: `/projects/${from}` }));
       return true;
     }
     const site = String(input.url ?? "").trim();
@@ -170,6 +172,7 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       // A reel returns its project id (costs go to the project), a carousel its post id.
       (result) => (typeof result !== "string" ? null : /^\d{12}-/.test(result) ? projectDir(result) : postDir(clientId, result)),
     );
+    job.link = clientPage(clientId);
     json(response, 202, job);
     return true;
   }
@@ -193,7 +196,7 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
     }
     if (method === "PUT") {
       const edits = await body<{ slides?: Slide[]; caption?: string; hashtags?: string[] }>(request);
-      json(response, 202, enqueue(`Re-render post: ${postId}`, async (log) => (await rerenderPost(clientId, postId, edits, log)).id, undefined, () => postDir(clientId, postId)));
+      json(response, 202, Object.assign(enqueue(`Re-render post: ${postId}`, async (log) => (await rerenderPost(clientId, postId, edits, log)).id, undefined, () => postDir(clientId, postId)), { link: clientPage(clientId) }));
       return true;
     }
   }

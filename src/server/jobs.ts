@@ -15,6 +15,8 @@ export type Job = {
   id: string;
   label: string;
   projectId?: string;
+  /** The studio page that shows this job's work, e.g. "/marketing/clients/risero"; jobs with a project use its page. */
+  link?: string;
   status: JobStatus;
   log: string[];
   /** Every stage the job has reached, in order; the last one is current. */

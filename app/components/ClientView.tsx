@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, clientFileUrl, formatCost, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
+import { api, clientFileUrl, formatCost, jobLink, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "./shared.tsx";
+import { JobProgress } from "./JobProgress.tsx";
 
 type Props = { id: string; jobs: Job[]; onOpenProject: (id: string) => void; onChanged: (client: Client) => void };
 
@@ -38,7 +39,9 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
   const [library, setLibrary] = useState<Library | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [styles, setStyles] = useState<ArtStyleInfo[]>([]);
-  const mine = jobs.filter((job) => client && (job.label === `Ideas: ${client.name}` || job.label.includes(`: ${client.name}: `) || job.label.startsWith("Re-render post: ") || job.label === "Art style previews"));
+  const page = `/marketing/clients/${id}`;
+  const mine = jobs.filter((job) => job.link === page || jobLink(job) === page || job.label === "Art style previews");
+  const working = mine.filter((job) => job.status === "queued" || job.status === "running");
   const writingIdeas = mine.some((job) => job.label.startsWith("Ideas: ") && (job.status === "queued" || job.status === "running"));
   const finished = mine.filter((job) => job.status === "done" || job.status === "failed").length;
 
@@ -85,6 +88,15 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
           <SparklesIcon /> {writingIdeas ? "Writing ideas…" : "Get 5 more"}
         </Button>
       </div>
+
+      {working.length > 0 && (
+        <div className="mb-4 grid gap-2 rounded-xl border bg-muted/30 p-3">
+          <span className="text-xs font-medium text-muted-foreground">Working on {working.length === 1 ? "1 job" : `${working.length} jobs`} for {client.name}</span>
+          {working.map((job) => (
+            <JobProgress key={job.id} job={job} compact />
+          ))}
+        </div>
+      )}
 
       <Tabs defaultValue="ideas">
         <TabsList>
