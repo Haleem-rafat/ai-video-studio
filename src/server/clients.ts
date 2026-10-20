@@ -15,7 +15,7 @@ import type { Client, Slide } from "../clients/types.ts";
 import { projectDir } from "../project.ts";
 import { enqueue, recentJobs } from "./jobs.ts";
 
-type Ctx = {
+export type Ctx = {
   path: string;
   method: string;
   url: URL;

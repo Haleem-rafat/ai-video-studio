@@ -5,13 +5,14 @@ import { join } from "node:path";
 import { listProjects, projectDir } from "../project.ts";
 import type { Project } from "../types.ts";
 import { readUsage, type UsageEntry } from "../usage.ts";
+import { listPromos, type Promo } from "../promo/store.ts";
 import { clientDir, clientsDir, listClients, listPosts, loadClient, localDate, postDir } from "./store.ts";
 import type { Client, Post } from "./types.ts";
 
 export type LibraryItem = {
   /** The post id, or the project id of a video. */
   id: string;
-  kind: "carousel" | "single" | "reel" | "video";
+  kind: "carousel" | "single" | "reel" | "video" | "promo";
   title: string;
   createdAt: string;
   /** US dollars. */
@@ -20,6 +21,8 @@ export type LibraryItem = {
   postId?: string;
   projectId?: string;
   format?: "short" | "long";
+  /** A website promo's id: its videos are in output/.promos/<id>. */
+  promoId?: string;
   /** A carousel's first slide, relative to the client's folder. */
   cover?: string;
   /** The quality check of its script, for posts made since checks began. */
@@ -70,6 +73,8 @@ export function buildLibrary(input: {
   projects: Project[];
   projectCosts: Record<string, number>;
   clientEntries: UsageEntry[];
+  /** Website promos of any site; only the client's finished ones are kept. */
+  promos?: Pick<Promo, "id" | "url" | "title" | "createdAt" | "status">[];
   now?: Date;
 }): Library {
   const { client, posts, postCosts, projects, projectCosts, clientEntries } = input;
@@ -107,7 +112,12 @@ export function buildLibrary(input: {
       format: project.format,
     }));
 
-  const items = [...postItems, ...videoItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Recorded with Chrome and ffmpeg only: a promo costs nothing.
+  const promoItems: LibraryItem[] = (input.promos ?? [])
+    .filter((promo) => host && promo.status === "done" && hostOf(promo.url) === host)
+    .map((promo) => ({ id: promo.id, kind: "promo", title: promo.title, createdAt: promo.createdAt, cost: 0, status: promo.status, promoId: promo.id }));
+
+  const items = [...postItems, ...videoItems, ...promoItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const ideasByDate = ideasCostByDate(clientEntries);
   const sum = (list: { cost: number }[]) => list.reduce((total, item) => total + item.cost, 0);
   const posts$ = sum(postItems.filter((item) => item.kind !== "reel"));
@@ -130,13 +140,13 @@ export function buildLibrary(input: {
 /** Reads a client's posts, projects and cost files, then builds its library. */
 export async function loadLibrary(clientId: string): Promise<Library> {
   const client = await loadClient(clientId);
-  const [posts, projects, clientEntries] = await Promise.all([listPosts(clientId), listProjects(), readUsage(clientDir(clientId))]);
+  const [posts, projects, clientEntries, promos] = await Promise.all([listPosts(clientId), listProjects(), readUsage(clientDir(clientId)), listPromos()]);
   const host = hostOf(client.url);
   const linked = new Set(posts.map((post) => post.projectId).filter(Boolean));
   const mine = projects.filter((project) => linked.has(project.id) || (host && project.marketing && hostOf(project.marketing.brand.url) === host));
   const postCosts = Object.fromEntries(await Promise.all(posts.map(async (post) => [post.id, costOf(await readUsage(postDir(clientId, post.id)))] as const)));
   const projectCosts = Object.fromEntries(await Promise.all(mine.map(async (project) => [project.id, costOf(await readUsage(projectDir(project.id)))] as const)));
-  return buildLibrary({ client, posts, postCosts, projects: mine, projectCosts, clientEntries });
+  return buildLibrary({ client, posts, postCosts, projects: mine, projectCosts, clientEntries, promos });
 }
 
 /** Every client folder and post folder: where costs of Instagram work are written, for the studio total. */

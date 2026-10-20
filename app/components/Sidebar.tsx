@@ -1,4 +1,4 @@
-import { ClapperboardIcon, MegaphoneIcon, MonitorIcon, PlusIcon, SearchIcon, SmartphoneIcon } from "lucide-react";
+import { ClapperboardIcon, MegaphoneIcon, MonitorIcon, MonitorSmartphoneIcon, PlusIcon, SearchIcon, SmartphoneIcon } from "lucide-react";
 
 
 import { useState } from "react";
@@ -37,10 +37,13 @@ type Props = {
   clients: Client[];
   openClient: string | null;
   onOpenClient: (id: string) => void;
+  /** Whether the website promos page is open. */
+  promos: boolean;
+  onPromos: () => void;
   footer: React.ReactNode;
 };
 
-export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, marketing, onMarketing, clients, openClient, onOpenClient, footer }: Props) {
+export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, marketing, onMarketing, clients, openClient, onOpenClient, promos, onPromos, footer }: Props) {
   const channelOf = (id: string) => channels.find((channel) => channel.id === id);
   // Marketing videos are made for clients, not for a YouTube channel: they get their own list.
   const [search, setSearch] = useState("");
@@ -131,7 +134,7 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={selected === null && openChannel === null && !marketing && !openClient} tooltip="New video" onClick={() => onSelect(null)}>
+                <SidebarMenuButton isActive={selected === null && openChannel === null && !marketing && !openClient && !promos} tooltip="New video" onClick={() => onSelect(null)}>
                   <PlusIcon />
                   <span>New video</span>
                 </SidebarMenuButton>
@@ -140,6 +143,12 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
                 <SidebarMenuButton isActive={Boolean(marketing)} tooltip="Marketing video" onClick={onMarketing}>
                   <MegaphoneIcon />
                   <span>Marketing video</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={promos} tooltip="Website promo" onClick={onPromos}>
+                  <MonitorSmartphoneIcon />
+                  <span>Website promo</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

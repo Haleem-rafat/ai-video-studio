@@ -24,6 +24,7 @@ import { addScenePhoto } from "../media/photos.ts";
 import { LOOKS, STYLES, VISUAL_TYPES, type Creativity, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
 import { enqueue, getJob, recentJobs } from "./jobs.ts";
 import { handleClients, startClientSchedule } from "./clients.ts";
+import { handlePromos, startPromos } from "./promos.ts";
 import { usageFolders } from "../clients/library.ts";
 import { appendUsage, collectUsage, readUsage, STUDIO_LEDGER, summarize } from "../usage.ts";
 import { gateway } from "ai";
@@ -284,6 +285,12 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   // Instagram clients: daily ideas, carousels and reels (src/server/clients.ts).
   if (path.startsWith("/api/clients") || path.startsWith("/client-files/") || path.startsWith("/client-styles/")) {
     const handled = await handleClients({ path, method, url, request, response, json, body, sendFile, inside, fail: (status, message) => new HttpError(status, message) });
+    if (handled) return;
+  }
+
+  // Website promos: a site scrolling on a laptop and a phone (src/server/promos.ts).
+  if (path.startsWith("/api/promos") || path.startsWith("/promo-files/")) {
+    const handled = await handlePromos({ path, method, url, request, response, json, body, sendFile, inside, fail: (status, message) => new HttpError(status, message) });
     if (handled) return;
   }
 
@@ -640,6 +647,7 @@ createServer((request, response) => {
   console.log(`AI Video Studio: http://localhost:${PORT}`);
   if (process.env.OPEN) spawn("open", [`http://localhost:${PORT}`]);
   startClientSchedule();
+  startPromos();
 });
 
 /**

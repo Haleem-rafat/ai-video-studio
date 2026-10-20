@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, SparklesIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, clientFileUrl, formatCost, jobLink, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
+import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { Field } from "./shared.tsx";
 import { JobProgress } from "./JobProgress.tsx";
 import { KnowledgePanel } from "./KnowledgePanel.tsx";
 
-type Props = { id: string; jobs: Job[]; onOpenProject: (id: string) => void; onChanged: (client: Client) => void };
+type Props = { id: string; jobs: Job[]; onOpenProject: (id: string) => void; onOpenPromo: (id: string) => void; onChanged: (client: Client) => void };
 
 const today = () => {
   const d = new Date();
@@ -23,16 +23,16 @@ const today = () => {
 type Filter = "all" | "videos" | "carousels" | "images";
 const FILTERS: { id: Filter; label: string; match: (item: LibraryItem) => boolean }[] = [
   { id: "all", label: "All", match: () => true },
-  { id: "videos", label: "Videos", match: (item) => item.kind === "reel" || item.kind === "video" },
+  { id: "videos", label: "Videos", match: (item) => item.kind === "reel" || item.kind === "video" || item.kind === "promo" },
   { id: "carousels", label: "Carousels", match: (item) => item.kind === "carousel" },
   { id: "images", label: "Images", match: (item) => item.kind === "single" },
 ];
 
 const GOAL_LABEL: Record<Idea["goal"], string> = { awareness: "Awareness", details: "Details", offer: "Offer" };
-const FORMAT_LABEL: Record<LibraryItem["kind"], string> = { carousel: "Carousel", single: "Single image", reel: "Reel", video: "Marketing video" };
+const FORMAT_LABEL: Record<LibraryItem["kind"], string> = { carousel: "Carousel", single: "Single image", reel: "Reel", video: "Marketing video", promo: "Website promo" };
 
 /** A client's Instagram: the day's ideas, the posts made from them, and the profile the ideas are written from. */
-export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
+export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: Props) {
   const [client, setClient] = useState<Client | null>(null);
   const [date, setDate] = useState(today);
   const [day, setDay] = useState<IdeaDay | null>(null);
@@ -85,6 +85,23 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
             All time {formatCost(library.totals.all)}
           </span>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!client.url}
+          title="The website scrolling on a laptop and a phone, with music (no AI cost)"
+          onClick={() =>
+            api
+              .makePromo(client.url)
+              .then((job) => {
+                toast.success("Recording the website…");
+                onOpenPromo(job.promoId);
+              })
+              .catch((error: Error) => toast.error(error.message))
+          }
+        >
+          <MonitorSmartphoneIcon /> Website promo
+        </Button>
         <Button size="sm" disabled={writingIdeas} onClick={() => act(api.moreIdeas(client.id), "Writing 5 more ideas…")}>
           <SparklesIcon /> {writingIdeas ? "Writing ideas…" : "Get 5 more"}
         </Button>
@@ -170,6 +187,8 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
                 const post = item.postId && item.kind !== "reel" ? posts.find((entry) => entry.id === item.postId) : undefined;
                 return post ? (
                   <PostCard key={item.id} client={client} post={post} cost={item.cost} onOpenProject={onOpenProject} onSaved={refresh} />
+                ) : item.promoId ? (
+                  <PromoCard key={item.id} item={item} onOpen={() => onOpenPromo(item.promoId!)} />
                 ) : (
                   <VideoCard key={item.id} item={item} onOpenProject={onOpenProject} />
                 );
@@ -440,6 +459,29 @@ function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: 
           Open project
         </Button>
       )}
+    </div>
+  );
+}
+
+/** A website promo: its reel-shaped video plays inline; both shapes are on its page. */
+function PromoCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) {
+  return (
+    <div className="grid content-start gap-3 rounded-xl border p-4">
+      <div className="flex items-center gap-2">
+        <Badge>{FORMAT_LABEL[item.kind]}</Badge>
+        <Badge variant="outline">16:9 + 9:16</Badge>
+        <Badge variant="outline" className="font-mono">
+          {formatCost(item.cost)}
+        </Badge>
+        <span className="ms-auto text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</span>
+      </div>
+      <p className="font-medium" dir="auto">
+        {item.title}
+      </p>
+      <video src={`${promoFileUrl(item.promoId!, "promo-9x16.mp4")}#t=4`} controls preload="metadata" className="mx-auto aspect-[9/16] max-h-96 rounded-lg border bg-black" />
+      <Button size="sm" variant="outline" onClick={onOpen}>
+        Open promo
+      </Button>
     </div>
   );
 }

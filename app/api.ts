@@ -6,9 +6,10 @@ import type { Progress } from "../src/server/jobs.ts";
 import type { Client, Idea, IdeaDay, Post, Slide, Trend } from "../src/clients/types.ts";
 import type { Library, LibraryItem } from "../src/clients/library.ts";
 import type { Knowledge } from "../src/clients/knowledge.ts";
+import type { Promo } from "../src/promo/store.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
 
-export type { Knowledge };
+export type { Knowledge, Promo };
 export type { ArtStyleChoice, ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
 export type ArtStyleInfo = { id: ArtStyleId; label: string; preview: boolean };
 export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
@@ -112,6 +113,9 @@ export const api = {
   library: (id: string) => call<Library>("GET", `/api/clients/${id}/library`),
   draftKnowledge: (id: string) => call<Job>("POST", `/api/clients/${id}/knowledge/draft`),
   answerKnowledge: (id: string, questionId: string, answer: string) => call<Job>("POST", `/api/clients/${id}/knowledge/answer`, { questionId, answer }),
+  promos: () => call<Promo[]>("GET", "/api/promos"),
+  promo: (id: string) => call<Promo>("GET", `/api/promos/${id}`),
+  makePromo: (url: string) => call<Job & { promoId: string }>("POST", "/api/promos", { url }),
   editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[] }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
 };
 
@@ -142,6 +146,9 @@ export function jobLink(job: Job): string | undefined {
 
 /** A client's file: its logo, or a post's slides and art. */
 export const clientFileUrl = (client: string, file: string) => `/client-files/${client}/${file}`;
+
+/** A website promo's video. */
+export const promoFileUrl = (promo: string, file: string) => `/promo-files/${promo}/${file}`;
 
 export type Privacy = "private" | "unlisted" | "public";
 

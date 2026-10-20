@@ -64,3 +64,30 @@ test("a client matching no projects, and posts without a cost file, still add up
   assert.deepEqual(library.items.map((i) => [i.kind, i.cost]), [["single", 0]]);
   assert.equal(library.totals.all, 0);
 });
+
+test("website promos of the client's site join its library at no cost; other sites' promos and unfinished ones don't", () => {
+  const promo = (id: string, url: string, status: "making" | "done" | "failed", createdAt: string) => ({ id, url, host: hostOf(url), title: `Promo ${id}`, createdAt, status });
+  const library = buildLibrary({
+    client,
+    posts: [post("c1", "carousel", "2026-10-20T10:00:00Z")],
+    postCosts: { c1: 0.17 },
+    projects: [],
+    projectCosts: {},
+    clientEntries: [],
+    promos: [
+      promo("p1", "https://diaaeziada.risero.io/", "done", "2026-10-20T12:00:00Z"),
+      promo("p2", "https://other.risero.io/", "done", "2026-10-20T12:00:00Z"),
+      promo("p3", "https://www.diaaeziada.risero.io/", "failed", "2026-10-20T13:00:00Z"),
+    ],
+    now,
+  });
+  assert.deepEqual(
+    library.items.map((item) => [item.kind, item.id, item.cost]),
+    [
+      ["promo", "p1", 0],
+      ["carousel", "c1", 0.17],
+    ],
+  );
+  assert.equal(library.items[0].promoId, "p1");
+  assert.ok(Math.abs(library.totals.all - 0.17) < 1e-9);
+});

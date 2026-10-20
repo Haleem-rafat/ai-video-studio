@@ -7,6 +7,7 @@ import { JobPanel } from "./components/JobPanel.tsx";
 import { MarketingChat } from "./components/MarketingChat.tsx";
 import { NewVideo } from "./components/NewVideo.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
+import { PromosView } from "./components/PromosView.tsx";
 import { AppSidebar } from "./components/Sidebar.tsx";
 import { EngineStatus, TopBar } from "./components/TopBar.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -26,6 +27,8 @@ export function App() {
   const marketing = route.page === "marketing" ? (route.session ?? "new") : null;
   /** The Instagram client whose page is open, if any. */
   const openClient = route.page === "client" ? route.id : null;
+  /** The website promos page: "all", or the open promo's id; null when another page is open. */
+  const promos = route.page === "promos" ? (route.id ?? "all") : null;
   const [clients, setClients] = useState<Client[]>([]);
   /** Bumped whenever a job touching the open project finishes. */
   const [projectVersion, setProjectVersion] = useState(0);
@@ -43,6 +46,8 @@ export function App() {
   const refreshChannels = useCallback(() => api.channels().then(setChannels).catch(() => {}), []);
 
   const showClient = useCallback((id: string) => navigate({ page: "client", id }), [navigate]);
+
+  const showPromo = useCallback((id: string | null) => navigate({ page: "promos", id }), [navigate]);
 
   const refreshClients = useCallback(() => api.clients().then(setClients).catch(() => {}), []);
 
@@ -102,6 +107,8 @@ export function App() {
           clients={clients}
           openClient={openClient}
           onOpenClient={showClient}
+          promos={Boolean(promos)}
+          onPromos={() => showPromo(null)}
           onChannelCreated={(channel) => {
             refreshChannels();
             showChannel(channel.id);
@@ -110,13 +117,15 @@ export function App() {
         />
         <SidebarInset className="h-svh min-w-0 overflow-hidden">
           <TopBar
-            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : openClient ? ["Marketing", clients.find((client) => client.id === openClient)?.name ?? "…"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
+            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : openClient ? ["Marketing", clients.find((client) => client.id === openClient)?.name ?? "…"] : promos ? ["Marketing", "Website promo"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
             theme={theme}
             onToggleTheme={toggle}
           />
           <main className="flex min-h-0 flex-1 flex-col">
-            {openClient ? (
-              <ClientView key={openClient} id={openClient} jobs={jobs} onOpenProject={select} onChanged={(client) => setClients((all) => all.map((entry) => (entry.id === client.id ? client : entry)))} />
+            {promos ? (
+              <PromosView id={promos === "all" ? null : promos} jobs={jobs} onOpen={showPromo} />
+            ) : openClient ? (
+              <ClientView key={openClient} id={openClient} jobs={jobs} onOpenProject={select} onOpenPromo={showPromo} onChanged={(client) => setClients((all) => all.map((entry) => (entry.id === client.id ? client : entry)))} />
             ) : marketing ? (
               <MarketingChat sessionId={marketing === "new" ? null : marketing} jobs={jobs} onOpen={showMarketing} />
             ) : shownChannel ? (
