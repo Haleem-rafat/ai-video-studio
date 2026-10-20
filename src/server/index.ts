@@ -24,6 +24,7 @@ import { addScenePhoto } from "../media/photos.ts";
 import { LOOKS, STYLES, VISUAL_TYPES, type Creativity, type FormatId, type Project, type Scene, type StyleId } from "../types.ts";
 import { enqueue, getJob, recentJobs } from "./jobs.ts";
 import { handleClients, startClientSchedule } from "./clients.ts";
+import { usageFolders } from "../clients/library.ts";
 import { appendUsage, collectUsage, readUsage, STUDIO_LEDGER, summarize } from "../usage.ts";
 import { gateway } from "ai";
 
@@ -389,7 +390,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   if (path === "/api/usage" && method === "GET") {
     // Every video's, chat's and channel job's costs; a chat copied into its videos counts once.
     const seen = new Set<string>();
-    const folders = [...(await listProjects()).map((project) => projectDir(project.id)), ...(await listSessions()).map((session) => sessionDir(session.id)), STUDIO_LEDGER];
+    const folders = [...(await listProjects()).map((project) => projectDir(project.id)), ...(await listSessions()).map((session) => sessionDir(session.id)), ...(await usageFolders()), STUDIO_LEDGER];
     const entries = (await Promise.all(folders.map((folder) => readUsage(folder)))).flat().filter((entry) => {
       if (!entry.generationId) return true;
       if (seen.has(entry.generationId)) return false;

@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { makeIdeas } from "../clients/ideas.ts";
 import { claimIdea, makePost, rerenderPost } from "../clients/make.ts";
+import { loadLibrary } from "../clients/library.ts";
 import { clientFromMarketingProject, clientFromUrl } from "../clients/onboard.ts";
 import { startSchedule } from "../clients/schedule.ts";
 import { clientDir, listClients, listPosts, loadClient, loadIdeas, loadPost, localDate, postDir, saveClient, saveIdeas } from "../clients/store.ts";
@@ -35,6 +36,9 @@ function ideasBusy(client: Pick<Client, "name">): boolean {
   return recentJobs().some((job) => job.label === ideasLabel(client) && (job.status === "queued" || job.status === "running"));
 }
 
+/** What making a client cost is written to its own folder. */
+const clientTarget = (result: unknown) => (typeof result === "string" && /^[a-z0-9-]+$/.test(result) ? clientDir(result) : null);
+
 export function startClientSchedule(): void {
   startSchedule(queueIdeas, ideasBusy);
 }
@@ -57,12 +61,12 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
     const input = await body<{ fromProject?: string; url?: string }>(request);
     const from = input.fromProject;
     if (from) {
-      json(response, 202, enqueue("New client from a marketing project", async () => (await clientFromMarketingProject(from)).id, undefined, () => null));
+      json(response, 202, enqueue("New client from a marketing project", async () => (await clientFromMarketingProject(from)).id, undefined, clientTarget));
       return true;
     }
     const site = String(input.url ?? "").trim();
     if (!/^(https?:\/\/)?[\w-]+(\.[\w-]+)+/i.test(site)) throw fail(400, "Add the client's website, e.g. https://example.com");
-    json(response, 202, enqueue(`New client: ${site.replace(/^https?:\/\//, "")}`, async (log) => (await clientFromUrl(site, log)).id, undefined, () => null));
+    json(response, 202, enqueue(`New client: ${site.replace(/^https?:\/\//, "")}`, async (log) => (await clientFromUrl(site, log)).id, undefined, clientTarget));
     return true;
   }
 
@@ -129,6 +133,12 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       (result) => (typeof result !== "string" ? null : /^\d{12}-/.test(result) ? projectDir(result) : postDir(clientId, result)),
     );
     json(response, 202, job);
+    return true;
+  }
+
+  if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/library$/)) && method === "GET") {
+    await find(match[1]);
+    json(response, 200, await loadLibrary(match[1]));
     return true;
   }
 
