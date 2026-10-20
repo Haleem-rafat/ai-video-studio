@@ -49,3 +49,13 @@ test("an idea can be claimed once: a second make is refused", async () => {
   assert.equal(claimed.status, "making");
   await assert.rejects(claimIdea("risero", "2026-10-20", idea.id), /already being made/);
 });
+
+test("after a restart, ideas left 'making' can be made again and their unfinished posts are marked failed", async () => {
+  const { recoverInterrupted } = await import("./make.ts");
+  const stuck: Idea = { ...idea, id: "2026-10-21-1", status: "making" };
+  await store.saveIdeas("restart", { date: "2026-10-21", trends: [], ideas: [stuck] });
+  await store.savePost({ id: "2026-10-21-1-reel", clientId: "restart", ideaId: stuck.id, kind: "reel", caption: "", hashtags: [], status: "rendering", createdAt: "x", updatedAt: "x" });
+  assert.equal(await recoverInterrupted("restart"), 1);
+  assert.equal((await store.loadIdeas("restart", "2026-10-21"))!.ideas[0].status, "new");
+  assert.equal((await store.loadPost("restart", "2026-10-21-1-reel")).status, "failed");
+});

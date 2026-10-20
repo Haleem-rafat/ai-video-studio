@@ -1,4 +1,5 @@
-import { writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { build } from "../pipeline.ts";
@@ -7,7 +8,7 @@ import { renderSlides } from "../render/carousel.ts";
 import { drawSlideArt, writeCarousel } from "./carousel.ts";
 import { createReel } from "./reel.ts";
 import { captionText, cleanHashtags } from "./rules.ts";
-import { clientDir, loadClient, loadIdeas, loadPost, postDir, saveIdeas, savePost } from "./store.ts";
+import { clientDir, listPosts, loadClient, loadIdeas, loadPost, postDir, saveIdeas, savePost } from "./store.ts";
 import { loadHistory } from "./history.ts";
 import { pickRotation, type ArtStyleChoice, type PictureAmount } from "./styles.ts";
 import type { Idea, Post, Slide } from "./types.ts";
@@ -36,6 +37,30 @@ export async function claimIdea(clientId: string, date: string, ideaId: string):
     if (idea.status === "made") throw new Error("This idea was already made; open its post.");
     idea.status = "making";
   });
+}
+
+/**
+ * Jobs don't survive the studio stopping. Ideas left "making" become makeable
+ * again and their unfinished posts are marked failed. Returns how many ideas were freed.
+ */
+export async function recoverInterrupted(clientId: string): Promise<number> {
+  let freed = 0;
+  const dir = join(clientDir(clientId), "ideas");
+  for (const file of existsSync(dir) ? (await readdir(dir)).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)) : []) {
+    const day = await loadIdeas(clientId, file.slice(0, 10));
+    const stuck = day?.ideas.filter((idea) => idea.status === "making") ?? [];
+    if (!day || !stuck.length) continue;
+    for (const idea of stuck) idea.status = "new";
+    freed += stuck.length;
+    await saveIdeas(clientId, day);
+  }
+  for (const post of await listPosts(clientId)) {
+    if (post.status === "done" || post.status === "failed") continue;
+    post.status = "failed";
+    post.error = "Interrupted: the studio stopped while it was being made. Make the idea again.";
+    await savePost(post);
+  }
+  return freed;
 }
 
 /** Makes the idea into a post. The idea must have been claimed first (see `claimIdea`). */

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { makeIdeas } from "../clients/ideas.ts";
-import { claimIdea, makePost, rerenderPost } from "../clients/make.ts";
+import { claimIdea, makePost, recoverInterrupted, rerenderPost } from "../clients/make.ts";
 import { loadLibrary } from "../clients/library.ts";
 import { drawPreviews, previewPath, previewsMade } from "../clients/previews.ts";
 import { ART_STYLE_IDS, ART_STYLES, type ArtStyleChoice, type PictureAmount } from "../clients/styles.ts";
@@ -43,6 +43,10 @@ function ideasBusy(client: Pick<Client, "name">): boolean {
 const clientTarget = (result: unknown) => (typeof result === "string" && /^[a-z0-9-]+$/.test(result) ? clientDir(result) : null);
 
 export function startClientSchedule(): void {
+  // Jobs from before a restart are gone: free their ideas before anything is queued.
+  void listClients()
+    .then((clients) => Promise.all(clients.map((client) => recoverInterrupted(client.id))))
+    .catch((error: unknown) => console.error(`clients: ${error instanceof Error ? error.message : error}`));
   startSchedule(queueIdeas, ideasBusy);
 }
 
@@ -148,7 +152,7 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
     if (!options.force) {
       const idea = (await loadIdeas(clientId, date))?.ideas.find((i) => i.id === ideaId);
       const twin = idea && duplicateOf([idea.hook, ...idea.outline].join(" "), await loadHistory(clientId));
-      if (twin) throw fail(409, `Too close to: «${twin.made.title}» (made ${twin.made.createdAt.slice(0, 10)}). Make anyway to spend on it.`);
+      if (twin) throw fail(409, `Too close to: “${twin.made.title}” (made ${twin.made.createdAt.slice(0, 10)}). Make anyway to spend on it.`);
     }
     const idea = await claimIdea(clientId, date, ideaId).catch((error: Error) => {
       throw fail(409, error.message);
