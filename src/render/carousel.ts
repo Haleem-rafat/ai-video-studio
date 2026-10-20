@@ -4,13 +4,14 @@ import { extname, join } from "node:path";
 
 import puppeteer from "puppeteer-core";
 
+import { styleOf } from "../clients/styles.ts";
 import type { Client, Slide } from "../clients/types.ts";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const WIDTH = 1080;
 const HEIGHT = 1350;
 
-export type SlideContext = { client: Pick<Client, "language" | "instagramHandle" | "brand">; index: number; total: number; logo?: string; art?: string };
+export type SlideContext = { client: Pick<Client, "language" | "instagramHandle" | "brand">; index: number; total: number; logo?: string; art?: string; style?: string };
 
 const WORDS = {
   ar: { myth: "خرافة", fact: "الحقيقة", before: "قبل", after: "بعد" },
@@ -104,6 +105,7 @@ blockquote{font-size:62px;line-height:1.35;font-weight:600}
 .content:has(.button){text-align:center;align-items:center}
 .button{background:${colors.cta};color:${colors.background};font-size:52px;padding:30px 64px;border-radius:999px}
 .link{direction:ltr}
+${styleOf(ctx.style).css(colors)}
 </style></head><body>
 <header>${ctx.logo && slide.layout !== "cta" ? `<img src="${ctx.logo}" alt="">` : ""}</header>
 <main class="content">${body(slide, ctx)}</main>
@@ -130,7 +132,7 @@ async function dataUrl(path: string): Promise<string | undefined> {
  * Renders the slides to `dir`/slides/NN.png. Art files are read from `dir`
  * and the logo from `clientFolder` (the brand's paths are relative to it).
  */
-export async function renderSlides(dir: string, client: Client, clientFolder: string, slides: Slide[], log: (message: string) => void = console.log): Promise<string[]> {
+export async function renderSlides(dir: string, client: Client, clientFolder: string, slides: Slide[], log: (message: string) => void = console.log, style?: string): Promise<string[]> {
   if (!existsSync(CHROME)) throw new Error("Google Chrome is needed to render slides");
   // Slides left from a longer earlier version would end up in the zip.
   await rm(join(dir, "slides"), { recursive: true, force: true });
@@ -143,7 +145,7 @@ export async function renderSlides(dir: string, client: Client, clientFolder: st
     await page.setViewport({ width: WIDTH, height: HEIGHT, deviceScaleFactor: 1 });
     for (const [index, slide] of slides.entries()) {
       const art = slide.art?.file ? await dataUrl(join(dir, slide.art.file)) : undefined;
-      await page.setContent(slideHtml(slide, { client, index, total: slides.length, logo, art }), { waitUntil: "load", timeout: 30000 });
+      await page.setContent(slideHtml(slide, { client, index, total: slides.length, logo, art, style }), { waitUntil: "load", timeout: 30000 });
       // Fonts load only once text asks for them, and display=block hides that text
       // until they arrive: load them by name before the screenshot.
       await page.evaluate(async (names: string[]) => {

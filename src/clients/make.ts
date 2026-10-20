@@ -8,6 +8,7 @@ import { drawSlideArt, writeCarousel } from "./carousel.ts";
 import { createReel } from "./reel.ts";
 import { captionText, cleanHashtags } from "./rules.ts";
 import { clientDir, loadClient, loadIdeas, loadPost, postDir, saveIdeas, savePost } from "./store.ts";
+import type { ArtStyleId, PictureAmount } from "./styles.ts";
 import type { Idea, Post, Slide } from "./types.ts";
 
 /** "<idea id>-<format>", so one idea has one post folder. */
@@ -37,12 +38,14 @@ export async function claimIdea(clientId: string, date: string, ideaId: string):
 }
 
 /** Makes the idea into a post. The idea must have been claimed first (see `claimIdea`). */
-export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log): Promise<Post> {
+export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: { artStyle?: ArtStyleId; pictures?: PictureAmount } = {}): Promise<Post> {
   const client = await loadClient(clientId);
   const idea = (await loadIdeas(clientId, dateOf(ideaId)))?.ideas.find((i) => i.id === ideaId);
   if (!idea) throw new Error(`No idea ${ideaId}`);
   const now = new Date().toISOString();
-  const post: Post = { id: postIdFor(idea), clientId, ideaId, kind: idea.format, caption: "", hashtags: [], status: "writing", createdAt: now, updatedAt: now };
+  const artStyle = options.artStyle ?? client.artStyle ?? "flat";
+  const pictures = options.pictures ?? client.pictures ?? "light";
+  const post: Post = { id: postIdFor(idea), clientId, ideaId, kind: idea.format, caption: "", hashtags: [], artStyle, pictures, status: "writing", createdAt: now, updatedAt: now };
   await savePost(post);
   try {
     if (idea.format === "reel") {
@@ -54,16 +57,16 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
       post.caption = project.marketing?.post?.caption ?? project.description;
       post.hashtags = cleanHashtags(project.marketing?.post?.hashtags ?? project.tags);
     } else {
-      const written = await writeCarousel(client, idea, log);
+      const written = await writeCarousel(client, idea, log, pictures);
       post.caption = written.caption;
       post.hashtags = cleanHashtags(written.hashtags);
       post.status = "drawing";
       await savePost(post);
       const dir = postDir(clientId, post.id);
-      post.slides = await drawSlideArt(dir, client, written.slides, log);
+      post.slides = await drawSlideArt(dir, client, written.slides, log, artStyle);
       post.status = "rendering";
       await savePost(post);
-      await renderSlides(dir, client, clientDir(clientId), post.slides, log);
+      await renderSlides(dir, client, clientDir(clientId), post.slides, log, artStyle);
     }
     await writeFile(join(postDir(clientId, post.id), "caption.txt"), captionText(post.caption, post.hashtags));
     post.status = "done";
@@ -98,8 +101,8 @@ export async function rerenderPost(
   if (edits.slides && post.kind !== "reel") {
     const before = post.slides ?? [];
     const slides = edits.slides.map((slide, i) => (slide.art && slide.art.prompt !== before[i]?.art?.prompt ? { ...slide, art: { prompt: slide.art.prompt } } : slide));
-    post.slides = await drawSlideArt(dir, client, slides, log);
-    await renderSlides(dir, client, clientDir(clientId), post.slides, log);
+    post.slides = await drawSlideArt(dir, client, slides, log, post.artStyle);
+    await renderSlides(dir, client, clientDir(clientId), post.slides, log, post.artStyle);
   }
   await writeFile(join(dir, "caption.txt"), captionText(post.caption, post.hashtags));
   await savePost(post);

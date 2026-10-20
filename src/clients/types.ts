@@ -1,4 +1,5 @@
 import type { MarketingBrief, SiteBrand } from "../types.ts";
+import type { ArtStyleId, PictureAmount } from "./styles.ts";
 
 /**
  * A business whose Instagram the studio makes posts for. Its brand and brief
@@ -19,6 +20,9 @@ export type Client = {
   /** Claims or topics never to use. */
   avoid: string;
   dailyIdeas: boolean;
+  /** Default art style and picture amount for new posts; unset means flat and light. */
+  artStyle?: ArtStyleId;
+  pictures?: PictureAmount;
   createdAt: string;
   updatedAt: string;
 };
@@ -76,6 +80,9 @@ export type Post = {
   caption: string;
   /** Without "#". */
   hashtags: string[];
+  /** The art style and picture amount it was made with; unset means flat and light. */
+  artStyle?: ArtStyleId;
+  pictures?: PictureAmount;
   status: "writing" | "drawing" | "rendering" | "done" | "failed";
   error?: string;
   createdAt: string;

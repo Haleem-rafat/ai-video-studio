@@ -77,3 +77,8 @@ test("renders 1080×1350 PNGs, even with very long Arabic text", { skip: !exists
     assert.ok(png.length > 40_000, `${file} looks blank (${png.length} bytes)`);
   }
 });
+
+test("a slide carries its art style's CSS, and flat when none is given", () => {
+  assert.match(slideHtml({ layout: "cover", title: "t" }, { client, index: 0, total: 5, style: "cartoon" }), /\/\* style:cartoon \*\//);
+  assert.match(slideHtml({ layout: "cover", title: "t" }, { client, index: 0, total: 5 }), /\/\* style:flat \*\//);
+});
