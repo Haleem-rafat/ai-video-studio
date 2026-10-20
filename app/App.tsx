@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api, type Channel, type Job, type ProjectSummary, type Status } from "./api.ts";
+import { api, type Channel, type Client, type Job, type ProjectSummary, type Status } from "./api.ts";
 import { ChannelSettings } from "./components/ChannelSettings.tsx";
+import { ClientView } from "./components/ClientView.tsx";
 import { JobPanel } from "./components/JobPanel.tsx";
 import { MarketingChat } from "./components/MarketingChat.tsx";
 import { NewVideo } from "./components/NewVideo.tsx";
@@ -23,6 +24,9 @@ export function App() {
   const openChannel = route.page === "channel" ? route.id : null;
   /** The marketing page: "new" for the start form, else a chat's id; null when another page is open. */
   const marketing = route.page === "marketing" ? (route.session ?? "new") : null;
+  /** The Instagram client whose page is open, if any. */
+  const openClient = route.page === "client" ? route.id : null;
+  const [clients, setClients] = useState<Client[]>([]);
   /** Bumped whenever a job touching the open project finishes. */
   const [projectVersion, setProjectVersion] = useState(0);
   const seen = useRef(new Map<string, Job["status"]>());
@@ -38,10 +42,15 @@ export function App() {
 
   const refreshChannels = useCallback(() => api.channels().then(setChannels).catch(() => {}), []);
 
+  const showClient = useCallback((id: string) => navigate({ page: "client", id }), [navigate]);
+
+  const refreshClients = useCallback(() => api.clients().then(setClients).catch(() => {}), []);
+
   useEffect(() => {
     refreshChannels();
     refreshProjects();
-  }, [refreshChannels, refreshProjects]);
+    refreshClients();
+  }, [refreshChannels, refreshProjects, refreshClients]);
 
   // One poll drives everything live: Bonsai state, credit and job progress.
   useEffect(() => {
@@ -58,6 +67,8 @@ export function App() {
           if (before === undefined || before === job.status || (job.status !== "done" && job.status !== "failed")) continue;
 
           refreshProjects();
+          if (job.label.startsWith("New client") || job.label.startsWith("Ideas: ")) refreshClients();
+          if (job.label.startsWith("New client") && job.status === "done" && typeof job.result === "string") showClient(job.result);
           if (job.label.startsWith("Write script") && job.status === "done" && typeof job.result === "string") select(job.result);
           else if (job.projectId) setProjectVersion((version) => version + 1);
         }
@@ -70,7 +81,7 @@ export function App() {
     return () => {
       stopped = true;
     };
-  }, [refreshProjects, select]);
+  }, [refreshProjects, select, refreshClients, showClient]);
 
   const jobs = status?.jobs ?? [];
   const open = projects.find((project) => project.id === selected);
@@ -88,6 +99,9 @@ export function App() {
           onOpenChannel={showChannel}
           marketing={marketing}
           onMarketing={() => showMarketing("new")}
+          clients={clients}
+          openClient={openClient}
+          onOpenClient={showClient}
           onChannelCreated={(channel) => {
             refreshChannels();
             showChannel(channel.id);
@@ -96,12 +110,14 @@ export function App() {
         />
         <SidebarInset className="h-svh min-w-0 overflow-hidden">
           <TopBar
-            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
+            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : openClient ? ["Marketing", clients.find((client) => client.id === openClient)?.name ?? "…"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
             theme={theme}
             onToggleTheme={toggle}
           />
           <main className="flex min-h-0 flex-1 flex-col">
-            {marketing ? (
+            {openClient ? (
+              <ClientView key={openClient} id={openClient} jobs={jobs} onOpenProject={select} onChanged={(client) => setClients((all) => all.map((entry) => (entry.id === client.id ? client : entry)))} />
+            ) : marketing ? (
               <MarketingChat sessionId={marketing === "new" ? null : marketing} jobs={jobs} onOpen={showMarketing} />
             ) : shownChannel ? (
               <ChannelSettings

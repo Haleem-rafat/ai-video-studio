@@ -3,7 +3,7 @@ import { ClapperboardIcon, MegaphoneIcon, MonitorIcon, PlusIcon, SearchIcon, Sma
 
 import { useState } from "react";
 
-import { brandUrl, dayGroup, formatCost, formatDate, formatWhen, type Channel, type ProjectSummary } from "../api.ts";
+import { brandUrl, dayGroup, formatCost, formatDate, formatWhen, type Channel, type Client, type ProjectSummary } from "../api.ts";
 import {
   Sidebar,
   SidebarContent,
@@ -33,10 +33,14 @@ type Props = {
   /** The open marketing page, if any. */
   marketing: string | null;
   onMarketing: () => void;
+  /** Instagram clients, listed under Marketing video. */
+  clients: Client[];
+  openClient: string | null;
+  onOpenClient: (id: string) => void;
   footer: React.ReactNode;
 };
 
-export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, marketing, onMarketing, footer }: Props) {
+export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, marketing, onMarketing, clients, openClient, onOpenClient, footer }: Props) {
   const channelOf = (id: string) => channels.find((channel) => channel.id === id);
   // Marketing videos are made for clients, not for a YouTube channel: they get their own list.
   const [search, setSearch] = useState("");
@@ -113,7 +117,7 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={selected === null && openChannel === null && !marketing} tooltip="New video" onClick={() => onSelect(null)}>
+                <SidebarMenuButton isActive={selected === null && openChannel === null && !marketing && !openClient} tooltip="New video" onClick={() => onSelect(null)}>
                   <PlusIcon />
                   <span>New video</span>
                 </SidebarMenuButton>
@@ -127,6 +131,24 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {clients.length > 0 && (
+          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+            <SidebarGroupLabel>Clients</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {clients.map((client) => (
+                  <SidebarMenuItem key={client.id}>
+                    <SidebarMenuButton isActive={openClient === client.id} onClick={() => onOpenClient(client.id)}>
+                      <ChannelSwatch color={client.brand.colors.accent} />
+                      <span className="truncate">{client.name}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupLabel>Channels</SidebarGroupLabel>

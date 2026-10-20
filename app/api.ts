@@ -3,7 +3,9 @@ import type { Creativity, FormatId, MarketingBrief, Project, Scene, SiteBrand, S
 import type { ChatMessage, Session } from "../src/marketing/session.ts";
 import type { UsageEntry, UsageSummary } from "../src/usage.ts";
 import type { Progress } from "../src/server/jobs.ts";
+import type { Client, Idea, IdeaDay, Post, Slide, Trend } from "../src/clients/types.ts";
 
+export type { Client, Idea, IdeaDay, Post, Slide, Trend };
 export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
 
 /** What one video, or the whole studio, has cost. */
@@ -89,10 +91,23 @@ export const api = {
   editMarketing: (id: string, edits: { brief?: Partial<MarketingBrief>; script?: string; colors?: Record<string, string> }) => call<Session>("PUT", `/api/marketing/${id}`, edits),
   sendMarketing: (id: string, text: string) => call<Session>("POST", `/api/marketing/${id}/messages`, { text }),
   createMarketing: (id: string) => call<Job>("POST", `/api/marketing/${id}/create`),
+  clients: () => call<Client[]>("GET", "/api/clients"),
+  client: (id: string) => call<Client>("GET", `/api/clients/${id}`),
+  newClient: (input: { fromProject?: string; url?: string }) => call<Job>("POST", "/api/clients", input),
+  editClient: (id: string, edits: Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief">>) => call<Client>("PUT", `/api/clients/${id}`, edits),
+  ideas: (id: string, date?: string) => call<IdeaDay>("GET", `/api/clients/${id}/ideas${date ? `?date=${date}` : ""}`),
+  moreIdeas: (id: string) => call<Job>("POST", `/api/clients/${id}/ideas`),
+  makeIdea: (id: string, ideaId: string) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`),
+  skipIdea: (id: string, ideaId: string) => call<IdeaDay>("POST", `/api/clients/${id}/ideas/${ideaId}/skip`),
+  posts: (id: string) => call<Post[]>("GET", `/api/clients/${id}/posts`),
+  editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[] }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
 };
 
 /** A picture of a marketing chat (a website screenshot or logo), before it has a project. */
 export const sessionUrl = (session: string, file: string) => `/marketing-files/${session}/${file}`;
+
+/** A client's file: its logo, or a post's slides and art. */
+export const clientFileUrl = (client: string, file: string) => `/client-files/${client}/${file}`;
 
 export type Privacy = "private" | "unlisted" | "public";
 

@@ -1,7 +1,10 @@
 import { ExternalLinkIcon } from "lucide-react";
 
-import type { ProjectState } from "../api.ts";
+import { toast } from "sonner";
+
+import { api, type ProjectState } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Field } from "./shared.tsx";
@@ -51,6 +54,19 @@ export function MarketingPanel({ project, busy, onEdit }: Props) {
         <Badge variant="outline">{m.language === "ar" ? "العربية" : "English"}</Badge>
         <Badge variant="outline">{m.creativity === "bold" ? "Bold" : m.creativity === "creative" ? "Creative" : "Close to the site"}</Badge>
         <Badge variant="outline">{m.brief.data === "real" ? "Real numbers" : "Example numbers"}</Badge>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() =>
+            api
+              .newClient({ fromProject: project.id })
+              .then(() => toast.success(`Making ${brand.name} an Instagram client…`))
+              .catch((error: Error) => toast.error(error.message))
+          }
+        >
+          Instagram client
+        </Button>
       </div>
 
       <Field label="Brand colours (from the website)">

@@ -7,8 +7,9 @@ import { useCallback, useEffect, useState } from "react";
  *   /channels/:id         a channel's settings
  *   /marketing            a new marketing video
  *   /marketing/:session   a marketing chat
+ *   /marketing/clients/:id  a client's Instagram ideas and posts
  */
-export type Route = { page: "new" } | { page: "project"; id: string } | { page: "channel"; id: string } | { page: "marketing"; session: string | null };
+export type Route = { page: "new" } | { page: "project"; id: string } | { page: "channel"; id: string } | { page: "marketing"; session: string | null } | { page: "client"; id: string };
 
 const ID = "([a-z0-9-]+)";
 
@@ -22,6 +23,7 @@ export function parseRoute(pathname: string, search: string): Route {
   let match: RegExpMatchArray | null;
   if ((match = pathname.match(new RegExp(`^/projects/${ID}/?$`)))) return { page: "project", id: match[1] };
   if ((match = pathname.match(new RegExp(`^/channels/${ID}/?$`)))) return { page: "channel", id: match[1] };
+  if ((match = pathname.match(new RegExp(`^/marketing/clients/${ID}/?$`)))) return { page: "client", id: match[1] };
   if ((match = pathname.match(new RegExp(`^/marketing/${ID}/?$`)))) return { page: "marketing", session: match[1] };
   if (/^\/marketing\/?$/.test(pathname)) return { page: "marketing", session: null };
   return { page: "new" };
@@ -35,6 +37,8 @@ export function routePath(route: Route): string {
       return `/channels/${route.id}`;
     case "marketing":
       return route.session ? `/marketing/${route.session}` : "/marketing";
+    case "client":
+      return `/marketing/clients/${route.id}`;
     default:
       return "/";
   }
