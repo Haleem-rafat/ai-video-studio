@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, clientFileUrl, type Client, type Idea, type IdeaDay, type Job, type Post } from "../api.ts";
+import { api, clientFileUrl, formatCost, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,8 +18,16 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+type Filter = "all" | "videos" | "carousels" | "images";
+const FILTERS: { id: Filter; label: string; match: (item: LibraryItem) => boolean }[] = [
+  { id: "all", label: "All", match: () => true },
+  { id: "videos", label: "Videos", match: (item) => item.kind === "reel" || item.kind === "video" },
+  { id: "carousels", label: "Carousels", match: (item) => item.kind === "carousel" },
+  { id: "images", label: "Images", match: (item) => item.kind === "single" },
+];
+
 const GOAL_LABEL: Record<Idea["goal"], string> = { awareness: "Awareness", details: "Details", offer: "Offer" };
-const FORMAT_LABEL: Record<Idea["format"], string> = { carousel: "Carousel", single: "Single image", reel: "Reel" };
+const FORMAT_LABEL: Record<LibraryItem["kind"], string> = { carousel: "Carousel", single: "Single image", reel: "Reel", video: "Marketing video" };
 
 /** A client's Instagram: the day's ideas, the posts made from them, and the profile the ideas are written from. */
 export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
@@ -27,6 +35,8 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
   const [date, setDate] = useState(today);
   const [day, setDay] = useState<IdeaDay | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [library, setLibrary] = useState<Library | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
   const mine = jobs.filter((job) => client && (job.label === `Ideas: ${client.name}` || job.label.includes(`: ${client.name}: `) || job.label.startsWith("Re-render post: ")));
   const writingIdeas = mine.some((job) => job.label.startsWith("Ideas: ") && (job.status === "queued" || job.status === "running"));
   const finished = mine.filter((job) => job.status === "done" || job.status === "failed").length;
@@ -35,6 +45,7 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
     api.client(id).then(setClient).catch((error: Error) => toast.error(error.message));
     api.ideas(id, date).then(setDay).catch(() => setDay(null));
     api.posts(id).then(setPosts).catch(() => setPosts([]));
+    api.library(id).then(setLibrary).catch(() => setLibrary(null));
   }, [id, date]);
 
   // Reload whenever one of this client's jobs finishes.
@@ -61,6 +72,13 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
             {client.niche}
           </span>
         </div>
+        {library && (
+          <span className="text-right font-mono text-xs text-muted-foreground tabular-nums" title={`Posts ${formatCost(library.totals.posts)} · videos ${formatCost(library.totals.videos)} · ideas ${formatCost(library.totals.ideas)}`}>
+            This month {formatCost(library.totals.month)}
+            <br />
+            All time {formatCost(library.totals.all)}
+          </span>
+        )}
         <Button size="sm" disabled={writingIdeas} onClick={() => act(api.moreIdeas(client.id), "Writing 5 more ideas…")}>
           <SparklesIcon /> {writingIdeas ? "Writing ideas…" : "Get 5 more"}
         </Button>
@@ -69,7 +87,7 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
       <Tabs defaultValue="ideas">
         <TabsList>
           <TabsTrigger value="ideas">Ideas</TabsTrigger>
-          <TabsTrigger value="posts">Posts {posts.length ? `(${posts.length})` : ""}</TabsTrigger>
+          <TabsTrigger value="library">Library {library?.items.length ? `(${library.items.length})` : ""}</TabsTrigger>
           <TabsTrigger value="profile">Profile</TabsTrigger>
         </TabsList>
 
@@ -77,6 +95,7 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <Input type="date" value={date} max={today()} onChange={(event) => setDate(event.target.value || today())} className="w-44" />
             {day?.trends.length ? <span className="text-xs text-muted-foreground">{day.trends.length} trends from this week's search</span> : null}
+            {library?.ideasByDate[date] ? <Badge variant="outline" className="font-mono">ideas {formatCost(library.ideasByDate[date])}</Badge> : null}
           </div>
           {!day?.ideas.length && <p className="text-sm text-muted-foreground">No ideas for this day yet. They are written every morning after 08:00, or press "Get 5 more".</p>}
           <div className="grid gap-3 lg:grid-cols-2">
@@ -101,11 +120,27 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
           ) : null}
         </TabsContent>
 
-        <TabsContent value="posts" className="grid gap-4 pt-2 lg:grid-cols-2">
-          {!posts.length && <p className="text-sm text-muted-foreground">Make an idea to see its post here.</p>}
-          {posts.map((post) => (
-            <PostCard key={post.id} client={client} post={post} onOpenProject={onOpenProject} onSaved={refresh} />
-          ))}
+        <TabsContent value="library" className="grid gap-4 pt-2">
+          <div className="flex flex-wrap gap-1.5">
+            {FILTERS.map((option) => (
+              <Button key={option.id} size="sm" variant={filter === option.id ? "default" : "outline"} onClick={() => setFilter(option.id)}>
+                {option.label} <span className="font-mono text-xs opacity-70">{library?.items.filter(option.match).length ?? 0}</span>
+              </Button>
+            ))}
+          </div>
+          {!library?.items.length && <p className="text-sm text-muted-foreground">Make an idea to see its post here.</p>}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {library?.items
+              .filter(FILTERS.find((option) => option.id === filter)!.match)
+              .map((item) => {
+                const post = item.postId && item.kind !== "reel" ? posts.find((entry) => entry.id === item.postId) : undefined;
+                return post ? (
+                  <PostCard key={item.id} client={client} post={post} cost={item.cost} onOpenProject={onOpenProject} onSaved={refresh} />
+                ) : (
+                  <VideoCard key={item.id} item={item} onOpenProject={onOpenProject} />
+                );
+              })}
+          </div>
         </TabsContent>
 
         <TabsContent value="profile" className="pt-2">
@@ -167,7 +202,7 @@ function IdeaCard({ idea, onMake, onSkip }: { idea: Idea; onMake: () => void; on
 }
 
 /** A made post: a swipeable carousel preview with its caption, or a link to the reel's project. */
-function PostCard({ client, post, onOpenProject, onSaved }: { client: Client; post: Post; onOpenProject: (id: string) => void; onSaved: () => void }) {
+function PostCard({ client, post, cost, onOpenProject, onSaved }: { client: Client; post: Post; cost?: number; onOpenProject: (id: string) => void; onSaved: () => void }) {
   const [index, setIndex] = useState(0);
   const [caption, setCaption] = useState(post.caption);
   const count = post.slides?.length ?? 0;
@@ -179,6 +214,11 @@ function PostCard({ client, post, onOpenProject, onSaved }: { client: Client; po
       <div className="flex items-center gap-2">
         <Badge>{FORMAT_LABEL[post.kind]}</Badge>
         <Badge variant={post.status === "failed" ? "destructive" : "outline"}>{post.status}</Badge>
+        {cost !== undefined && (
+          <Badge variant="outline" className="font-mono">
+            {formatCost(cost)}
+          </Badge>
+        )}
         <span className="ms-auto text-xs text-muted-foreground">{new Date(post.createdAt).toLocaleString()}</span>
       </div>
       {post.error && <p className="text-xs text-destructive">{post.error}</p>}
@@ -239,6 +279,35 @@ function PostCard({ client, post, onOpenProject, onSaved }: { client: Client; po
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** A reel or an earlier marketing video: plays inline, opens its project. */
+function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: (id: string) => void }) {
+  return (
+    <div className="grid content-start gap-3 rounded-xl border p-4">
+      <div className="flex items-center gap-2">
+        <Badge>{FORMAT_LABEL[item.kind]}</Badge>
+        <Badge variant="outline">{item.format === "long" ? "16:9" : "9:16"}</Badge>
+        <Badge variant="outline" className="font-mono">
+          {formatCost(item.cost)}
+        </Badge>
+        <span className="ms-auto text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</span>
+      </div>
+      <p className="font-medium" dir="auto">
+        {item.title}
+      </p>
+      {item.status === "done" && item.projectId ? (
+        <video src={`/files/${item.projectId}/video.mp4#t=1`} controls preload="metadata" className={`mx-auto rounded-lg border bg-black ${item.format === "long" ? "aspect-video w-full" : "aspect-[9/16] max-h-96"}`} />
+      ) : (
+        <p className="text-xs text-muted-foreground">{item.status === "failed" ? "Failed" : "Not rendered yet"}</p>
+      )}
+      {item.projectId && (
+        <Button size="sm" variant="outline" onClick={() => onOpenProject(item.projectId!)}>
+          Open project
+        </Button>
+      )}
     </div>
   );
 }

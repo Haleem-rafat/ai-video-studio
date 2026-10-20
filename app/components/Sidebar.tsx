@@ -3,7 +3,7 @@ import { ClapperboardIcon, MegaphoneIcon, MonitorIcon, PlusIcon, SearchIcon, Sma
 
 import { useState } from "react";
 
-import { brandUrl, dayGroup, formatCost, formatDate, formatWhen, type Channel, type Client, type ProjectSummary } from "../api.ts";
+import { brandUrl, dayGroup, formatCost, formatDate, formatWhen, type Channel, type Client, type ProjectSummary, hostOf } from "../api.ts";
 import {
   Sidebar,
   SidebarContent,
@@ -61,6 +61,20 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
         item(project),
       ];
     });
+  /** Marketing videos under the client whose website they were made for; the rest under "Other". */
+  const byClient = (list: ProjectSummary[]) => {
+    const clientOf = (project: ProjectSummary) => clients.find((client) => hostOf(client.url) && hostOf(client.url) === hostOf(project.marketing?.brand.url ?? ""));
+    const groups = [...clients.map((client) => ({ key: client.id, name: client.name, list: list.filter((project) => clientOf(project) === client) })), { key: "other", name: "Other", list: list.filter((project) => !clientOf(project)) }];
+    const shownGroups = groups.filter((group) => group.list.length);
+    // With no clients yet, keep the day headings.
+    if (shownGroups.length === 1 && shownGroups[0].key === "other") return byDay(list);
+    return shownGroups.flatMap((group) => [
+      <li key={`client-${group.key}`} className="flex px-2 pt-2 pb-0.5 text-[10px] font-medium tracking-wide text-muted-foreground/70 uppercase">
+        {group.name} <span className="ml-auto font-mono">{group.list.length}</span>
+      </li>,
+      ...group.list.map(item),
+    ]);
+  };
   const item = (project: ProjectSummary) => {
     const channel = channelOf(project.channel);
     const Icon = project.format === "short" ? SmartphoneIcon : MonitorIcon;
@@ -196,7 +210,7 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
               Marketing <span className="ml-auto font-mono tabular-nums">{marketingProjects.length}</span>
             </SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>{byDay(marketingProjects)}</SidebarMenu>
+              <SidebarMenu>{byClient(marketingProjects)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}

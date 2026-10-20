@@ -4,8 +4,9 @@ import type { ChatMessage, Session } from "../src/marketing/session.ts";
 import type { UsageEntry, UsageSummary } from "../src/usage.ts";
 import type { Progress } from "../src/server/jobs.ts";
 import type { Client, Idea, IdeaDay, Post, Slide, Trend } from "../src/clients/types.ts";
+import type { Library, LibraryItem } from "../src/clients/library.ts";
 
-export type { Client, Idea, IdeaDay, Post, Slide, Trend };
+export type { Client, Idea, IdeaDay, Library, LibraryItem, Post, Slide, Trend };
 export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
 
 /** What one video, or the whole studio, has cost. */
@@ -100,11 +101,23 @@ export const api = {
   makeIdea: (id: string, ideaId: string) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`),
   skipIdea: (id: string, ideaId: string) => call<IdeaDay>("POST", `/api/clients/${id}/ideas/${ideaId}/skip`),
   posts: (id: string) => call<Post[]>("GET", `/api/clients/${id}/posts`),
+  library: (id: string) => call<Library>("GET", `/api/clients/${id}/library`),
   editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[] }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
 };
 
 /** A picture of a marketing chat (a website screenshot or logo), before it has a project. */
 export const sessionUrl = (session: string, file: string) => `/marketing-files/${session}/${file}`;
+
+/** A website's host without "www.", to match marketing videos to their client (same rule as the server). */
+export function hostOf(url: string): string {
+  if (!url.trim()) return "";
+  try {
+    const host = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.toLowerCase().replace(/^www\./, "");
+    return host.includes(".") ? host : "";
+  } catch {
+    return "";
+  }
+}
 
 /** A client's file: its logo, or a post's slides and art. */
 export const clientFileUrl = (client: string, file: string) => `/client-files/${client}/${file}`;
