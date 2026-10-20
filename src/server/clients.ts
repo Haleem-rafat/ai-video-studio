@@ -5,7 +5,8 @@ import { makeIdeas } from "../clients/ideas.ts";
 import { claimIdea, makePost, rerenderPost } from "../clients/make.ts";
 import { loadLibrary } from "../clients/library.ts";
 import { drawPreviews, previewPath, previewsMade } from "../clients/previews.ts";
-import { ART_STYLE_IDS, ART_STYLES, type ArtStyleId, type PictureAmount } from "../clients/styles.ts";
+import { ART_STYLE_IDS, ART_STYLES, type ArtStyleChoice, type PictureAmount } from "../clients/styles.ts";
+import { duplicateOf, loadHistory } from "../clients/history.ts";
 import { clientFromMarketingProject, clientFromUrl } from "../clients/onboard.ts";
 import { startSchedule } from "../clients/schedule.ts";
 import { clientDir, listClients, listPosts, loadClient, loadIdeas, loadPost, localDate, postDir, saveClient, saveIdeas } from "../clients/store.ts";
@@ -45,7 +46,7 @@ export function startClientSchedule(): void {
   startSchedule(queueIdeas, ideasBusy);
 }
 
-const isStyle = (id: unknown): id is ArtStyleId => typeof id === "string" && (ART_STYLE_IDS as readonly string[]).includes(id);
+const isStyle = (id: unknown): id is ArtStyleChoice => id === "rotate" || (typeof id === "string" && (ART_STYLE_IDS as readonly string[]).includes(id));
 const isAmount = (amount: unknown): amount is PictureAmount => amount === "light" || amount === "rich";
 
 /** Handles /api/clients…, /client-files/… and /client-styles/…; false when the path is not one of them. */
@@ -69,7 +70,7 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
   }
 
   if ((match = path.match(/^\/client-styles\/([a-z]+)\.png$/))) {
-    if (!isStyle(match[1])) throw fail(404, "No such style");
+    if (!isStyle(match[1]) || match[1] === "rotate") throw fail(404, "No such style");
     await ctx.sendFile(request, response, previewPath(match[1]));
     return true;
   }
@@ -142,7 +143,13 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       json(response, 200, day);
       return true;
     }
-    const options = await body<{ artStyle?: string; pictures?: string }>(request).catch(() => ({}) as { artStyle?: string; pictures?: string });
+    const options = await body<{ artStyle?: string; pictures?: string; force?: boolean }>(request).catch(() => ({}) as { artStyle?: string; pictures?: string; force?: boolean });
+    // Nothing is spent on an idea that repeats something already made, unless asked to.
+    if (!options.force) {
+      const idea = (await loadIdeas(clientId, date))?.ideas.find((i) => i.id === ideaId);
+      const twin = idea && duplicateOf([idea.hook, ...idea.outline].join(" "), await loadHistory(clientId));
+      if (twin) throw fail(409, `Too close to: «${twin.made.title}» (made ${twin.made.createdAt.slice(0, 10)}). Make anyway to spend on it.`);
+    }
     const idea = await claimIdea(clientId, date, ideaId).catch((error: Error) => {
       throw fail(409, error.message);
     });

@@ -19,7 +19,7 @@ const CAROUSEL = z.object({
 });
 
 /** The slides and caption of a carousel (5-8 slides) or a single image (1 cover), checked and fitted to the limits. */
-export async function writeCarousel(client: Client, idea: Idea, log: (message: string) => void, pictures: PictureAmount = "light"): Promise<{ slides: Slide[]; caption: string; hashtags: string[] }> {
+export async function writeCarousel(client: Client, idea: Idea, log: (message: string) => void, pictures: PictureAmount = "light", pastTitles: string[] = []): Promise<{ slides: Slide[]; caption: string; hashtags: string[] }> {
   const kind = idea.format === "single" ? "single" : "carousel";
   const arabic = client.language === "ar";
   const prompt = `You design Instagram ${kind === "single" ? "single-image posts" : "infographic carousels"} for ${client.name} (${client.url}).
@@ -37,7 +37,7 @@ Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}
 Tone: ${client.brief.tone}
 Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, client counts or guarantees.
 
-RULES
+${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
 - ${kind === "single" ? "Exactly 1 slide: a cover whose title is the hook, sharpened, and a subtitle with the one takeaway." : "5-8 slides. Slide 1 is the cover (the hook as a title that makes people swipe). The last slide is the cta. Between them, one idea per slide, using the layouts that fit the content: stat, list, myth-fact, before-after, steps, quote, chart."}
 - Very short text: a title under 70 characters, list items under 70, a stat value like "3x" or "15".
 - Numbers not given in the client's facts are examples: put "${arabic ? "مثال" : "example"}" in the note or the chart unit.

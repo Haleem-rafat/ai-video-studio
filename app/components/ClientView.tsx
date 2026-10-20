@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, clientFileUrl, formatCost, type ArtStyleId, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
+import { api, clientFileUrl, formatCost, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,7 +107,18 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
                 idea={idea}
                 styles={styles}
                 defaults={{ artStyle: client.artStyle ?? "flat", pictures: client.pictures ?? "light" }}
-                onMake={(options) => act(api.makeIdea(client.id, idea.id, options), `Making the ${FORMAT_LABEL[idea.format].toLowerCase()}…`)}
+                onMake={(options) => {
+                  const made = `Making the ${FORMAT_LABEL[idea.format].toLowerCase()}…`;
+                  api
+                    .makeIdea(client.id, idea.id, options)
+                    .then(() => (toast.success(made), refresh()))
+                    .catch((error: Error) =>
+                      // A repeat of something already made: nothing was spent; offer to make it anyway.
+                      error.message.startsWith("Too close to")
+                        ? toast.warning(error.message, { duration: 15000, action: { label: "Make anyway", onClick: () => act(api.makeIdea(client.id, idea.id, { ...options, force: true }), made) } })
+                        : toast.error(error.message),
+                    );
+                }}
                 onSkip={() => act(api.skipIdea(client.id, idea.id), "Skipped")}
               />
             ))}
@@ -169,12 +180,21 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
   );
 }
 
-type MakeOptions = { artStyle: ArtStyleId; pictures: PictureAmount };
+type MakeOptions = { artStyle: ArtStyleChoice; pictures: PictureAmount };
 
 /** The 12 art styles as picture tiles; a style without its sample picture shows its name only. */
-function StyleGrid({ styles, value, onChange, size = "md" }: { styles: ArtStyleInfo[]; value: ArtStyleId; onChange: (id: ArtStyleId) => void; size?: "sm" | "md" }) {
+function StyleGrid({ styles, value, onChange, size = "md" }: { styles: ArtStyleInfo[]; value: ArtStyleChoice; onChange: (id: ArtStyleChoice) => void; size?: "sm" | "md" }) {
   return (
     <div className={`grid gap-2 ${size === "sm" ? "grid-cols-4 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6"}`}>
+      <button
+        type="button"
+        onClick={() => onChange("rotate")}
+        title="A different style each time: one this client's recent posts haven't used"
+        className={`grid gap-1 rounded-lg border p-1 text-center text-[11px] transition ${value === "rotate" ? "border-primary ring-2 ring-primary" : "hover:border-foreground/40"}`}
+      >
+        <span className="grid aspect-square w-full place-items-center rounded-md bg-muted text-2xl">↻</span>
+        Rotate
+      </button>
       {styles.map((style) => (
         <button
           key={style.id}

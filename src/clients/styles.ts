@@ -157,3 +157,14 @@ export function withPictures(slides: Slide[], amount: PictureAmount, fallbackPro
     return rest as Slide;
   });
 }
+
+/** What a post can ask for: a style, or "rotate" to take one the client hasn't used lately. */
+export type ArtStyleChoice = ArtStyleId | "rotate";
+
+/** The style the client's recent posts have used least recently (never used first). */
+export function pickRotation(history: { artStyle?: string }[]): ArtStyleId {
+  const recent = history.map((made) => made.artStyle).filter(Boolean) as string[];
+  const unused = ART_STYLE_IDS.find((id) => !recent.includes(id));
+  if (unused) return unused;
+  return [...ART_STYLE_IDS].sort((a, b) => recent.indexOf(b) - recent.indexOf(a))[0];
+}

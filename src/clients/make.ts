@@ -8,7 +8,8 @@ import { drawSlideArt, writeCarousel } from "./carousel.ts";
 import { createReel } from "./reel.ts";
 import { captionText, cleanHashtags } from "./rules.ts";
 import { clientDir, loadClient, loadIdeas, loadPost, postDir, saveIdeas, savePost } from "./store.ts";
-import type { ArtStyleId, PictureAmount } from "./styles.ts";
+import { loadHistory } from "./history.ts";
+import { pickRotation, type ArtStyleChoice, type PictureAmount } from "./styles.ts";
 import type { Idea, Post, Slide } from "./types.ts";
 
 /** "<idea id>-<format>", so one idea has one post folder. */
@@ -38,18 +39,20 @@ export async function claimIdea(clientId: string, date: string, ideaId: string):
 }
 
 /** Makes the idea into a post. The idea must have been claimed first (see `claimIdea`). */
-export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: { artStyle?: ArtStyleId; pictures?: PictureAmount } = {}): Promise<Post> {
+export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount } = {}): Promise<Post> {
   const client = await loadClient(clientId);
   const idea = (await loadIdeas(clientId, dateOf(ideaId)))?.ideas.find((i) => i.id === ideaId);
   if (!idea) throw new Error(`No idea ${ideaId}`);
   const now = new Date().toISOString();
-  const artStyle = options.artStyle ?? client.artStyle ?? "flat";
+  const history = await loadHistory(clientId);
+  const choice = options.artStyle ?? client.artStyle ?? "flat";
+  const artStyle = choice === "rotate" ? pickRotation(history.filter((made) => made.kind === "carousel" || made.kind === "single")) : choice;
   const pictures = options.pictures ?? client.pictures ?? "light";
   const post: Post = { id: postIdFor(idea), clientId, ideaId, kind: idea.format, caption: "", hashtags: [], artStyle, pictures, status: "writing", createdAt: now, updatedAt: now };
   await savePost(post);
   try {
     if (idea.format === "reel") {
-      post.projectId = await createReel(client, idea, log);
+      post.projectId = await createReel(client, idea, log, history);
       post.status = "rendering";
       await savePost(post);
       await build(post.projectId, { quality: "standard" }, log);
@@ -57,7 +60,8 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
       post.caption = project.marketing?.post?.caption ?? project.description;
       post.hashtags = cleanHashtags(project.marketing?.post?.hashtags ?? project.tags);
     } else {
-      const written = await writeCarousel(client, idea, log, pictures);
+      const pastTitles = history.filter((made) => made.kind === "carousel" || made.kind === "single").flatMap((made) => [made.title, ...made.lines.slice(0, 6)]);
+      const written = await writeCarousel(client, idea, log, pictures, pastTitles);
       post.caption = written.caption;
       post.hashtags = cleanHashtags(written.hashtags);
       post.status = "drawing";

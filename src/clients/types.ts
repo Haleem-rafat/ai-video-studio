@@ -1,5 +1,5 @@
 import type { MarketingBrief, SiteBrand } from "../types.ts";
-import type { ArtStyleId, PictureAmount } from "./styles.ts";
+import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "./styles.ts";
 
 /**
  * A business whose Instagram the studio makes posts for. Its brand and brief
@@ -20,8 +20,8 @@ export type Client = {
   /** Claims or topics never to use. */
   avoid: string;
   dailyIdeas: boolean;
-  /** Default art style and picture amount for new posts; unset means flat and light. */
-  artStyle?: ArtStyleId;
+  /** Default art style ("rotate" takes one not used lately) and picture amount for new posts; unset means flat and light. */
+  artStyle?: ArtStyleChoice;
   pictures?: PictureAmount;
   createdAt: string;
   updatedAt: string;

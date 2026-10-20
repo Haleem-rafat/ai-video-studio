@@ -2,6 +2,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { extractJson } from "../llm.ts";
+import { duplicateOf, loadHistory, type Made } from "./history.ts";
 import { ideaProblems } from "./rules.ts";
 import { loadClient, loadIdeas, localDate, recentIdeas, saveIdeas } from "./store.ts";
 import { IDEA_ANGLES, IDEA_FORMATS, IDEA_GOALS, type Client, type Idea, type IdeaDay, type Trend } from "./types.ts";
@@ -76,7 +77,16 @@ Answer ONLY with JSON: {"trends":[{"title":"...","summary":"one sentence","url":
 }
 
 /** 5 ideas that follow the rules; one retry with what broke them. */
-export async function writeIdeas(client: Client, trends: Trend[], pastHooks: string[], log: (message: string) => void): Promise<IdeaDraft[]> {
+/** The rules a batch breaks, plus every idea that repeats something already made. */
+function batchProblems(ideas: IdeaDraft[], pastHooks: string[], made: Made[]): string[] {
+  const repeats = ideas.flatMap((idea, index) => {
+    const twin = duplicateOf([idea.hook, ...idea.outline].join(" "), made);
+    return twin ? [`Idea ${index + 1} ("${idea.hook}") repeats what was already made in "${twin.made.title}"; give it a different message, not just new words.`] : [];
+  });
+  return [...ideaProblems(ideas, pastHooks), ...repeats];
+}
+
+export async function writeIdeas(client: Client, trends: Trend[], pastHooks: string[], log: (message: string) => void, made: Made[] = []): Promise<IdeaDraft[]> {
   const arabic = client.language === "ar";
   const prompt = `You are the Instagram content strategist of ${client.name} (${client.url}). Suggest today's 5 post ideas: niche, reach and shareable, never generic.
 
@@ -95,6 +105,9 @@ Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, cl
 THIS WEEK'S TRENDS (ride one where it fits; cite its url in "trend")
 ${trends.length ? trends.map((t) => `- ${t.title}: ${t.summary} (${t.url})`).join("\n") : "none found today: use evergreen angles"}
 
+ALREADY MADE AND PAID FOR (never repeat these messages, angles or examples; each new idea must say something these don't)
+${made.length ? made.slice(0, 40).map((m) => `- [${m.kind}] ${m.title}: ${m.lines.slice(0, 3).join(" / ").slice(0, 220)}`).join("\n") : "nothing yet"}
+
 HOOKS ALREADY USED IN THE LAST ${HISTORY_DAYS} DAYS (do not repeat or paraphrase)
 ${pastHooks.length ? pastHooks.map((h) => `- ${h}`).join("\n") : "none"}
 
@@ -107,11 +120,11 @@ RULES
   const write = (extra = "") => generateText({ telemetry: { functionId: "ideas" }, model: WRITER_MODEL, output: Output.object({ schema: IDEAS }), prompt: prompt + extra });
   log(`ideas: writing 5 ideas for ${client.name} ...`);
   let { output } = await write();
-  const problems = ideaProblems(output.ideas, pastHooks);
+  const problems = batchProblems(output.ideas, pastHooks, made);
   if (problems.length) {
     log(`ideas: fixing ${problems.length} problem(s) ...`);
     ({ output } = await write(`\n\nYOUR FIRST ANSWER BROKE THESE RULES:\n${problems.map((p) => `- ${p}`).join("\n")}\nWrite the 5 ideas again so none are broken.`));
-    const still = ideaProblems(output.ideas, pastHooks);
+    const still = batchProblems(output.ideas, pastHooks, made);
     if (still.length) log(`ideas: still ${still.join(" ")}`);
   }
   return output.ideas.slice(0, 5);
@@ -123,7 +136,7 @@ export async function makeIdeas(clientId: string, log: (message: string) => void
   const day = (await loadIdeas(clientId, date)) ?? { date, trends: [], ideas: [] };
   const trends = await findTrends(client, log);
   const pastHooks = (await recentIdeas(clientId, date, HISTORY_DAYS)).map((idea) => idea.hook);
-  const drafts = await writeIdeas(client, trends, pastHooks, log);
+  const drafts = await writeIdeas(client, trends, pastHooks, log, await loadHistory(clientId));
   day.trends = [...day.trends, ...trends.filter((t) => !day.trends.some((old) => old.url === t.url))];
   day.ideas = [...day.ideas, ...numberIdeas(date, day.ideas.length, drafts)];
   await saveIdeas(clientId, day);

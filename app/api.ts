@@ -5,9 +5,9 @@ import type { UsageEntry, UsageSummary } from "../src/usage.ts";
 import type { Progress } from "../src/server/jobs.ts";
 import type { Client, Idea, IdeaDay, Post, Slide, Trend } from "../src/clients/types.ts";
 import type { Library, LibraryItem } from "../src/clients/library.ts";
-import type { ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
+import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
 
-export type { ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
+export type { ArtStyleChoice, ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
 export type ArtStyleInfo = { id: ArtStyleId; label: string; preview: boolean };
 export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
 
@@ -100,7 +100,7 @@ export const api = {
   editClient: (id: string, edits: Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures">>) => call<Client>("PUT", `/api/clients/${id}`, edits),
   ideas: (id: string, date?: string) => call<IdeaDay>("GET", `/api/clients/${id}/ideas${date ? `?date=${date}` : ""}`),
   moreIdeas: (id: string) => call<Job>("POST", `/api/clients/${id}/ideas`),
-  makeIdea: (id: string, ideaId: string, options: { artStyle?: ArtStyleId; pictures?: PictureAmount } = {}) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`, options),
+  makeIdea: (id: string, ideaId: string, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; force?: boolean } = {}) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`, options),
   artStyles: () => call<ArtStyleInfo[]>("GET", "/api/clients/styles"),
   drawStylePreviews: () => call<Job>("POST", "/api/clients/styles/previews"),
   skipIdea: (id: string, ideaId: string) => call<IdeaDay>("POST", `/api/clients/${id}/ideas/${ideaId}/skip`),
