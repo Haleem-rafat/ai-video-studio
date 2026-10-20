@@ -282,7 +282,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   let match: RegExpMatchArray | null;
 
   // Instagram clients: daily ideas, carousels and reels (src/server/clients.ts).
-  if (path.startsWith("/api/clients") || path.startsWith("/client-files/")) {
+  if (path.startsWith("/api/clients") || path.startsWith("/client-files/") || path.startsWith("/client-styles/")) {
     const handled = await handleClients({ path, method, url, request, response, json, body, sendFile, inside, fail: (status, message) => new HttpError(status, message) });
     if (handled) return;
   }

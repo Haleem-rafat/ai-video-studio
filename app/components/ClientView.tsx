@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, clientFileUrl, formatCost, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
+import { api, clientFileUrl, formatCost, type ArtStyleId, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +37,8 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [library, setLibrary] = useState<Library | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
-  const mine = jobs.filter((job) => client && (job.label === `Ideas: ${client.name}` || job.label.includes(`: ${client.name}: `) || job.label.startsWith("Re-render post: ")));
+  const [styles, setStyles] = useState<ArtStyleInfo[]>([]);
+  const mine = jobs.filter((job) => client && (job.label === `Ideas: ${client.name}` || job.label.includes(`: ${client.name}: `) || job.label.startsWith("Re-render post: ") || job.label === "Art style previews"));
   const writingIdeas = mine.some((job) => job.label.startsWith("Ideas: ") && (job.status === "queued" || job.status === "running"));
   const finished = mine.filter((job) => job.status === "done" || job.status === "failed").length;
 
@@ -46,6 +47,7 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
     api.ideas(id, date).then(setDay).catch(() => setDay(null));
     api.posts(id).then(setPosts).catch(() => setPosts([]));
     api.library(id).then(setLibrary).catch(() => setLibrary(null));
+    api.artStyles().then(setStyles).catch(() => setStyles([]));
   }, [id, date]);
 
   // Reload whenever one of this client's jobs finishes.
@@ -100,7 +102,14 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
           {!day?.ideas.length && <p className="text-sm text-muted-foreground">No ideas for this day yet. They are written every morning after 08:00, or press "Get 5 more".</p>}
           <div className="grid gap-3 lg:grid-cols-2">
             {day?.ideas.map((idea) => (
-              <IdeaCard key={idea.id} idea={idea} onMake={() => act(api.makeIdea(client.id, idea.id), `Making the ${FORMAT_LABEL[idea.format].toLowerCase()}…`)} onSkip={() => act(api.skipIdea(client.id, idea.id), "Skipped")} />
+              <IdeaCard
+                key={idea.id}
+                idea={idea}
+                styles={styles}
+                defaults={{ artStyle: client.artStyle ?? "flat", pictures: client.pictures ?? "light" }}
+                onMake={(options) => act(api.makeIdea(client.id, idea.id, options), `Making the ${FORMAT_LABEL[idea.format].toLowerCase()}…`)}
+                onSkip={() => act(api.skipIdea(client.id, idea.id), "Skipped")}
+              />
             ))}
           </div>
           {day?.trends.length ? (
@@ -147,6 +156,8 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
           <ProfileForm
             key={client.updatedAt}
             client={client}
+            styles={styles}
+            onPreviews={() => act(api.drawStylePreviews(), "Drawing one sample picture per style (about $0.30)…")}
             onSaved={(next) => {
               setClient(next);
               onChanged(next);
@@ -158,7 +169,44 @@ export function ClientView({ id, jobs, onOpenProject, onChanged }: Props) {
   );
 }
 
-function IdeaCard({ idea, onMake, onSkip }: { idea: Idea; onMake: () => void; onSkip: () => void }) {
+type MakeOptions = { artStyle: ArtStyleId; pictures: PictureAmount };
+
+/** The 12 art styles as picture tiles; a style without its sample picture shows its name only. */
+function StyleGrid({ styles, value, onChange, size = "md" }: { styles: ArtStyleInfo[]; value: ArtStyleId; onChange: (id: ArtStyleId) => void; size?: "sm" | "md" }) {
+  return (
+    <div className={`grid gap-2 ${size === "sm" ? "grid-cols-4 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6"}`}>
+      {styles.map((style) => (
+        <button
+          key={style.id}
+          type="button"
+          onClick={() => onChange(style.id)}
+          className={`grid gap-1 rounded-lg border p-1 text-center text-[11px] transition ${value === style.id ? "border-primary ring-2 ring-primary" : "hover:border-foreground/40"}`}
+        >
+          {style.preview ? <img src={`/client-styles/${style.id}.png`} alt="" className="aspect-square w-full rounded-md object-cover" /> : <span className="grid aspect-square w-full place-items-center rounded-md bg-muted text-muted-foreground">{style.label}</span>}
+          {style.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PictureToggle({ value, onChange }: { value: PictureAmount; onChange: (amount: PictureAmount) => void }) {
+  return (
+    <div className="flex gap-1.5">
+      <Button size="sm" type="button" variant={value === "light" ? "default" : "outline"} onClick={() => onChange("light")}>
+        Light · cover + 2 pictures
+      </Button>
+      <Button size="sm" type="button" variant={value === "rich" ? "default" : "outline"} onClick={() => onChange("rich")}>
+        Rich · a picture on every slide
+      </Button>
+    </div>
+  );
+}
+
+function IdeaCard({ idea, styles, defaults, onMake, onSkip }: { idea: Idea; styles: ArtStyleInfo[]; defaults: MakeOptions; onMake: (options: Partial<MakeOptions>) => void; onSkip: () => void }) {
+  const [choosing, setChoosing] = useState(false);
+  const [options, setOptions] = useState<MakeOptions>(defaults);
+  const pictured = idea.format !== "reel";
   return (
     <div className={`grid content-start gap-2 rounded-xl border p-4 ${idea.status === "skipped" ? "opacity-50" : ""}`}>
       <div className="flex flex-wrap gap-1.5">
@@ -184,8 +232,8 @@ function IdeaCard({ idea, onMake, onSkip }: { idea: Idea; onMake: () => void; on
         </a>
       )}
       <div className="flex gap-2">
-        {idea.status === "new" && (
-          <Button size="sm" onClick={onMake}>
+        {idea.status === "new" && !choosing && (
+          <Button size="sm" onClick={() => (pictured ? setChoosing(true) : onMake({}))}>
             Make
           </Button>
         )}
@@ -195,8 +243,29 @@ function IdeaCard({ idea, onMake, onSkip }: { idea: Idea; onMake: () => void; on
           </Button>
         )}
         {idea.status === "making" && <span className="text-xs text-muted-foreground">Being made, see the jobs panel</span>}
-        {idea.status === "made" && <span className="text-xs text-muted-foreground">Made: see Posts</span>}
+        {idea.status === "made" && <span className="text-xs text-muted-foreground">Made: see Library</span>}
       </div>
+      {choosing && idea.status === "new" && (
+        <div className="grid gap-2 rounded-lg border bg-muted/30 p-3">
+          <span className="text-xs font-medium">Art style</span>
+          <StyleGrid size="sm" styles={styles} value={options.artStyle} onChange={(artStyle) => setOptions({ ...options, artStyle })} />
+          {idea.format === "carousel" && <PictureToggle value={options.pictures} onChange={(pictures) => setOptions({ ...options, pictures })} />}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setChoosing(false);
+                onMake(options);
+              }}
+            >
+              Make it
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setChoosing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -313,7 +382,7 @@ function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: 
 }
 
 /** What ideas and posts are written from. */
-function ProfileForm({ client, onSaved }: { client: Client; onSaved: (client: Client) => void }) {
+function ProfileForm({ client, styles, onPreviews, onSaved }: { client: Client; styles: ArtStyleInfo[]; onPreviews: () => void; onSaved: (client: Client) => void }) {
   const [draft, setDraft] = useState(client);
   const brief = draft.brief;
   const setBrief = (change: Partial<Client["brief"]>) => setDraft({ ...draft, brief: { ...brief, ...change } });
@@ -326,6 +395,8 @@ function ProfileForm({ client, onSaved }: { client: Client; onSaved: (client: Cl
         niche: draft.niche,
         avoid: draft.avoid,
         dailyIdeas: draft.dailyIdeas,
+        artStyle: draft.artStyle ?? "flat",
+        pictures: draft.pictures ?? "light",
         brief: { ...brief, problems: brief.problems.map((line) => line.trim()).filter(Boolean), features: brief.features.map((line) => line.trim()).filter(Boolean) },
       })
       .then((next) => {
@@ -376,6 +447,12 @@ function ProfileForm({ client, onSaved }: { client: Client; onSaved: (client: Cl
       <label className="flex items-center gap-2 text-sm">
         <Switch checked={draft.dailyIdeas} onCheckedChange={(dailyIdeas) => setDraft({ ...draft, dailyIdeas })} /> 5 new ideas every morning
       </label>
+      <Field label="Default art style for posts" detail={styles.some((style) => !style.preview) ? <button type="button" className="underline" onClick={onPreviews}>Draw style previews (~$0.30)</button> : undefined}>
+        <StyleGrid styles={styles} value={draft.artStyle ?? "flat"} onChange={(artStyle) => setDraft({ ...draft, artStyle })} />
+      </Field>
+      <Field label="Default pictures per carousel">
+        <PictureToggle value={draft.pictures ?? "light"} onChange={(pictures) => setDraft({ ...draft, pictures })} />
+      </Field>
       <div>
         <Button onClick={save}>Save profile</Button>
       </div>
