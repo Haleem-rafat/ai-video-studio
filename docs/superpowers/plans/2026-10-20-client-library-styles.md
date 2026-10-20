@@ -90,3 +90,19 @@
 - Make one Risero carousel in **3D clay, Rich** and one in **Cartoon, Light** (from "Get 5 more" ideas); look at every slide.
 - Check the Library: every item has a cost; header totals = sum of items + ideas; studio total moved by the same amount.
 - Report links, costs and slide screenshots.
+
+### Task 6: No duplicates (added 2026-10-20, approved in chat)
+
+**Files:** Create `src/clients/history.ts`, `src/clients/history.test.ts`. Modify `src/clients/ideas.ts` (history in prompt + duplicate check), `src/clients/reel.ts` (avoid past openings/beat orders/sentences; rotate creativity and voice; one rewrite), `src/clients/carousel.ts` (past slide titles), `src/clients/make.ts` (resolve "rotate" style), `src/clients/styles.ts` (`ArtStyleChoice`, `pickRotation`), `src/server/clients.ts` (Make guard, 409 unless `force`), `app/api.ts` + `app/components/ClientView.tsx` ("Make anyway"; "Rotate" tile).
+
+**Interfaces — produces:**
+- `type Made = { id; kind: "carousel" | "single" | "reel" | "video"; title: string; lines: string[]; beats?: string[]; voice?: string; creativity?: string; artStyle?: string; createdAt: string }`
+- `loadHistory(clientId): Promise<Made[]>` (posts + reels + the client's marketing videos, newest first)
+- `similarity(a: string, b: string): number` (Jaccard of normalized word sets, words ≥ 3 letters, stop words dropped)
+- `duplicateOf(text: string, history: Made[], threshold = DUPLICATE_AT): { made: Made; score: number } | null`
+- `reelProblems(draft: { beats: string[]; lines: string[] }, history: Made[]): string[]` — same opening beat as either of the last 2 videos/reels; ≥ 50% of positions with the same beat as any earlier video; any sentence ≥ 0.6 similar to an earlier video's sentence
+- `nextVoice(history)`, `nextCreativity(history)`; `pickRotation(history, ids)`: the style least recently used by the client's posts
+
+**Tests:** similarity of reordered/punctuated Arabic sentences is high, of unrelated ones low; `duplicateOf` finds today's made carousel from its own idea text; `reelProblems` flags the two real Risero reels' shared patterns and passes a different draft; `nextVoice` rotates; `pickRotation` skips the last styles; calibration printed against the real Risero history before choosing `DUPLICATE_AT`.
+
+**Steps:** tests → FAIL → implement → PASS → wire → typecheck/build → real run (Task 5) → commit.
