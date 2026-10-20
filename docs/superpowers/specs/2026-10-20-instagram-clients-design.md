@@ -1,6 +1,12 @@
 # Instagram marketing for clients: daily ideas, infographic carousels, reels
 
-Date: 2026-10-20 · Status: approved in chat, awaiting spec review
+Date: 2026-10-20 · Status: approved
+
+**Update 2026-10-20:** everything lives inside **Marketing mode** (a Clients list under
+"Marketing video", routes `/marketing/clients/:id`, and an "Instagram client" button on a
+marketing project). Every idea has a **goal**: `awareness` (reach new people),
+`details` (explain a feature or how it works) or `offer` (sell, with the call to action);
+each day's 5 ideas cover all three goals.
 
 ## Goal
 
@@ -39,16 +45,10 @@ type Client = {
   url: string;
   instagramHandle?: string;   // shown on slides, without "@"
   language: "en" | "ar";
-  brand: SiteBrand;           // existing type; logo copied to output/.clients/<id>/brand/
-  profile: {
-    niche: string;            // e.g. "booking pages for coaches and service providers"
-    audience: string;
-    offer: string;            // what the client sells, one or two sentences
-    problems: string[];
-    tone: string;
-    cta: { label: string; url: string };
-    avoid: string;            // claims or topics never to use (e.g. unconfirmed features)
-  };
+  brand: SiteBrand;           // existing type; its shots/ (logo included) copied to output/.clients/<id>/shots/
+  brief: MarketingBrief;      // existing type: business, audience, problems, result, features, cta, tone, voice…
+  niche: string;              // e.g. "booking pages for coaches and service providers"
+  avoid: string;              // claims or topics never to use (e.g. unconfirmed features)
   dailyIdeas: boolean;        // default true
   createdAt: string; updatedAt: string;
 };
@@ -57,11 +57,11 @@ type Client = {
 Created two ways:
 
 - **From a marketing project** (`POST /api/clients { fromProject }`): copies
-  `marketing.brand` and maps the brief (business→offer, audience, problems, tone,
-  cta, notes→avoid). The niche is asked of the LLM from the brief in one call. No
+  `marketing.brand`, `marketing.brief` and the `shots/` folder; `avoid` starts as the
+  brief's notes. The niche is asked of the LLM from the brief in one call. No
   website read. This is how Risero is created.
 - **From a URL** (`POST /api/clients { url }`): runs the existing `readSite`
-  as a background job, then fills the profile from the brand in one LLM call.
+  as a background job, then fills the brief and niche from the brand in one LLM call.
 
 The profile is editable in the Profile tab (`PUT /api/clients/:id`).
 
@@ -75,6 +75,7 @@ type Trend = { title: string; summary: string; url: string };
 type Idea = {
   id: string;                         // "<date>-<n>"
   format: "carousel" | "single" | "reel";
+  goal: "awareness" | "details" | "offer";
   angle: "myth" | "mistakes" | "list" | "before-after" | "trend" | "how-to" | "story" | "stat" | "question";
   hook: string;                       // the first line, in the client's language
   outline: string[];                  // slide or scene beats, 3–7 items
@@ -94,7 +95,7 @@ type Idea = {
    uses), given profile, brand summary, trends, and the angles + hooks of the last
    14 days' ideas. Returns 5 ideas, validated with zod.
 3. **Rules checked in code**, with one retry asking to fix what failed: exactly 5;
-   ≥1 reel and ≥2 carousels; no two with the same angle; no hook repeating a hook
+   ≥1 reel and ≥2 carousels; every goal at least once; no two with the same angle; no hook repeating a hook
    of the last 14 days (normalized text equality); hook ≤ 120 characters.
 
 **Schedule** (`src/clients/schedule.ts`, started by the server): every hour and
@@ -172,7 +173,7 @@ Files: `slides/*.png`, `caption.txt` (caption, blank line, hashtags), and
 
 `src/clients/reel.ts` turns the idea into the existing marketing pipeline: a
 `MarketingBrief` copied from the client profile with `seconds: 45` (cap 60),
-`platforms: ["Instagram Reels"]`, `notes` = hook + outline + "say the hook in the
+`platforms: ["Instagram Reels"]`, `notes` = goal + hook + outline + "say the hook in the
 first 2 seconds", creativity `creative`, format `short`. It then runs the same
 write → art → voice → render steps the marketing session uses, as one job, and
 stores `projectId`. The reel's caption and hashtags come from the project's
@@ -180,10 +181,11 @@ stores `projectId`. The reel's caption and hashtags come from the project's
 
 ## 4. Studio screen
 
-- Sidebar: a **Clients** section listing clients, and "New client" (URL, or pick
-  an existing marketing project).
-- Route `/clients/:id` with tabs:
-  - **Today**: trends used (title + link), 5 idea cards (format badge, angle,
+- Sidebar: under "Marketing video", a **Clients** group listing clients. A client is
+  created from a URL on the marketing start page, or with **Instagram client** on a
+  marketing project's panel.
+- Route `/marketing/clients/:id` with tabs:
+  - **Today**: trends used (title + link), 5 idea cards (format and goal badges, angle,
     hook, outline, why) with **Make** / **Skip**, a date picker for past days, and
     **Get 5 more**.
   - **Posts**: grid of posts; a carousel opens as a swipeable 4:5 preview with
