@@ -46,6 +46,17 @@ test("the chart scales bars to the largest value", () => {
   assert.match(html, /width:100%/);
 });
 
+test("a long chart unit is shown once under the title, not beside every bar", () => {
+  const html = slideHtml({ layout: "chart", title: "t", bars: [{ label: "مصر", value: 60 }, { label: "السعودية", value: 25 }], unit: "% من الزوار (مثال)" }, { client, index: 2, total: 5 });
+  assert.equal(html.split("من الزوار").length - 1, 1);
+  assert.match(html, /<span class="bar-value">60%?<\/span>/);
+});
+
+test("myth-fact cards keep their own height instead of filling the slide", () => {
+  const html = slideHtml({ layout: "myth-fact", myth: "m", fact: "f" }, { client, index: 1, total: 5 });
+  assert.match(html, /\.content>\.card\{flex:none\}/);
+});
+
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 test("renders 1080×1350 PNGs, even with very long Arabic text", { skip: !existsSync(chrome) && "needs Google Chrome", timeout: 90_000 }, async () => {

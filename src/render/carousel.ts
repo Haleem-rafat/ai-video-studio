@@ -40,10 +40,14 @@ function body(slide: Slide, ctx: SlideContext): string {
       return `${art}<div class="mark">“</div><blockquote data-fit="34">${escape(slide.text)}</blockquote>${slide.by ? `<p class="sub">— ${escape(slide.by)}</p>` : ""}`;
     case "chart": {
       const max = Math.max(...slide.bars.map((bar) => bar.value), 1);
-      return `${art}<h2 data-fit="36">${escape(slide.title)}</h2><div class="bars">${slide.bars
+      // A short unit ("%", "x") sits beside each value; a long one ("% من الزوار (مثال)") once, under the title.
+      const unit = slide.unit ?? "";
+      const short = unit.length <= 3 ? unit : (unit.match(/^[%x×$€£]+/)?.[0] ?? "");
+      const caption = unit.length > 3 ? `<p class="sub" data-fit="24">${escape(unit)}</p>` : "";
+      return `${art}<h2 data-fit="36">${escape(slide.title)}</h2>${caption}<div class="bars">${slide.bars
         .map(
           (bar) =>
-            `<div class="bar"><span class="bar-label" data-fit="22">${escape(bar.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round((bar.value / max) * 100)}%"></div></div><span class="bar-value">${bar.value}${escape(slide.unit ?? "")}</span></div>`,
+            `<div class="bar"><span class="bar-label" data-fit="22">${escape(bar.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round((bar.value / max) * 100)}%"></div></div><span class="bar-value">${bar.value}${escape(short)}</span></div>`,
         )
         .join("")}</div>`;
     }
@@ -82,6 +86,7 @@ h2{font-size:60px;line-height:1.2}
 .list li,.step{display:flex;gap:24px;align-items:center;background:${colors.panel};border-radius:28px;padding:26px 30px;font-size:38px}
 .num{flex:none;width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:${colors.cta};color:${colors.background};font-size:34px}
 .card{background:${colors.panel};border-radius:32px;padding:34px 38px;display:flex;flex-direction:column;gap:16px;font-size:40px;flex:1}
+.content>.card{flex:none}
 .card.muted p{color:${colors.muted};text-decoration:line-through;text-decoration-color:${colors.muted}88}
 .card.hot{outline:4px solid ${colors.cta}}
 .tag{font-size:30px;color:${colors.accent}}
