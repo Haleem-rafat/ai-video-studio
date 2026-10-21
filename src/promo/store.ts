@@ -76,6 +76,9 @@ export function promoOptions(input: Partial<Record<keyof PromoOptions, unknown>>
 /** Starts a promo's record so its page can show it while it is made. */
 export async function startPromo(url: string, options: PromoOptions = DEFAULT_OPTIONS): Promise<Promo> {
   const site = siteUrl(url);
+  // A second click while it records would only queue the same video again.
+  const same = (await listPromos()).find((promo) => promo.status === "making" && promo.url === site && promo.options?.speed === options.speed && promo.options?.length === options.length);
+  if (same) throw new Error(`This promo of ${hostOf(site)} is already being made (${same.id})`);
   let id = promoIdFor(site);
   for (let n = 2; existsSync(promoDir(id)); n++) id = `${promoIdFor(site)}-${n}`;
   const promo: Promo = { id, url: site, host: hostOf(site), title: hostOf(site), createdAt: new Date().toISOString(), status: "making", options };

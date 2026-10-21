@@ -46,3 +46,13 @@ test("a new promo remembers its speed and length, so it can be recorded again th
   const promo = await startPromo("https://b.example.com", { speed: "normal", length: 60 });
   assert.deepEqual((await loadPromo(promo.id)).options, { speed: "normal", length: 60 });
 });
+
+test("a promo of the same site with the same speed and length can't be started twice while it is being made", async () => {
+  const first = await startPromo("https://c.example.com", { speed: "slow", length: 30 });
+  await assert.rejects(() => startPromo("c.example.com/", { speed: "slow", length: 30 }), /already being made/);
+  // Another speed is another promo.
+  await startPromo("https://c.example.com", { speed: "fast", length: 30 });
+  // Once it is done (or failed), the same one can be made again.
+  await savePromo({ ...(await loadPromo(first.id)), status: "done" });
+  await startPromo("https://c.example.com", { speed: "slow", length: 30 });
+});
