@@ -6,6 +6,7 @@ import { api, type Job } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JobProgress } from "./JobProgress.tsx";
+import { Confirm } from "./shared.tsx";
 import { MOOD_LABEL, MOODS, trackName, type Track } from "./promo-music.ts";
 
 type Props = { tracks: Track[]; jobs: Job[]; onChanged: () => void };
@@ -102,17 +103,17 @@ export function MusicLibrary({ tracks, jobs, onChanged }: Props) {
                 >
                   <PencilIcon />
                 </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="text-destructive"
-                  title="Delete (promos already made keep their sound)"
-                  onClick={() => {
-                    if (confirm(`Delete ${trackName(track.file)} from the library?`)) act(api.deleteTrack(track.file), "Track deleted");
-                  }}
-                >
-                  <Trash2Icon />
-                </Button>
+                <Confirm
+                  trigger={
+                    <Button size="icon" variant="ghost" className="text-destructive" title="Delete">
+                      <Trash2Icon />
+                    </Button>
+                  }
+                  title={`Delete ${trackName(track.file)}?`}
+                  description="The track is removed from the music library. Promos already made with it keep their sound."
+                  action="Delete track"
+                  onConfirm={() => act(api.deleteTrack(track.file), "Track deleted")}
+                />
               </>
             )}
           </li>

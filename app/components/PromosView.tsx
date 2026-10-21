@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JobProgress } from "./JobProgress.tsx";
+import { Confirm } from "./shared.tsx";
 import { MusicLibrary } from "./MusicLibrary.tsx";
 import { MOOD_LABEL, MOODS, trackName, type Track } from "./promo-music.ts";
 
@@ -86,8 +87,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
   useEffect(() => {
     if (open?.options) setOptions(open.options);
   }, [open?.id]);
-  const remove = (promo: PromoState) => {
-    if (!confirm(`Delete this promo of ${promo.host} and its videos?`)) return;
+  const remove = (promo: PromoState) =>
     api
       .deletePromo(promo.id)
       .then(() => {
@@ -96,7 +96,6 @@ export function PromosView({ id, jobs, onOpen }: Props) {
         refresh();
       })
       .catch((error: Error) => toast.error(error.message));
-  };
   const failedCount = promos.filter((promo) => promo.status === "failed").length;
   const jobOf = (promo: PromoState) => promoJobs.find((job) => job.link === `/marketing/promos/${promo.id}` && (job.status === "queued" || job.status === "running"));
 
@@ -165,11 +164,16 @@ export function PromosView({ id, jobs, onOpen }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">All promos</span>
             {failedCount > 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="ms-auto text-destructive"
-                onClick={() =>
+              <Confirm
+                trigger={
+                  <Button size="sm" variant="ghost" className="ms-auto text-destructive">
+                    <Trash2Icon /> Delete failed ({failedCount})
+                  </Button>
+                }
+                title={`Delete ${failedCount} failed ${failedCount === 1 ? "promo" : "promos"}?`}
+                description="Promos that failed are removed from the list. Finished promos and ones being made are kept."
+                action="Delete failed"
+                onConfirm={() =>
                   api
                     .deleteFailedPromos()
                     .then(({ deleted }) => {
@@ -179,9 +183,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
                     })
                     .catch((error: Error) => toast.error(error.message))
                 }
-              >
-                <Trash2Icon /> Delete failed ({failedCount})
-              </Button>
+              />
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -277,9 +279,17 @@ function PromoDetail({
         <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake} title="With the speed, length and music chosen above">
           <RotateCcwIcon /> Record again ({optionsLabel(remakeWith)})
         </Button>
-        <Button size="sm" variant="ghost" className="text-destructive" disabled={promo.status === "making" || running} title={promo.status === "making" ? "It is being made" : "Delete this promo and its videos"} onClick={onDelete}>
-          <Trash2Icon /> Delete
-        </Button>
+        <Confirm
+          trigger={
+            <Button size="sm" variant="ghost" className="text-destructive" disabled={promo.status === "making" || running} title={promo.status === "making" ? "It is being made" : "Delete this promo and its videos"}>
+              <Trash2Icon /> Delete
+            </Button>
+          }
+          title="Delete this promo?"
+          description={`The promo of ${promo.host}, its 16:9 and 9:16 videos and its recording are deleted. This can't be undone.`}
+          action="Delete promo"
+          onConfirm={onDelete}
+        />
       </div>
       {job && <JobProgress job={job} compact />}
       {promo.status === "failed" && !running && <p className="text-sm text-destructive">Failed: {promo.error ?? "unknown error"}</p>}
