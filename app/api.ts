@@ -8,9 +8,13 @@ import type { Library, LibraryItem } from "../src/clients/library.ts";
 import type { Knowledge } from "../src/clients/knowledge.ts";
 import type { Promo } from "../src/promo/store.ts";
 import type { PromoOptions } from "../src/promo/record.ts";
+import type { ProfileView } from "../src/clients/profile.ts";
+import type { AnswerError, Purpose, Value } from "../src/clients/questionnaire.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
 
 export type { Knowledge, Promo, PromoOptions };
+export type { AnswerError, ProfileView, Purpose, Value };
+export type ImportPreview = { count: number; answers: Record<string, Value>; errors: AnswerError[] };
 /** A promo with whether its music can change without recording again. */
 export type PromoState = Promo & { canChangeMusic: boolean };
 export type { ArtStyleChoice, ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
@@ -116,6 +120,18 @@ export const api = {
   library: (id: string) => call<Library>("GET", `/api/clients/${id}/library`),
   draftKnowledge: (id: string) => call<Job>("POST", `/api/clients/${id}/knowledge/draft`),
   answerKnowledge: (id: string, questionId: string, answer: string) => call<Job>("POST", `/api/clients/${id}/knowledge/answer`, { questionId, answer }),
+  profile: (id: string) => call<ProfileView>("GET", `/api/clients/${id}/profile`),
+  saveProfile: (id: string, answers: Record<string, Value>, confirmed: string[] = []) => call<ProfileView & { errors: AnswerError[] }>("PUT", `/api/clients/${id}/profile`, { answers, confirmed }),
+  profileContext: (id: string, purpose: Purpose) => call<{ purpose: Purpose; text: string }>("GET", `/api/clients/${id}/profile/context?purpose=${purpose}`),
+  /** Reads a filled questionnaire; with `dryRun` nothing is saved. */
+  importProfile: async <T,>(id: string, file: File, options: { dryRun?: boolean; force?: boolean } = {}): Promise<T> => {
+    const format = /\.json$/i.test(file.name) ? "json" : "docx";
+    const query = new URLSearchParams({ format, ...(options.dryRun ? { dryRun: "1" } : {}), ...(options.force ? { force: "1" } : {}) });
+    const response = await fetch(`/api/clients/${id}/profile/import?${query}`, { method: "POST", body: file });
+    const data = await response.json();
+    if (!response.ok) throw Object.assign(new Error(data.error ?? `Import failed (${response.status})`), { status: response.status });
+    return data as T;
+  },
   promos: () => call<PromoState[]>("GET", "/api/promos"),
   promo: (id: string) => call<PromoState>("GET", `/api/promos/${id}`),
   renamePromo: (id: string, title: string) => call<PromoState>("PUT", `/api/promos/${id}`, { title }),
@@ -164,6 +180,9 @@ export function jobLink(job: Job): string | undefined {
 
 /** A client's file: its logo, or a post's slides and art. */
 export const clientFileUrl = (client: string, file: string) => `/client-files/${client}/${file}`;
+
+/** A client's questionnaire as a file to send them. */
+export const profileExportUrl = (id: string, format: "docx" | "pdf" | "json", lang: "en" | "ar") => `/api/clients/${id}/profile/export?format=${format}&lang=${lang}`;
 
 /** A website promo's video; `version` makes the browser fetch it again after its music changes. */
 export const promoFileUrl = (promo: string, file: string, version?: string) => `/promo-files/${promo}/${file}${version ? `?v=${encodeURIComponent(version)}` : ""}`;

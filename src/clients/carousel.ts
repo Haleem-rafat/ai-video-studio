@@ -8,7 +8,7 @@ import { recordImage } from "../usage.ts";
 import { proofread } from "./arabic.ts";
 import { FLAT_SLIDE, fitSlides, slideProblems, toSlide } from "./slides.ts";
 import { styleOf, withPictures, type PictureAmount } from "./styles.ts";
-import { knowledgeText } from "./knowledge.ts";
+import { businessContext } from "./context.ts";
 import { needsRewrite, reviewScript, rewriteNotes, scriptOf } from "./review.ts";
 import type { Client, Idea, ScriptReview, Slide } from "./types.ts";
 
@@ -40,7 +40,7 @@ Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}
 Tone: ${client.brief.tone}
 Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, client counts or guarantees.
 
-${knowledgeText(client.knowledge) ? `${knowledgeText(client.knowledge)}\n\n` : ""}${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
+${businessContext(client, "carousel") ? `${businessContext(client, "carousel")}\n\n` : ""}${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
 - ${kind === "single" ? "Exactly 1 slide: a cover whose title is the hook, sharpened, and a subtitle with the one takeaway." : "5-8 slides. Slide 1 is the cover (the hook as a title that makes people swipe). The last slide is the cta. Between them, one idea per slide, using the layouts that fit the content: stat, list, myth-fact, before-after, steps, quote, chart."}
 - Write like someone who knows this product: show how it really works for the customer (a real step, a real screen, a real moment), in the customer's own words, about their own situation. No generic marketing lines.
 - Very short text: a title under 70 characters, list items under 70, a stat value like "3x" or "15".

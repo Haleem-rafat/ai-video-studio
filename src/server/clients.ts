@@ -14,6 +14,7 @@ import { clientDir, listClients, listPosts, loadClient, loadIdeas, loadPost, loc
 import type { Client, Slide } from "../clients/types.ts";
 import { projectDir } from "../project.ts";
 import { enqueue, recentJobs } from "./jobs.ts";
+import { handlePrompted } from "./prompted.ts";
 
 export type Ctx = {
   path: string;
@@ -60,6 +61,8 @@ const isAmount = (amount: unknown): amount is PictureAmount => amount === "light
 export async function handleClients(ctx: Ctx): Promise<boolean> {
   const { path, method, url, request, response, json, body, fail } = ctx;
   let match: RegExpMatchArray | null;
+  // Prompted mode: /api/clients/:id/profile…
+  if (await handlePrompted(ctx)) return true;
   const find = (id: string) =>
     loadClient(id).catch(() => {
       throw fail(404, `No client "${id}"`);

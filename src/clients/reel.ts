@@ -8,7 +8,7 @@ import { newProjectId, projectDir, saveProject } from "../project.ts";
 import type { MarketingBrief, Project } from "../types.ts";
 import { prepareSpeech, proofread } from "./arabic.ts";
 import { nextCreativity, nextVoice, reelProblems, type Made } from "./history.ts";
-import { knowledgeText } from "./knowledge.ts";
+import { businessContext } from "./context.ts";
 import { needsRewrite, reviewScript, rewriteNotes, scriptOf } from "./review.ts";
 import { clientDir } from "./store.ts";
 import type { Client, Idea, ScriptReview } from "./types.ts";
@@ -53,22 +53,23 @@ export function avoidNotes(history: Made[]): string {
   ].join("\n");
 }
 
+/** Everything the reel's writer is told about this client and this idea, on top of the brief. */
+export function reelNotes(client: Client, idea: Idea, history: Made[] = []): string {
+  const knowledge = businessContext(client, "reel");
+  return [
+    reelBrief(client, idea).notes,
+    idea.persona ? `Speak to: ${idea.persona}, in their own words. Show this real step of how the product works: ${idea.step ?? "one concrete step"}.` : "",
+    knowledge ? `${knowledge}\nWrite like someone who knows this product: show how it really works for this customer, in their words. No generic marketing lines; claim only what the knowledge says.` : "",
+    avoidNotes(history),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 /** Writes a reel as an ordinary 9:16 marketing project (the same writer as Marketing mode) and returns its id. */
 export async function createReel(client: Client, idea: Idea, log: (message: string) => void, history: Made[] = []): Promise<{ projectId: string; review?: ScriptReview }> {
-  const base = reelBrief(client, idea);
-  const avoid = avoidNotes(history);
-  const knowledge = knowledgeText(client.knowledge);
-  const brief = {
-    ...base,
-    notes: [
-      base.notes,
-      idea.persona ? `Speak to: ${idea.persona}, in their own words. Show this real step of how the product works: ${idea.step ?? "one concrete step"}.` : "",
-      knowledge ? `${knowledge}\nWrite like someone who knows this product: show how it really works for this customer, in their words. No generic marketing lines; claim only what the knowledge says.` : "",
-      avoid,
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
-  };
+  const subtitles = client.profile?.answers["creative.subtitles"]?.value as string | undefined;
+  const brief = { ...reelBrief(client, idea), notes: reelNotes(client, idea, history) };
   // Reels take turns between creative and bold, and between the narrators of the brief's voice.
   const creativity = nextCreativity(history);
   const voice = nextVoice(history, brief.voice === "female" ? "female" : "male");
@@ -111,7 +112,8 @@ export async function createReel(client: Client, idea: Idea, log: (message: stri
       creativity,
       language: client.language,
       narrator: { voice, style: MARKETING_STYLE[client.language] },
-      captions: Boolean(brief.captions),
+      // Prompted mode's subtitles answer, when given, decides; else the brief.
+      captions: subtitles === undefined ? Boolean(brief.captions) : subtitles === "yes",
       post: { caption: draft.caption, hashtags: draft.hashtags },
     },
     scenes: draft.scenes,

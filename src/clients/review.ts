@@ -2,7 +2,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import type { Scene } from "../types.ts";
-import { knowledgeText } from "./knowledge.ts";
+import { businessContext } from "./context.ts";
 import { textsOf } from "./arabic.ts";
 import type { Client, Idea, ScriptReview, Slide } from "./types.ts";
 
@@ -46,7 +46,7 @@ export async function reviewScript(client: Client, input: { kind: "carousel" | "
 
 THE IDEA: ${input.idea.hook} (goal ${input.idea.goal}${input.idea.persona ? `, for ${input.idea.persona}` : ""})
 
-${knowledgeText(client.knowledge) || `WHAT THE CLIENT SELLS\n${client.brand.summary}\nFeatures: ${client.brief.features.join(" | ")}\nAudience: ${client.brief.audience}`}
+${businessContext(client, "review") || `WHAT THE CLIENT SELLS\n${client.brand.summary}\nFeatures: ${client.brief.features.join(" | ")}\nAudience: ${client.brief.audience}`}
 
 THE SCRIPT
 ${input.script}`,

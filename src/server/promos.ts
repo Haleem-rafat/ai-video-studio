@@ -1,8 +1,7 @@
 import { hostOf } from "../clients/library.ts";
-import type { IncomingMessage } from "node:http";
-
 import { canChangeMusic, changeMusic, deleteFailedPromos, deletePromo, listPromos, loadPromo, makePromo, mutedFile, promoDir, promoOptions, recoverPromos, renamePromo, startPromo, type Promo } from "../promo/store.ts";
 import { addTrack, composeTrack, deleteTrack, listTracks, MOODS, MUSIC_DIR, renameTrack, type Mood } from "../promo/music.ts";
+import { rawBody } from "./body.ts";
 import type { Ctx } from "./clients.ts";
 import { enqueue } from "./jobs.ts";
 
@@ -15,16 +14,6 @@ const shown = (promo: Promo) => ({ ...promo, canChangeMusic: canChangeMusic(prom
 /** Largest song that can be uploaded. */
 const MAX_SONG = 40 * 1024 * 1024;
 
-async function rawBody(request: IncomingMessage, limit: number): Promise<Uint8Array> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of request) {
-    size += (chunk as Buffer).length;
-    if (size > limit) throw new Error(`The file is over ${Math.round(limit / 1024 / 1024)} MB`);
-    chunks.push(chunk as Buffer);
-  }
-  return new Uint8Array(Buffer.concat(chunks));
-}
 
 /** Promos whose job ended with the studio are marked failed, so they can be made again. */
 export function startPromos(): void {

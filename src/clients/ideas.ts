@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { extractJson } from "../llm.ts";
 import { duplicateOf, loadHistory, type Made } from "./history.ts";
-import { knowledgeText } from "./knowledge.ts";
+import { businessContext } from "./context.ts";
 import { ideaProblems } from "./rules.ts";
 import { loadClient, loadIdeas, localDate, recentIdeas, saveIdeas } from "./store.ts";
 import { IDEA_ANGLES, IDEA_FORMATS, IDEA_GOALS, type Client, type Idea, type IdeaDay, type Trend } from "./types.ts";
@@ -107,7 +107,7 @@ Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}
 Tone: ${client.brief.tone}
 Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, client counts or guarantees.
 
-${knowledgeText(client.knowledge) ? `${knowledgeText(client.knowledge)}\n\n` : ""}THIS WEEK'S TRENDS (ride one where it fits; cite its url in "trend")
+${businessContext(client, "ideas") ? `${businessContext(client, "ideas")}\n\n` : ""}THIS WEEK'S TRENDS (ride one where it fits; cite its url in "trend")
 ${trends.length ? trends.map((t) => `- ${t.title}: ${t.summary} (${t.url})`).join("\n") : "none found today: use evergreen angles"}
 
 ALREADY MADE AND PAID FOR (never repeat these messages, angles or examples; each new idea must say something these don't)

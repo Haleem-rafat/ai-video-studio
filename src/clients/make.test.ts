@@ -7,7 +7,7 @@ import { join } from "node:path";
 import type { Client, Idea } from "./types.ts";
 
 process.env.CLIENTS_DIR = mkdtempSync(join(tmpdir(), "clients-"));
-const { reelBrief, reelScript } = await import("./reel.ts");
+const { reelBrief, reelNotes, reelScript } = await import("./reel.ts");
 const { claimIdea, postIdFor } = await import("./make.ts");
 const store = await import("./store.ts");
 
@@ -58,4 +58,15 @@ test("after a restart, ideas left 'making' can be made again and their unfinishe
   assert.equal(await recoverInterrupted("restart"), 1);
   assert.equal((await store.loadIdeas("restart", "2026-10-21"))!.ideas[0].status, "new");
   assert.equal((await store.loadPost("restart", "2026-10-21-1-reel")).status, "failed");
+});
+
+test("a reel's writer gets the client's Prompted mode answers and restrictions", () => {
+  const entry = (value: string | string[]) => ({ value, source: "app" as const, updatedAt: "" });
+  const answered = { ...client, profile: { version: 1, updatedAt: "", answers: { "creative.video": entry(["voice", "screens"]), "rules.never": entry("لا أسعار") } } } as Client;
+  const notes = reelNotes(answered, idea);
+  assert.match(notes, /Voice-over, Real website screens/);
+  assert.match(notes, /ALWAYS FOLLOW[\s\S]*لا أسعار/);
+  assert.match(notes, /Hook → Problem or opportunity/);
+  // Without answers the notes are what they were.
+  assert.doesNotMatch(reelNotes(client, idea), /<client>/);
 });

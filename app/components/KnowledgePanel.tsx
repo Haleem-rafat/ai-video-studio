@@ -57,8 +57,15 @@ export function KnowledgePanel({ client, working, onSaved, onJob }: Props) {
       })
       .catch((error: Error) => toast.error(error.message));
 
+  const fromPrompted = Object.keys(client.profile?.answers ?? {}).length;
+
   return (
     <div className="grid max-w-3xl gap-4">
+      <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+        {fromPrompted
+          ? `${fromPrompted} answers from Prompted mode are given to the writers first; where they differ from this Knowledge (drafted from the website), the answers win.`
+          : "The client's own answers in Prompted mode would be given to the writers first and win over this Knowledge where they differ."}
+      </p>
       <div className="grid gap-2 rounded-xl border bg-muted/30 p-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Interview</span>

@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "./shared.tsx";
 import { JobProgress } from "./JobProgress.tsx";
 import { KnowledgePanel } from "./KnowledgePanel.tsx";
+import { PromptedMode } from "./PromptedMode.tsx";
 import { VideoPlayer } from "./VideoPlayer.tsx";
 
 type Props = { id: string; jobs: Job[]; onOpenProject: (id: string) => void; onOpenPromo: (id: string) => void; onChanged: (client: Client) => void };
@@ -122,6 +123,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
           <TabsTrigger value="ideas">Ideas</TabsTrigger>
           <TabsTrigger value="library">Library {library?.items.length ? `(${library.items.length})` : ""}</TabsTrigger>
           <TabsTrigger value="knowledge">Knowledge {client.knowledge ? "" : "·"}</TabsTrigger>
+          <TabsTrigger value="prompted">Prompted mode {client.profile && Object.keys(client.profile.answers).length ? `(${Object.keys(client.profile.answers).length})` : "·"}</TabsTrigger>
           <TabsTrigger value="profile">Profile</TabsTrigger>
         </TabsList>
 
@@ -195,6 +197,10 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                 );
               })}
           </div>
+        </TabsContent>
+
+        <TabsContent value="prompted" className="pt-2">
+          <PromptedMode clientId={client.id} onSaved={refresh} />
         </TabsContent>
 
         <TabsContent value="knowledge" className="pt-2">

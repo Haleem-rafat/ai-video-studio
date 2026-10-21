@@ -1,5 +1,6 @@
 import type { MarketingBrief, SiteBrand } from "../types.ts";
 import type { Knowledge } from "./knowledge.ts";
+import type { BusinessProfile } from "./questionnaire.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "./styles.ts";
 
 /**
@@ -22,6 +23,8 @@ export type Client = {
   avoid: string;
   /** What writers must know about the product and its customers; built from the website and an interview. */
   knowledge?: Knowledge;
+  /** Prompted mode: the client's own answers about the business; they win over the website and Knowledge. */
+  profile?: BusinessProfile;
   /** How the voice says names written in Latin letters, e.g. { "Risero": "رايزرو" }. */
   pronounce?: Record<string, string>;
   dailyIdeas: boolean;
