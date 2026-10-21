@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, MusicIcon, PencilIcon, RotateCcwIcon, Trash2Icon, VolumeXIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, MusicIcon, PencilIcon, RotateCcwIcon, Trash2Icon, VolumeXIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, promoFileUrl, type Job, type PromoOptions, type PromoState } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { JobProgress } from "./JobProgress.tsx";
 import { Confirm } from "./shared.tsx";
 import { MusicLibrary } from "./MusicLibrary.tsx";
+import { PlayButton } from "./PlayButton.tsx";
 import { MOOD_LABEL, MOODS, trackName, type Track } from "./promo-music.ts";
 
 type Props = { id: string | null; jobs: Job[]; onOpen: (id: string | null) => void };
@@ -30,27 +32,41 @@ const optionsLabel = (options: PromoOptions) =>
 
 const SHAPE_LABEL = { "16x9": "16:9 · YouTube, website", "9x16": "9:16 · Reels, TikTok, stories" } as const;
 
-/** Every music choice: Auto, none, a new AI track, or a library track. */
+/** Every music choice: Auto (""), none, a new AI track, or a library track. */
 function MusicSelect({ value, tracks, onChange }: { value: string; tracks: Track[]; onChange: (value: string) => void }) {
   return (
-    <select className="h-8 rounded-md border bg-background px-2 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">Auto: a different track each time</option>
-      <option value="none">No music</option>
-      <optgroup label="Make a new AI track (ElevenLabs)">
-        {MOODS.map((mood) => (
-          <option key={mood} value={`new:${mood}`}>
-            New {MOOD_LABEL[mood].toLowerCase()} track
-          </option>
-        ))}
-      </optgroup>
-      <optgroup label="Library">
-        {tracks.map((track) => (
-          <option key={track.file} value={track.file}>
-            {trackName(track.file)} ({Math.round(track.seconds)}s)
-          </option>
-        ))}
-      </optgroup>
-    </select>
+    // The design system's Select can't hold an empty value, so Auto travels as "auto".
+    <Select value={value || "auto"} onValueChange={(next) => onChange(next === "auto" ? "" : next)}>
+      <SelectTrigger size="sm" className="min-w-64">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="auto">Auto: a different track each time</SelectItem>
+        <SelectItem value="none">No music</SelectItem>
+        <SelectSeparator />
+        <SelectGroup>
+          <SelectLabel>Make a new AI track (ElevenLabs)</SelectLabel>
+          {MOODS.map((mood) => (
+            <SelectItem key={mood} value={`new:${mood}`}>
+              New {MOOD_LABEL[mood].toLowerCase()} track
+            </SelectItem>
+          ))}
+        </SelectGroup>
+        {tracks.length > 0 && (
+          <>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel>Library</SelectLabel>
+              {tracks.map((track) => (
+                <SelectItem key={track.file} value={track.file}>
+                  {trackName(track.file)} ({Math.round(track.seconds)}s)
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </>
+        )}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -60,6 +76,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
   const [url, setUrl] = useState("");
   const [options, setOptions] = useState<PromoOptions>({ speed: "slow", length: 45 });
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const promoJobs = jobs.filter((job) => /^(Website promo|Promo music|New music): /.test(job.label));
   const finished = promoJobs.filter((job) => job.status === "done" || job.status === "failed").length;
 
@@ -135,7 +152,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
           <span className="text-xs text-muted-foreground">Music</span>
           <MusicSelect value={options.music ?? ""} tracks={tracks} onChange={(music) => setOptions({ ...options, music: music || undefined })} />
           {options.music?.startsWith("new:") && <span className="text-xs text-muted-foreground">About a minute more; billed by ElevenLabs. It joins the library for later promos.</span>}
-          {options.music?.endsWith(".mp3") && <audio key={options.music} src={`/promo-music/${options.music}`} controls preload="none" className="h-8" />}
+          {options.music?.endsWith(".mp3") && <PlayButton src={`/promo-music/${options.music}`} label="Listen" />}
         </div>
         <p className="text-xs text-muted-foreground">
           {options.length === "page" ? "Scrolls the whole page at this speed (up to 2 minutes)." : `Scrolls at this speed for up to ${options.length}s: a long page shows its first part, a short one ends sooner.`}
@@ -150,14 +167,17 @@ export function PromosView({ id, jobs, onOpen }: Props) {
 
       {open && <PromoDetail key={open.id} promo={open} job={jobOf(open)} tracks={tracks} remakeWith={options} onRemake={() => make(open.url)} onDelete={() => remove(open)} onChanged={refresh} />}
 
-      <details className="group rounded-xl border p-4">
-        <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
-          <MusicIcon className="size-4 text-muted-foreground" /> Music library <span className="font-mono text-xs text-muted-foreground">{tracks.length}</span>
-        </summary>
-        <div className="pt-3">
-          <MusicLibrary tracks={tracks} jobs={jobs} onChanged={refresh} />
-        </div>
-      </details>
+      <div className="rounded-xl border p-2">
+        <Button variant="ghost" className="w-full justify-start" aria-expanded={libraryOpen} onClick={() => setLibraryOpen(!libraryOpen)}>
+          <MusicIcon className="text-muted-foreground" /> Music library <span className="font-mono text-xs text-muted-foreground">{tracks.length}</span>
+          <ChevronDownIcon className={`ms-auto transition-transform ${libraryOpen ? "rotate-180" : ""}`} />
+        </Button>
+        {libraryOpen && (
+          <div className="px-2 pt-2 pb-1">
+            <MusicLibrary tracks={tracks} jobs={jobs} onChanged={refresh} />
+          </div>
+        )}
+      </div>
 
       {promos.length > 0 && (
         <div className="grid gap-2">

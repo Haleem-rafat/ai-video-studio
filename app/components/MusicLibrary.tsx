@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import { api, type Job } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { JobProgress } from "./JobProgress.tsx";
+import { PlayButton } from "./PlayButton.tsx";
 import { Confirm } from "./shared.tsx";
 import { MOOD_LABEL, MOODS, trackName, type Track } from "./promo-music.ts";
 
@@ -48,13 +50,18 @@ export function MusicLibrary({ tracks, jobs, onChanged }: Props) {
           <UploadIcon /> {uploading ? "Uploading…" : "Add your MP3"}
         </Button>
         <span className="text-xs text-muted-foreground">or</span>
-        <select className="h-8 rounded-md border bg-background px-2 text-sm" value={mood} onChange={(event) => setMood(event.target.value as (typeof MOODS)[number])}>
-          {MOODS.map((option) => (
-            <option key={option} value={option}>
-              {MOOD_LABEL[option]}
-            </option>
-          ))}
-        </select>
+        <Select value={mood} onValueChange={(next) => setMood(next as (typeof MOODS)[number])}>
+          <SelectTrigger size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MOODS.map((option) => (
+              <SelectItem key={option} value={option}>
+                {MOOD_LABEL[option]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button size="sm" variant="outline" disabled={composing.length > 0} title="ElevenLabs Music composes a 130-second instrumental track (billed by ElevenLabs)" onClick={() => act(api.newTrack(mood), `Composing a new ${MOOD_LABEL[mood]} track…`)}>
           <SparklesIcon /> Make with AI
         </Button>
@@ -89,7 +96,7 @@ export function MusicLibrary({ tracks, jobs, onChanged }: Props) {
                 {track.seconds < 60 && <span className="text-xs text-muted-foreground">short promos only</span>}
               </>
             )}
-            <audio src={`/promo-music/${track.file}`} controls preload="none" className="h-8" />
+            <PlayButton src={`/promo-music/${track.file}`} />
             {editing !== track.file && (
               <>
                 <Button
