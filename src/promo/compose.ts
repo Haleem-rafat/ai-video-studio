@@ -98,10 +98,10 @@ export async function lengthOf(file: string): Promise<number> {
  * The ffmpeg filter that builds a promo: the recordings scaled into the screens
  * between the back and front layers, a slow push-in, fades, and the music.
  */
-export function promoFilter(layout: Layout, seconds: number): string {
+export function promoFilter(layout: Layout, seconds: number, music = true): string {
   const { laptop, phone, width, height } = layout;
   const fadeOut = Math.max(0, seconds - 0.8).toFixed(2);
-  const music = Math.max(0, seconds - 2).toFixed(2);
+  const fadeMusic = Math.max(0, seconds - 2).toFixed(2);
   const frames = Math.round(seconds * FPS);
   return [
     `[1:v]scale=${laptop.screen.w}:${laptop.screen.h}:flags=lanczos,setsar=1[desk]`,
@@ -113,16 +113,19 @@ export function promoFilter(layout: Layout, seconds: number): string {
     `[c0][4:v]overlay=0:0[c]`,
     // A slow push-in (100% → 104%) keeps the frame alive while the pages scroll.
     `[c]scale=w='${width}*(1+0.04*n/${frames})':h=-2:eval=frame:flags=bicubic,crop=${width}:${height},setsar=1,fps=${FPS},format=yuv420p,fade=t=in:st=0:d=0.6,fade=t=out:st=${fadeOut}:d=0.8[v]`,
-    `[5:a]atrim=0:${seconds.toFixed(2)},afade=t=in:st=0:d=1,afade=t=out:st=${music}:d=2,volume=0.8[m]`,
+    music
+      ? `[5:a]atrim=0:${seconds.toFixed(2)},afade=t=in:st=0:d=1,afade=t=out:st=${fadeMusic}:d=2,volume=0.8[m]`
+      : // No music: a silent track, since some apps won't play a video without sound.
+        `anullsrc=r=44100:cl=stereo,atrim=0:${seconds.toFixed(2)}[m]`,
   ].join(";");
 }
 
-/** Makes one promo video from the two recordings, over `music` (a track shorter than the video loops). */
-export async function composePromo(input: { desktop: string; phone: string; look: Look; dir: string; shape: Shape; out: string; music: string }): Promise<{ seconds: number }> {
+/** Makes one promo video from the two recordings, over `music` (a track shorter than the video loops; none is silent). */
+export async function composePromo(input: { desktop: string; phone: string; look: Look; dir: string; shape: Shape; out: string; music?: string }): Promise<{ seconds: number }> {
   const layout = layoutFor(input.shape);
   const layers = await drawLayers(layout, input.look, input.dir, input.shape);
   const seconds = Math.min(await lengthOf(input.desktop), await lengthOf(input.phone));
-  if (!existsSync(input.music)) throw new Error(`No music at ${input.music}`);
+  if (input.music && !existsSync(input.music)) throw new Error(`No music at ${input.music}`);
   await run(
     "ffmpeg",
     [
@@ -130,8 +133,8 @@ export async function composePromo(input: { desktop: string; phone: string; look
       ...["-loop", "1", "-framerate", String(FPS), "-i", layers.back],
       ...["-i", input.desktop, "-i", input.phone],
       ...[layers.laptop, layers.phone].flatMap((layer) => ["-loop", "1", "-framerate", String(FPS), "-i", layer]),
-      ...["-stream_loop", "-1", "-i", input.music],
-      ...["-filter_complex", promoFilter(layout, seconds), "-map", "[v]", "-map", "[m]"],
+      ...(input.music ? ["-stream_loop", "-1", "-i", input.music] : []),
+      ...["-filter_complex", promoFilter(layout, seconds, Boolean(input.music)), "-map", "[v]", "-map", "[m]"],
       ...["-t", seconds.toFixed(2), "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", input.out],
     ],
     { maxBuffer: 16 * 1024 * 1024 },

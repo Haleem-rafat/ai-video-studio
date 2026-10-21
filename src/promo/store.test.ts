@@ -77,3 +77,9 @@ test("a hand-picked track is kept with the options; anything that isn't an mp3 n
   assert.deepEqual(promoOptions({ speed: "slow", length: 45, music: "calm-piano.mp3" }), { speed: "slow", length: 45, music: "calm-piano.mp3" });
   assert.deepEqual(promoOptions({ speed: "slow", length: 45, music: "../../.env" }), { speed: "slow", length: 45 });
 });
+
+test("music can be turned off, or a new AI track asked for in a known mood", () => {
+  assert.equal(promoOptions({ music: "none" }).music, "none");
+  assert.equal(promoOptions({ music: "new:upbeat" }).music, "new:upbeat");
+  assert.equal(promoOptions({ music: "new:dubstep" }).music, undefined);
+});

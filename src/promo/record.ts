@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 
 import puppeteer, { type Page } from "puppeteer-core";
 
+import { openParts } from "./parts.ts";
 import { watchNetwork, whenOnline } from "./settle.ts";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -183,6 +184,8 @@ async function recordDevice(page: Page, url: string, device: Device, out: string
   await wakeUp(page);
   // Waking the page up can start lazy pictures and videos further down.
   await network.settled(log, 30000);
+  // FAQ answers, accordions, press-and-hold lines and embedded calendars: shown open, not closed or loading.
+  await openParts(page, log);
   await network.stop();
   await tidy(page);
   const height = await page.evaluate(() => document.documentElement.scrollHeight);

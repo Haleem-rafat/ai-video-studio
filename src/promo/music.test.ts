@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { pickMusic, type Track } from "./music.ts";
+import { MOOD_PROMPTS, MOODS, pickMusic, trackFileFor, type Track } from "./music.ts";
 
 const tracks: Track[] = [
   { file: "lofi-1.mp3", seconds: 30 },
@@ -32,4 +32,16 @@ test("when no track is long enough, the longest is used", () => {
 test("a track chosen by hand wins, if it exists", () => {
   assert.equal(pickMusic(tracks, 78, [], "lofi-1.mp3"), "lofi-1.mp3");
   assert.notEqual(pickMusic(tracks, 78, [], "gone.mp3"), "gone.mp3");
+});
+
+test("every mood has a prompt for an instrumental track without vocals", () => {
+  for (const mood of MOODS) {
+    assert.ok(MOOD_PROMPTS[mood].length > 60, mood);
+    assert.match(MOOD_PROMPTS[mood], /instrumental/i);
+  }
+});
+
+test("a new track gets a file name of its mood and a number that isn't taken", () => {
+  assert.equal(trackFileFor("calm", ["calm-piano.mp3", "lofi-1.mp3"]), "ai-calm-1.mp3");
+  assert.equal(trackFileFor("calm", ["ai-calm-1.mp3", "ai-calm-2.mp3"]), "ai-calm-3.mp3");
 });

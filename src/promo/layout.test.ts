@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { concatList, scrollAt, scrollPlan, SPEEDS, VIEWPORTS } from "./record.ts";
 import { layoutFor, SHAPES, type Rect } from "./layout.ts";
+import { promoFilter } from "./compose.ts";
 
 const inside = (rect: Rect, width: number, height: number) => rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= width && rect.y + rect.h <= height;
 const ratio = (rect: Rect) => rect.w / rect.h;
@@ -89,4 +90,11 @@ test("each frame plays for as long as it was on screen, and the last one is not 
     11.25,
   );
   assert.equal(list, "file '/a/00000.jpg'\nduration 0.5000\nfile '/a/00001.jpg'\nduration 0.7500\nfile '/a/00001.jpg'\n");
+});
+
+test("a promo without music still has a (silent) sound track, so every app plays it", () => {
+  const layout = layoutFor("16x9");
+  assert.match(promoFilter(layout, 30, false), /anullsrc/);
+  assert.doesNotMatch(promoFilter(layout, 30, true), /anullsrc/);
+  assert.match(promoFilter(layout, 30, true), /\[5:a\]/);
 });

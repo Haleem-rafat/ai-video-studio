@@ -22,8 +22,16 @@ const LENGTHS: { id: PromoOptions["length"]; label: string }[] = [
   { id: 60, label: "60s" },
   { id: "page", label: "Whole page" },
 ];
-/** "calm-piano.mp3" → "Calm piano". */
-const trackName = (file: string) => file.replace(/\.mp3$/i, "").replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+const MOODS = ["calm", "upbeat", "corporate", "cinematic", "lofi"] as const;
+const MOOD_LABEL: Record<(typeof MOODS)[number], string> = { calm: "calm", upbeat: "upbeat", corporate: "corporate", cinematic: "cinematic", lofi: "lo-fi" };
+
+/** "calm-piano.mp3" → "Calm piano"; "none" → "No music"; "new:upbeat" → "New upbeat track". */
+const trackName = (file: string) =>
+  file === "none"
+    ? "No music"
+    : file.startsWith("new:")
+      ? `New ${MOOD_LABEL[file.slice(4) as (typeof MOODS)[number]] ?? file.slice(4)} track`
+      : file.replace(/\.mp3$/i, "").replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase());
 const optionsLabel = (options: PromoOptions) =>
   `${SPEEDS.find((speed) => speed.id === options.speed)?.label} · ${LENGTHS.find((length) => length.id === options.length)?.label}${options.music ? ` · ${trackName(options.music)}` : ""}`;
 
@@ -113,13 +121,24 @@ export function PromosView({ id, jobs, onOpen }: Props) {
             onChange={(event) => setOptions({ ...options, music: event.target.value || undefined })}
           >
             <option value="">Auto: a different track each time</option>
-            {tracks.map((track) => (
-              <option key={track.file} value={track.file}>
-                {trackName(track.file)} ({Math.round(track.seconds)}s)
-              </option>
-            ))}
+            <option value="none">No music</option>
+            <optgroup label="Make a new AI track (ElevenLabs)">
+              {MOODS.map((mood) => (
+                <option key={mood} value={`new:${mood}`}>
+                  New {MOOD_LABEL[mood]} track
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Library">
+              {tracks.map((track) => (
+                <option key={track.file} value={track.file}>
+                  {trackName(track.file)} ({Math.round(track.seconds)}s)
+                </option>
+              ))}
+            </optgroup>
           </select>
-          {options.music && <audio key={options.music} src={`/promo-music/${options.music}`} controls preload="none" className="h-8" />}
+          {options.music?.startsWith("new:") && <span className="text-xs text-muted-foreground">About a minute more; billed by ElevenLabs. It joins the library for later promos.</span>}
+          {options.music?.endsWith(".mp3") && <audio key={options.music} src={`/promo-music/${options.music}`} controls preload="none" className="h-8" />}
         </div>
         <p className="text-xs text-muted-foreground">
           {options.length === "page" ? "Scrolls the whole page at this speed (up to 2 minutes)." : `Scrolls at this speed for up to ${options.length}s: a long page shows its first part, a short one ends sooner.`}
@@ -195,9 +214,9 @@ function PromoDetail({ promo, job, remakeWith, onRemake, onDelete }: { promo: Pr
         <Badge variant="outline" className="font-mono">
           $0.00
         </Badge>
-        {promo.seconds && <Badge variant="outline">{Math.round(promo.seconds)}s · music</Badge>}
+        {promo.seconds && <Badge variant="outline">{Math.round(promo.seconds)}s</Badge>}
         {promo.options && <Badge variant="outline">{optionsLabel(promo.options)}</Badge>}
-        {promo.music && <Badge variant="outline">♪ {trackName(promo.music)}</Badge>}
+        {promo.status === "done" && <Badge variant="outline">{promo.music ? `♪ ${trackName(promo.music)}` : "No music"}</Badge>}
         <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake} title="With the speed and length chosen above">
           <RotateCcwIcon /> Record again ({optionsLabel(remakeWith)})
         </Button>

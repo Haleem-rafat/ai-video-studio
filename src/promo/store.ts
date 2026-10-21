@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { OUTPUT_DIR } from "../config.ts";
 import { hostOf } from "../clients/library.ts";
 import { composePromo, lengthOf } from "./compose.ts";
-import { listTracks, MUSIC_DIR, pickMusic } from "./music.ts";
+import { composeTrack, listTracks, MOODS, MUSIC_DIR, pickMusic, type Mood } from "./music.ts";
 import { SHAPES, type Shape } from "./layout.ts";
 import { DEFAULT_OPTIONS, LENGTHS, recordSite, SPEEDS, type Look, type PromoOptions } from "./record.ts";
 
@@ -73,7 +73,8 @@ export async function listPromos(): Promise<Promo[]> {
 export function promoOptions(input: Partial<Record<keyof PromoOptions, unknown>> | undefined): PromoOptions {
   const speed = typeof input?.speed === "string" && input.speed in SPEEDS ? (input.speed as PromoOptions["speed"]) : DEFAULT_OPTIONS.speed;
   const length = LENGTHS.find((option) => option === input?.length) ?? DEFAULT_OPTIONS.length;
-  const music = typeof input?.music === "string" && /^[\w.-]+\.mp3$/i.test(input.music) ? input.music : undefined;
+  const music =
+    typeof input?.music === "string" && (/^[\w.-]+\.mp3$/i.test(input.music) || input.music === "none" || MOODS.some((mood) => input.music === `new:${mood}`)) ? input.music : undefined;
   return { speed, length, ...(music ? { music } : {}) };
 }
 
@@ -100,18 +101,20 @@ export async function makePromo(id: string, log: (message: string) => void = con
     // A track long enough to play once, and not the one the last promos used.
     const need = Math.min(await lengthOf(recording.desktop), await lengthOf(recording.phone));
     const recent = (await listPromos()).map((other) => other.music).filter((file): file is string => Boolean(file));
-    const music = pickMusic(await listTracks(), need, recent, promo.options?.music);
-    if (!music) throw new Error(`No music in ${MUSIC_DIR}`);
-    log(`promo: music ${music}`);
+    const wanted = promo.options?.music;
+    const music =
+      wanted === "none" ? undefined : wanted?.startsWith("new:") ? await composeTrack(wanted.slice(4) as Mood, log) : pickMusic(await listTracks(), need, recent, wanted);
+    if (music === "") throw new Error(`No music in ${MUSIC_DIR}`);
+    log(music ? `promo: music ${music}` : "promo: no music");
     const videos: Promo["videos"] = {};
     let seconds = 0;
     for (const shape of SHAPES) {
       log(`promo: composing the ${shape} video ...`);
       const file = `promo-${shape}.mp4`;
-      ({ seconds } = await composePromo({ ...recording, dir: work, shape, out: join(dir, file), music: join(MUSIC_DIR, music) }));
+      ({ seconds } = await composePromo({ ...recording, dir: work, shape, out: join(dir, file), music: music ? join(MUSIC_DIR, music) : undefined }));
       videos[shape] = file;
     }
-    const done: Promo = { ...promo, title: recording.title || promo.host, status: "done", seconds, look: recording.look, music, videos };
+    const done: Promo = { ...promo, title: recording.title || promo.host, status: "done", seconds, look: recording.look, ...(music ? { music } : {}), videos };
     await savePromo(done);
     await rm(work, { recursive: true, force: true });
     log(`promo: done, ${seconds.toFixed(1)}s in ${SHAPES.join(" and ")}`);
