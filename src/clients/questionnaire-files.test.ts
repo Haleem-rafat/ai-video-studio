@@ -98,3 +98,11 @@ test("the print page has every section and question, right to left in Arabic", (
   // Client text is escaped, never markup.
   assert.doesNotMatch(questionnaireHtml(client, "en", { "more.notes": { value: "<script>x</script>", source: "app", updatedAt: "" } }), /<script>x/);
 });
+
+test("words that match no option are dropped, not reported, when a question takes no free words", async () => {
+  const { choiceFromText } = await import("./questionnaire-files.ts");
+  const formats = QUESTIONS.find((q) => q.id === "content.formats")!;
+  assert.deepEqual(choiceFromText(formats, "عايزين ريلز, Carousels"), ["carousel"]);
+  const tone = QUESTIONS.find((q) => q.id === "voice.tone")!;
+  assert.deepEqual(choiceFromText(tone, "Friendly, like a friend"), ["friendly", "other:like a friend"]);
+});

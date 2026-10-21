@@ -134,17 +134,19 @@ function textOf(part: string): string {
 
 const norm = (text: string) => text.toLowerCase().replace(/[ً-ْ]/g, "").replace(/\s+/g, " ").trim();
 
-/** A choice written in words ("Friendly, Premium, like a friend") as option ids, the rest as the client's own words. */
+/** A choice written in words ("Friendly, Premium, like a friend") as option ids, the rest as the client's own words where the question takes them. */
 export function choiceFromText(q: Question, text: string): Value {
   const tokens = text.split(/[,،;\n]+|\s+[·•]\s+/).map((token) => token.trim()).filter(Boolean);
   const picked: string[] = [];
   const own: string[] = [];
   for (const token of tokens) {
-    const match = q.options!.find((option) => [option.id, option.label.en, option.label.ar].some((label) => norm(label) === norm(token)));
+    // "Reels" matches "Reels / Shorts": each half of a label counts.
+    const match = q.options!.find((option) => [option.id, option.label.en, option.label.ar].flatMap((label) => [label, ...label.split(" / ")]).some((label) => norm(label) === norm(token)));
     if (match) picked.push(match.id);
     else own.push(token);
   }
-  const values = [...new Set(picked), ...(own.length ? [`other:${own.join(", ")}`] : [])];
+  // A question without "your own words" drops what matches no option, rather than failing on it.
+  const values = [...new Set(picked), ...(own.length && q.other ? [`other:${own.join(", ")}`] : [])];
   return q.kind === "single" ? (values[0] ?? "") : values;
 }
 

@@ -55,7 +55,8 @@ test("an exact block is read for free, without asking the AI, and explained ques
   assert.equal(preview.answers["goals.primary"], "sales");
   const item = preview.items.find((each) => each.id === "goals.primary")!;
   assert.equal(item.question.en, QUESTIONS.find((q) => q.id === "goals.primary")!.label.en);
-  assert.equal(item.text, "Sales and bookings");
+  // Shown in the dialog's language: option labels in both.
+  assert.deepEqual(item.text, { en: "Sales and bookings", ar: "مبيعات وحجوزات" });
   assert.ok(preview.errors.some((error) => error.question === "made.up"));
   assert.equal(preview.otherClient, false);
 });
@@ -86,4 +87,14 @@ test("free text goes to the AI, which maps it to questions; its notes and doubts
   assert.equal(preview.items.find((each) => each.id === "voice.tone")!.sure, false);
   assert.equal(preview.answers["nope.nope"], undefined);
   assert.equal(preview.leftover, "They also sell a course");
+});
+
+test("the real block is found even when the AI repeats the markers in its closing sentence, or the chat includes the prompt's example", () => {
+  const example = clientPrompt(client, "ar");
+  const chat = `${example}\n\nAI: thanks!\n${MARKERS.start}\n{"format":"ai-video-studio/client-ai","client":"risero","answers":{"overview.what":"صفحات حجز"}}\n${MARKERS.end}\n\nانسخ كل حاجة من ${MARKERS.start} لحد ${MARKERS.end} وابعتها للوكالة.`;
+  assert.deepEqual(extractBlock(chat)?.answers, { "overview.what": "صفحات حجز" });
+});
+
+test("the prompt's own example block, with only placeholders, is not taken as answers", () => {
+  assert.equal(extractBlock(clientPrompt(client, "en")), null);
 });
