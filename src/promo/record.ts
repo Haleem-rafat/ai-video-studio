@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 import puppeteer, { type Page } from "puppeteer-core";
 
-import { watchNetwork } from "./settle.ts";
+import { watchNetwork, whenOnline } from "./settle.ts";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -237,10 +237,15 @@ export async function recordSite(url: string, dir: string, options: PromoOptions
   await mkdir(dir, { recursive: true });
   const desktop = join(dir, "desktop.mp4");
   const phone = join(dir, "phone.mp4");
-  const { look, title, timing } = await withDevice("desktop", async (page) => {
-    const timing = await recordDevice(page, url, "desktop", desktop, (distance) => scrollPlan(distance, options), log);
-    return { look: await lookOf(page), title: await page.title(), timing };
-  });
-  await withDevice("phone", (page) => recordDevice(page, url, "phone", phone, () => timing, log));
+  // A dropped connection records that device again once the internet is back.
+  const { look, title, timing } = await whenOnline(
+    () =>
+      withDevice("desktop", async (page) => {
+        const timing = await recordDevice(page, url, "desktop", desktop, (distance) => scrollPlan(distance, options), log);
+        return { look: await lookOf(page), title: await page.title(), timing };
+      }),
+    log,
+  );
+  await whenOnline(() => withDevice("phone", (page) => recordDevice(page, url, "phone", phone, () => timing, log)), log);
   return { desktop, phone, look, title };
 }

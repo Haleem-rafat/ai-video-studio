@@ -90,3 +90,28 @@ export async function watchNetwork(page: Page): Promise<PageNetwork> {
     stop: () => session.detach().catch(() => {}),
   };
 }
+
+/** Chrome's errors for a connection that is down or changing, which come back on their own. */
+const OFFLINE = /net::ERR_(INTERNET_DISCONNECTED|NETWORK_CHANGED|NAME_NOT_RESOLVED|CONNECTION_(RESET|TIMED_OUT|CLOSED|REFUSED|ABORTED)|TIMED_OUT|ADDRESS_UNREACHABLE|NETWORK_IO_SUSPENDED|PROXY_CONNECTION_FAILED)\b/;
+
+/** Whether an error is the Mac's internet dropping (worth waiting out), not a problem with the site. */
+export function offline(error: unknown): boolean {
+  return error instanceof Error && OFFLINE.test(error.message);
+}
+
+/**
+ * Runs `work`, and while it fails because the internet is down, tries again
+ * every `every` ms for up to `upTo` ms. Any other error fails at once.
+ */
+export async function whenOnline<T>(work: () => Promise<T>, log: (message: string) => void, { every = 5000, upTo = 120000 } = {}): Promise<T> {
+  const start = Date.now();
+  for (;;) {
+    try {
+      return await work();
+    } catch (error) {
+      if (!offline(error) || Date.now() - start >= upTo) throw error;
+      log(`promo: no internet connection (${(error as Error).message.match(/ERR_\w+/)?.[0]}); trying again in ${Math.round(every / 1000)}s ...`);
+      await wait(every);
+    }
+  }
+}
