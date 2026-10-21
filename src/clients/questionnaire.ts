@@ -159,8 +159,8 @@ export const QUESTIONS: Question[] = [
 ];
 
 export type Value = string | string[];
-/** Where an answer came from: typed in the studio, an imported file, or confirmed from the website/Knowledge. */
-export type AnswerSource = "app" | "docx" | "json" | "website";
+/** Where an answer came from: typed in the studio, an imported file, the client's own AI chat, or confirmed from the website/Knowledge. */
+export type AnswerSource = "app" | "docx" | "json" | "chat" | "website";
 export type AnswerEntry = { value: Value; source: AnswerSource; updatedAt: string };
 export type Answers = Record<string, AnswerEntry>;
 

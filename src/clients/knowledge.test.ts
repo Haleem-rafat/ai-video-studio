@@ -36,3 +36,20 @@ test("an answer is recorded on its question; answering again replaces it; others
   assert.equal(twice.questions[1].answer, undefined);
   assert.throws(() => mergeAnswer(base, "nope", "x"));
 });
+
+test("drafting Knowledge again reads the owner's own answers, as the source that wins", async () => {
+  const { sourceOf } = await import("./knowledge.ts");
+  const client = {
+    name: "Risero",
+    url: "https://x",
+    language: "ar",
+    avoid: "",
+    brand: { summary: "Booking pages", services: [], text: "site text" },
+    brief: { business: "", audience: "", problems: [], result: "", features: [], cta: { label: "", url: "" }, notes: "" },
+    profile: { version: 1, updatedAt: "", answers: { "products.proof": { value: "Coach Sara: 5 → 22 bookings a month", source: "chat", updatedAt: "" } } },
+  } as never;
+  const text = sourceOf(client);
+  assert.match(text, /THE OWNER'S OWN ANSWERS/);
+  assert.match(text, /Coach Sara: 5 → 22 bookings a month/);
+  assert.ok(text.indexOf("THE OWNER'S OWN ANSWERS") < text.indexOf("WEBSITE TEXT"));
+});

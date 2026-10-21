@@ -1,10 +1,13 @@
+import { clientPrompt, extractBlock, readClientAnswers } from "../clients/client-prompt.ts";
 import { businessContext } from "../clients/context.ts";
+import { draftKnowledge } from "../clients/knowledge.ts";
 import { applyAnswers, profileView } from "../clients/profile.ts";
 import { parseQuestionnaireDocx, parseQuestionnaireJson, questionnaireDocx, questionnaireJson, questionnairePdf, type Imported, type Lang } from "../clients/questionnaire-files.ts";
 import { PURPOSES, type Purpose } from "../clients/questionnaire.ts";
-import { loadClient, saveClient } from "../clients/store.ts";
+import { clientDir, loadClient, saveClient } from "../clients/store.ts";
 import { rawBody } from "./body.ts";
 import type { Ctx } from "./clients.ts";
+import { enqueue } from "./jobs.ts";
 
 /** Largest questionnaire file that can be imported. */
 const MAX_IMPORT = 10 * 1024 * 1024;
@@ -17,7 +20,7 @@ const fileName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-"
  */
 export async function handlePrompted(ctx: Ctx): Promise<boolean> {
   const { path, method, url, request, response, json, body, fail } = ctx;
-  const match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/profile(?:\/(export|import|context))?$/);
+  const match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/profile(?:\/(export|import|context|prompt|chat|chat\/save))?$/);
   if (!match) return false;
   const [, id, action] = match;
   const client = await loadClient(id).catch(() => {
@@ -81,6 +84,59 @@ export async function handlePrompted(ctx: Ctx): Promise<boolean> {
     const { client: next, errors } = applyAnswers(client, imported.answers, { source: format === "docx" ? "docx" : "json", keepEmpty: true });
     await saveClient(next);
     json(response, 200, { ...profileView(next), imported: count, errors: [...imported.errors, ...errors] });
+    return true;
+  }
+
+  // ---- answered in the client's own AI (ChatGPT, Claude, Gemini)
+  if (action === "prompt" && method === "GET") {
+    const lang: Lang = url.searchParams.get("lang") === "en" ? "en" : "ar";
+    const text = clientPrompt(client, lang);
+    if (url.searchParams.get("download") === "1") {
+      response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": `attachment; filename="${fileName(client.name)}-ai-prompt-${lang}.txt"`, "Cache-Control": "no-store" });
+      response.end(text);
+    } else json(response, 200, { lang, text });
+    return true;
+  }
+
+  if (action === "chat" && method === "POST") {
+    const { text } = await body<{ text?: string }>(request);
+    if (!text?.trim()) throw fail(400, "Paste what the client sent back.");
+    if (text.length > 200000) throw fail(413, "That text is too long; paste only the client's answers.");
+    // The exact block is read at once, for free; anything else is read by the AI as a job, its cost on the client.
+    if (extractBlock(text)) {
+      json(response, 200, { preview: await readClientAnswers(client, text, () => {}) });
+      return true;
+    }
+    const job = Object.assign(
+      enqueue(`Read client answers: ${client.name}`, (log) => readClientAnswers(client, text, log), undefined, () => clientDir(id)),
+      { link: `/marketing/clients/${id}` },
+    );
+    json(response, 202, { job });
+    return true;
+  }
+
+  if (action === "chat/save" && method === "POST") {
+    const input = await body<{ answers?: unknown; redraftKnowledge?: boolean }>(request);
+    const { client: next, errors } = applyAnswers(client, input.answers, { source: "chat", keepEmpty: true });
+    await saveClient(next);
+    // Knowledge drafted again reads these answers first.
+    const job = input.redraftKnowledge
+      ? Object.assign(
+          enqueue(
+            `Knowledge: ${next.name}`,
+            async (log) => {
+              const fresh = await loadClient(id);
+              fresh.knowledge = await draftKnowledge(fresh, log);
+              await saveClient(fresh);
+              return id;
+            },
+            undefined,
+            () => clientDir(id),
+          ),
+          { link: `/marketing/clients/${id}` },
+        )
+      : undefined;
+    json(response, 200, { ...profileView(next), errors, ...(job ? { job } : {}) });
     return true;
   }
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2Icon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, EyeIcon, FileJsonIcon, FileTextIcon, FileTypeIcon, LanguagesIcon, LoaderCircleIcon, SparklesIcon, UploadIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, profileExportUrl, type AnswerError, type ImportPreview, type ProfileView, type Purpose, type Value } from "../api.ts";
+import { api, profileExportUrl, type Job, type AnswerError, type ImportPreview, type ProfileView, type Purpose, type Value } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,10 +12,11 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ImportClientAI, PromptForClient } from "./ClientAIDialogs.tsx";
 import { say, type Lang } from "./prompted-text.ts";
 
 type Question = ProfileView["questions"][number];
-type Props = { clientId: string; onSaved?: () => void };
+type Props = { clientId: string; jobs: Job[]; onSaved?: () => void };
 
 const PURPOSES: Purpose[] = ["ideas", "carousel", "reel", "review"];
 
@@ -32,7 +33,7 @@ const shown = (q: Question, values: Record<string, Value>) => {
  * English or Arabic, saved section by section, exported for the client to
  * fill in elsewhere and imported back. The answers feed every writer.
  */
-export function PromptedMode({ clientId, onSaved }: Props) {
+export function PromptedMode({ clientId, jobs, onSaved }: Props) {
   const [view, setView] = useState<ProfileView | null>(null);
   const [failed, setFailed] = useState(false);
   const [values, setValues] = useState<Record<string, Value>>({});
@@ -181,7 +182,7 @@ export function PromptedMode({ clientId, onSaved }: Props) {
   const sourceNote = (id: string) => {
     if (dirty.has(id)) return null;
     const source = view.sources[id];
-    return source === "website" ? t("sourceWebsite") : source === "docx" ? t("sourceDocx") : source === "json" ? t("sourceJson") : null;
+    return source === "website" ? t("sourceWebsite") : source === "docx" ? t("sourceDocx") : source === "json" ? t("sourceJson") : source === "chat" ? t("sourceChat") : null;
   };
 
   return (
@@ -248,6 +249,16 @@ export function PromptedMode({ clientId, onSaved }: Props) {
             <Button size="sm" variant="outline" title={t("importHint")} onClick={() => fileInput.current?.click()}>
               <UploadIcon /> {t("import")}
             </Button>
+            <PromptForClient clientId={clientId} lang={lang} />
+            <ImportClientAI
+              clientId={clientId}
+              lang={lang}
+              jobs={jobs}
+              onSaved={() => {
+                load();
+                onSaved?.();
+              }}
+            />
             <Button size="sm" variant="outline" onClick={async () => (await save()) && setPreview(true)}>
               <EyeIcon /> {t("preview")}
             </Button>

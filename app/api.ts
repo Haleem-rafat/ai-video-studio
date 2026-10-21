@@ -10,10 +10,11 @@ import type { Promo } from "../src/promo/store.ts";
 import type { PromoOptions } from "../src/promo/record.ts";
 import type { ProfileView } from "../src/clients/profile.ts";
 import type { AnswerError, Purpose, Value } from "../src/clients/questionnaire.ts";
+import type { Preview as ChatPreview } from "../src/clients/client-prompt.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
 
 export type { Knowledge, Promo, PromoOptions };
-export type { AnswerError, ProfileView, Purpose, Value };
+export type { AnswerError, ChatPreview, ProfileView, Purpose, Value };
 export type ImportPreview = { count: number; answers: Record<string, Value>; errors: AnswerError[] };
 /** A promo with whether its music can change without recording again. */
 export type PromoState = Promo & { canChangeMusic: boolean };
@@ -122,6 +123,11 @@ export const api = {
   answerKnowledge: (id: string, questionId: string, answer: string) => call<Job>("POST", `/api/clients/${id}/knowledge/answer`, { questionId, answer }),
   profile: (id: string) => call<ProfileView>("GET", `/api/clients/${id}/profile`),
   saveProfile: (id: string, answers: Record<string, Value>, confirmed: string[] = []) => call<ProfileView & { errors: AnswerError[] }>("PUT", `/api/clients/${id}/profile`, { answers, confirmed }),
+  clientPrompt: (id: string, lang: "en" | "ar") => call<{ lang: string; text: string }>("GET", `/api/clients/${id}/profile/prompt?lang=${lang}`),
+  /** The exact block comes back read at once; free text starts an AI job whose result is the preview. */
+  readClientAnswers: (id: string, text: string) => call<{ preview?: ChatPreview; job?: Job }>("POST", `/api/clients/${id}/profile/chat`, { text }),
+  saveClientAnswers: (id: string, answers: Record<string, Value>, redraftKnowledge: boolean) =>
+    call<ProfileView & { errors: AnswerError[]; job?: Job }>("POST", `/api/clients/${id}/profile/chat/save`, { answers, redraftKnowledge }),
   profileContext: (id: string, purpose: Purpose) => call<{ purpose: Purpose; text: string }>("GET", `/api/clients/${id}/profile/context?purpose=${purpose}`),
   /** Reads a filled questionnaire; with `dryRun` nothing is saved. */
   importProfile: async <T,>(id: string, file: File, options: { dryRun?: boolean; force?: boolean } = {}): Promise<T> => {
@@ -180,6 +186,9 @@ export function jobLink(job: Job): string | undefined {
 
 /** A client's file: its logo, or a post's slides and art. */
 export const clientFileUrl = (client: string, file: string) => `/client-files/${client}/${file}`;
+
+/** The prompt a client pastes into their own AI, as a text file. */
+export const clientPromptUrl = (id: string, lang: "en" | "ar") => `/api/clients/${id}/profile/prompt?lang=${lang}&download=1`;
 
 /** A client's questionnaire as a file to send them. */
 export const profileExportUrl = (id: string, format: "docx" | "pdf" | "json", lang: "en" | "ar") => `/api/clients/${id}/profile/export?format=${format}&lang=${lang}`;

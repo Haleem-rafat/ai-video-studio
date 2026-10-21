@@ -200,7 +200,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
         </TabsContent>
 
         <TabsContent value="prompted" className="pt-2">
-          <PromptedMode clientId={client.id} onSaved={refresh} />
+          <PromptedMode clientId={client.id} jobs={jobs} onSaved={refresh} />
         </TabsContent>
 
         <TabsContent value="knowledge" className="pt-2">
