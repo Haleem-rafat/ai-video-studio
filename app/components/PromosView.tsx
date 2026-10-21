@@ -6,11 +6,13 @@ import { api, promoFileUrl, type Job, type PromoOptions, type PromoState } from 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { JobProgress } from "./JobProgress.tsx";
 import { Confirm } from "./shared.tsx";
 import { MusicLibrary } from "./MusicLibrary.tsx";
 import { PlayButton } from "./PlayButton.tsx";
+import { VideoPlayer } from "./VideoPlayer.tsx";
 import { MOOD_LABEL, MOODS, trackName, type Track } from "./promo-music.ts";
 
 type Props = { id: string | null; jobs: Job[]; onOpen: (id: string | null) => void };
@@ -210,7 +212,20 @@ export function PromosView({ id, jobs, onOpen }: Props) {
             {promos.map((promo) => (
               <button key={promo.id} type="button" onClick={() => onOpen(promo.id)} className={`grid gap-2 rounded-xl border p-3 text-left hover:bg-muted/40 ${promo.id === id ? "ring-2 ring-primary" : ""}`}>
                 {promo.status === "done" && promo.videos?.["16x9"] ? (
-                  <video src={`${promoFileUrl(promo.id, promo.videos["16x9"], promo.updatedAt)}#t=4`} preload="metadata" muted className="aspect-video w-full rounded-lg border bg-black object-cover" />
+                  // A still at 4 s; it plays silently while the pointer is over it.
+                  <video
+                    src={`${promoFileUrl(promo.id, promo.videos["16x9"], promo.updatedAt)}#t=4`}
+                    preload="metadata"
+                    muted
+                    playsInline
+                    loop
+                    onMouseEnter={(event) => void event.currentTarget.play().catch(() => {})}
+                    onMouseLeave={(event) => {
+                      event.currentTarget.pause();
+                      event.currentTarget.currentTime = 4;
+                    }}
+                    className="aspect-video w-full rounded-lg border bg-black object-cover"
+                  />
                 ) : (
                   <div className="flex aspect-video w-full items-center justify-center rounded-lg border bg-muted text-xs text-muted-foreground">{promo.status === "failed" ? "Failed" : "Recording…"}</div>
                 )}
@@ -250,6 +265,7 @@ function PromoDetail({
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(promo.title);
   const [music, setMusic] = useState(promo.options?.music ?? "");
+  const [shape, setShape] = useState<"16x9" | "9x16">("16x9");
   const act = (work: Promise<unknown>, done: string) =>
     work
       .then(() => {
@@ -257,6 +273,8 @@ function PromoDetail({
         onChanged();
       })
       .catch((error: Error) => toast.error(error.message));
+  const file = promo.videos?.[shape];
+  const download = `${promo.host}-promo-${shape}`;
 
   return (
     <div className="grid gap-4 rounded-xl border p-4">
@@ -278,26 +296,22 @@ function PromoDetail({
             </Button>
           </form>
         ) : (
-          <>
-            <span className="min-w-0 truncate font-semibold" dir="auto">
-              {promo.title}
-            </span>
-            <Button size="icon" variant="ghost" className="size-7" title="Rename" onClick={() => setRenaming(true)}>
-              <PencilIcon />
-            </Button>
-          </>
+          <div className="grid min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1">
+              <span className="truncate text-lg font-semibold" dir="auto">
+                {promo.title}
+              </span>
+              <Button size="icon" variant="ghost" className="size-7 shrink-0" title="Rename" onClick={() => setRenaming(true)}>
+                <PencilIcon />
+              </Button>
+            </div>
+            <a href={promo.url} target="_blank" rel="noreferrer" className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:underline">
+              {promo.host} <ExternalLinkIcon className="size-3" />
+            </a>
+          </div>
         )}
-        <a href={promo.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:underline">
-          {promo.host} <ExternalLinkIcon className="size-3" />
-        </a>
-        <Badge variant="outline" className="font-mono">
-          $0.00
-        </Badge>
-        {promo.seconds && <Badge variant="outline">{Math.round(promo.seconds)}s</Badge>}
-        {promo.options && <Badge variant="outline">{optionsLabel({ ...promo.options, music: undefined })}</Badge>}
-        {promo.status === "done" && <Badge variant="outline">{promo.music ? `♪ ${trackName(promo.music)}` : "No music"}</Badge>}
-        <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake} title="With the speed, length and music chosen above">
-          <RotateCcwIcon /> Record again ({optionsLabel(remakeWith)})
+        <Button size="sm" variant="outline" disabled={running} onClick={onRemake} title="With the speed, length and music chosen above">
+          <RotateCcwIcon /> Record again
         </Button>
         <Confirm
           trigger={
@@ -311,56 +325,89 @@ function PromoDetail({
           onConfirm={onDelete}
         />
       </div>
+
       {job && <JobProgress job={job} compact />}
       {promo.status === "failed" && !running && <p className="text-sm text-destructive">Failed: {promo.error ?? "unknown error"}</p>}
       {promo.status === "making" && !running && <p className="text-sm text-muted-foreground">Waiting to record…</p>}
-      {promo.status === "done" && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
-          <MusicIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm">Change music</span>
-          <MusicSelect value={music} tracks={tracks} onChange={setMusic} />
-          <Button
-            size="sm"
-            disabled={running || !promo.canChangeMusic}
-            title={promo.canChangeMusic ? "Keeps the recording; only the music changes (a few seconds)" : "Made before recordings were kept: record again to change its music"}
-            onClick={() => act(api.changePromoMusic(promo.id, music), "Changing the music…")}
-          >
-            Apply
-          </Button>
-          {!promo.canChangeMusic && <span className="text-xs text-muted-foreground">This older promo has no saved recording: record again to change its music.</span>}
-        </div>
-      )}
+
       {promo.status === "done" && promo.videos && (
-        <div className="grid items-start gap-4 lg:grid-cols-[2fr_1fr]">
-          {(["16x9", "9x16"] as const).map((shape) => {
-            const file = promo.videos?.[shape];
-            if (!file) return null;
-            const name = `${promo.host}-promo-${shape}`;
-            return (
-              <div key={shape} className="grid gap-2">
-                <video src={promoFileUrl(promo.id, file, promo.updatedAt)} controls preload="metadata" className={`w-full rounded-lg border bg-black ${shape === "16x9" ? "aspect-video" : "mx-auto aspect-[9/16] max-h-[640px] w-auto"}`} />
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {SHAPE_LABEL[shape]}
-                  <span className="ms-auto flex gap-1.5">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <Tabs value={shape} onValueChange={(next) => setShape(next as "16x9" | "9x16")} className="min-w-0">
+            <TabsList>
+              <TabsTrigger value="16x9">16:9 · YouTube, website</TabsTrigger>
+              <TabsTrigger value="9x16">9:16 · Reels, TikTok</TabsTrigger>
+            </TabsList>
+            {(["16x9", "9x16"] as const).map((each) =>
+              promo.videos?.[each] ? (
+                <TabsContent key={each} value={each} className="pt-2">
+                  <VideoPlayer src={promoFileUrl(promo.id, promo.videos[each]!, promo.updatedAt)} shape={each} posterAt={4} maxHeight="68vh" />
+                </TabsContent>
+              ) : null,
+            )}
+          </Tabs>
+
+          <aside className="grid content-start gap-3">
+            <section className="grid gap-2 rounded-lg border p-3">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Download {shape === "16x9" ? "16:9" : "9:16"}</h3>
+              {file && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" asChild className={promo.music ? "" : "col-span-2"}>
+                    <a href={promoFileUrl(promo.id, file, promo.updatedAt)} download={`${download}.mp4`}>
+                      <DownloadIcon /> {promo.music ? "With music" : "Download"}
+                    </a>
+                  </Button>
+                  {promo.music && (
                     <Button size="sm" variant="outline" asChild>
-                      <a href={promoFileUrl(promo.id, file, promo.updatedAt)} download={`${name}.mp4`}>
-                        <DownloadIcon /> {promo.music ? "With music" : "Download"}
+                      <a href={promoFileUrl(promo.id, `promo-${shape}-muted.mp4`, promo.updatedAt)} download={`${download}-muted.mp4`}>
+                        <VolumeXIcon /> Muted
                       </a>
                     </Button>
-                    {promo.music && (
-                      <Button size="sm" variant="outline" asChild>
-                        <a href={promoFileUrl(promo.id, `promo-${shape}-muted.mp4`, promo.updatedAt)} download={`${name}-muted.mp4`}>
-                          <VolumeXIcon /> Muted
-                        </a>
-                      </Button>
-                    )}
-                  </span>
+                  )}
                 </div>
-              </div>
-            );
-          })}
+              )}
+              <p className="text-xs text-muted-foreground">{shape === "16x9" ? "1920×1080" : "1080×1920"} MP4. Switch the tab for the other shape.</p>
+            </section>
+
+            <section className="grid gap-2 rounded-lg border p-3">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Music</h3>
+              <p className="flex items-center gap-1.5 text-sm">
+                <MusicIcon className="size-4 text-muted-foreground" />
+                {promo.music ? trackName(promo.music) : "No music"}
+              </p>
+              <MusicSelect value={music} tracks={tracks} onChange={setMusic} />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={running || !promo.canChangeMusic}
+                title={promo.canChangeMusic ? "Keeps the recording; only the music changes (a few seconds)" : "Made before recordings were kept: record again to change its music"}
+                onClick={() => act(api.changePromoMusic(promo.id, music), "Changing the music…")}
+              >
+                Change music
+              </Button>
+              {!promo.canChangeMusic && <p className="text-xs text-muted-foreground">This older promo has no saved recording: record again to change its music.</p>}
+            </section>
+
+            <section className="grid gap-1.5 rounded-lg border p-3 text-sm">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Details</h3>
+              <Detail label="Length" value={promo.seconds ? `${Math.round(promo.seconds)}s` : "—"} />
+              {promo.options && <Detail label="Speed" value={SPEEDS.find((speed) => speed.id === promo.options!.speed)?.label ?? "—"} />}
+              {promo.options && <Detail label="Scroll" value={LENGTHS.find((length) => length.id === promo.options!.length)?.label ?? "—"} />}
+              <Detail label="Cost" value="$0.00" mono />
+              <Detail label="Made" value={new Date(promo.createdAt).toLocaleString()} />
+              <p className="pt-1 text-xs text-muted-foreground">Record again uses: {optionsLabel(remakeWith)}</p>
+            </section>
+          </aside>
         </div>
       )}
+    </div>
+  );
+}
+
+function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={mono ? "font-mono tabular-nums" : ""}>{value}</span>
     </div>
   );
 }

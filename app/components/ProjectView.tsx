@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Preview } from "./Preview.tsx";
+import { VideoPlayer } from "./VideoPlayer.tsx";
 import { PublishDialog } from "./PublishDialog.tsx";
 import { SceneCard } from "./SceneCard.tsx";
 import { ChannelSwatch, Confirm, Field } from "./shared.tsx";
@@ -545,7 +546,7 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
             <TabsContent value="video" className="flex min-h-0 flex-1 flex-col">
               {project.hasVideo && project.render ? (
                 <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-                  <video key={project.render.renderedAt} controls className="min-h-0 flex-1 rounded-lg bg-black" src={`/files/${id}/video.mp4?v=${encodeURIComponent(project.render.renderedAt)}`} />
+                  <VideoPlayer key={project.render.renderedAt} shape="fill" src={`/files/${id}/video.mp4?v=${encodeURIComponent(project.render.renderedAt)}`} />
                   <div className="font-mono text-[11px] text-muted-foreground tabular-nums">
                     {project.render.seconds.toFixed(1)}s · rendered {new Date(project.render.renderedAt).toLocaleString()}
                   </div>

@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "./shared.tsx";
 import { JobProgress } from "./JobProgress.tsx";
 import { KnowledgePanel } from "./KnowledgePanel.tsx";
+import { VideoPlayer } from "./VideoPlayer.tsx";
 
 type Props = { id: string; jobs: Job[]; onOpenProject: (id: string) => void; onOpenPromo: (id: string) => void; onChanged: (client: Client) => void };
 
@@ -450,7 +451,7 @@ function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: 
         {item.title}
       </p>
       {item.status === "done" && item.projectId ? (
-        <video src={`/files/${item.projectId}/video.mp4#t=1`} controls preload="metadata" className={`mx-auto rounded-lg border bg-black ${item.format === "long" ? "aspect-video w-full" : "aspect-[9/16] max-h-96"}`} />
+        <VideoPlayer src={`/files/${item.projectId}/video.mp4`} shape={item.format === "long" ? "16x9" : "9x16"} maxHeight="24rem" />
       ) : (
         <p className="text-xs text-muted-foreground">{item.status === "failed" ? "Failed" : "Not rendered yet"}</p>
       )}
@@ -478,7 +479,7 @@ function PromoCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) 
       <p className="font-medium" dir="auto">
         {item.title}
       </p>
-      <video src={`${promoFileUrl(item.promoId!, "promo-9x16.mp4")}#t=4`} controls preload="metadata" className="mx-auto aspect-[9/16] max-h-96 rounded-lg border bg-black" />
+      <VideoPlayer src={promoFileUrl(item.promoId!, "promo-9x16.mp4")} shape="9x16" posterAt={4} maxHeight="24rem" />
       <Button size="sm" variant="outline" onClick={onOpen}>
         Open promo
       </Button>
