@@ -28,7 +28,8 @@ export type Speed = keyof typeof SPEEDS;
 export type Length = 15 | 30 | 45 | 60 | "page";
 export const LENGTHS: Length[] = [15, 30, 45, 60, "page"];
 
-export type PromoOptions = { speed: Speed; length: Length };
+/** `music` is a file in assets/music chosen by hand; without it each promo gets a different track. */
+export type PromoOptions = { speed: Speed; length: Length; music?: string };
 export const DEFAULT_OPTIONS: PromoOptions = { speed: "slow", length: 45 };
 
 /** "Whole page" stops here, so a huge page can't make an endless video. */

@@ -22,7 +22,10 @@ const LENGTHS: { id: PromoOptions["length"]; label: string }[] = [
   { id: 60, label: "60s" },
   { id: "page", label: "Whole page" },
 ];
-const optionsLabel = (options: PromoOptions) => `${SPEEDS.find((speed) => speed.id === options.speed)?.label} · ${LENGTHS.find((length) => length.id === options.length)?.label}`;
+/** "calm-piano.mp3" → "Calm piano". */
+const trackName = (file: string) => file.replace(/\.mp3$/i, "").replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+const optionsLabel = (options: PromoOptions) =>
+  `${SPEEDS.find((speed) => speed.id === options.speed)?.label} · ${LENGTHS.find((length) => length.id === options.length)?.label}${options.music ? ` · ${trackName(options.music)}` : ""}`;
 
 const SHAPE_LABEL = { "16x9": "16:9 · YouTube, website", "9x16": "9:16 · Reels, TikTok, stories" } as const;
 
@@ -31,6 +34,8 @@ export function PromosView({ id, jobs, onOpen }: Props) {
   const [promos, setPromos] = useState<Promo[]>([]);
   const [url, setUrl] = useState("");
   const [options, setOptions] = useState<PromoOptions>({ speed: "slow", length: 45 });
+  const [tracks, setTracks] = useState<{ file: string; seconds: number }[]>([]);
+  useEffect(() => void api.promoMusic().then(setTracks).catch(() => setTracks([])), []);
   const promoJobs = jobs.filter((job) => job.label.startsWith("Website promo: "));
   const finished = promoJobs.filter((job) => job.status === "done" || job.status === "failed").length;
 
@@ -99,6 +104,22 @@ export function PromosView({ id, jobs, onOpen }: Props) {
               </Button>
             ))}
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Music</span>
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            value={options.music ?? ""}
+            onChange={(event) => setOptions({ ...options, music: event.target.value || undefined })}
+          >
+            <option value="">Auto: a different track each time</option>
+            {tracks.map((track) => (
+              <option key={track.file} value={track.file}>
+                {trackName(track.file)} ({Math.round(track.seconds)}s)
+              </option>
+            ))}
+          </select>
+          {options.music && <audio key={options.music} src={`/promo-music/${options.music}`} controls preload="none" className="h-8" />}
         </div>
         <p className="text-xs text-muted-foreground">
           {options.length === "page" ? "Scrolls the whole page at this speed (up to 2 minutes)." : `Scrolls at this speed for up to ${options.length}s: a long page shows its first part, a short one ends sooner.`}
@@ -176,6 +197,7 @@ function PromoDetail({ promo, job, remakeWith, onRemake, onDelete }: { promo: Pr
         </Badge>
         {promo.seconds && <Badge variant="outline">{Math.round(promo.seconds)}s · music</Badge>}
         {promo.options && <Badge variant="outline">{optionsLabel(promo.options)}</Badge>}
+        {promo.music && <Badge variant="outline">♪ {trackName(promo.music)}</Badge>}
         <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake} title="With the speed and length chosen above">
           <RotateCcwIcon /> Record again ({optionsLabel(remakeWith)})
         </Button>

@@ -18,6 +18,7 @@ export default defineConfig({
       "/files": "http://127.0.0.1:4300",
       "/client-files": "http://127.0.0.1:4300",
       "/promo-files": "http://127.0.0.1:4300",
+      "/promo-music": "http://127.0.0.1:4300",
     },
   },
 });

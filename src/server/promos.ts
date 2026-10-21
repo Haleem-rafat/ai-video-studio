@@ -1,5 +1,6 @@
 import { hostOf } from "../clients/library.ts";
 import { deleteFailedPromos, deletePromo, listPromos, loadPromo, makePromo, promoDir, promoOptions, recoverPromos, startPromo } from "../promo/store.ts";
+import { listTracks, MUSIC_DIR } from "../promo/music.ts";
 import type { Ctx } from "./clients.ts";
 import { enqueue } from "./jobs.ts";
 
@@ -32,6 +33,16 @@ export async function handlePromos(ctx: Ctx): Promise<boolean> {
       { link: promoPage(promo.id) },
     );
     json(response, 202, { ...job, promoId: promo.id });
+    return true;
+  }
+
+  if (path === "/api/promos/music" && method === "GET") {
+    json(response, 200, await listTracks());
+    return true;
+  }
+
+  if ((match = path.match(/^\/promo-music\/([\w.-]+\.mp3)$/i))) {
+    await ctx.sendFile(request, response, ctx.inside(MUSIC_DIR, match[1]));
     return true;
   }
 

@@ -72,3 +72,8 @@ test("a promo can be deleted with its videos, but not while it is being made; fa
   assert.deepEqual(await deleteFailedPromos(), [broken.id]);
   assert.ok((await listPromos()).some((promo) => promo.id === making.id), "promos being made are kept");
 });
+
+test("a hand-picked track is kept with the options; anything that isn't an mp3 name is ignored", () => {
+  assert.deepEqual(promoOptions({ speed: "slow", length: 45, music: "calm-piano.mp3" }), { speed: "slow", length: 45, music: "calm-piano.mp3" });
+  assert.deepEqual(promoOptions({ speed: "slow", length: 45, music: "../../.env" }), { speed: "slow", length: 45 });
+});

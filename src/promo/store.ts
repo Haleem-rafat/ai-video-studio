@@ -4,7 +4,8 @@ import { join } from "node:path";
 
 import { OUTPUT_DIR } from "../config.ts";
 import { hostOf } from "../clients/library.ts";
-import { composePromo } from "./compose.ts";
+import { composePromo, lengthOf } from "./compose.ts";
+import { listTracks, MUSIC_DIR, pickMusic } from "./music.ts";
 import { SHAPES, type Shape } from "./layout.ts";
 import { DEFAULT_OPTIONS, LENGTHS, recordSite, SPEEDS, type Look, type PromoOptions } from "./record.ts";
 
@@ -22,6 +23,8 @@ export type Promo = {
   error?: string;
   seconds?: number;
   look?: Look;
+  /** The track in assets/music it plays. */
+  music?: string;
   /** Shape → file in the promo's folder. */
   videos?: Partial<Record<Shape, string>>;
 };
@@ -70,14 +73,15 @@ export async function listPromos(): Promise<Promo[]> {
 export function promoOptions(input: Partial<Record<keyof PromoOptions, unknown>> | undefined): PromoOptions {
   const speed = typeof input?.speed === "string" && input.speed in SPEEDS ? (input.speed as PromoOptions["speed"]) : DEFAULT_OPTIONS.speed;
   const length = LENGTHS.find((option) => option === input?.length) ?? DEFAULT_OPTIONS.length;
-  return { speed, length };
+  const music = typeof input?.music === "string" && /^[\w.-]+\.mp3$/i.test(input.music) ? input.music : undefined;
+  return { speed, length, ...(music ? { music } : {}) };
 }
 
 /** Starts a promo's record so its page can show it while it is made. */
 export async function startPromo(url: string, options: PromoOptions = DEFAULT_OPTIONS): Promise<Promo> {
   const site = siteUrl(url);
   // A second click while it records would only queue the same video again.
-  const same = (await listPromos()).find((promo) => promo.status === "making" && promo.url === site && promo.options?.speed === options.speed && promo.options?.length === options.length);
+  const same = (await listPromos()).find((promo) => promo.status === "making" && promo.url === site && promo.options?.speed === options.speed && promo.options?.length === options.length && promo.options?.music === options.music);
   if (same) throw new Error(`This promo of ${hostOf(site)} is already being made (${same.id})`);
   let id = promoIdFor(site);
   for (let n = 2; existsSync(promoDir(id)); n++) id = `${promoIdFor(site)}-${n}`;
@@ -93,15 +97,21 @@ export async function makePromo(id: string, log: (message: string) => void = con
   const work = join(dir, "work");
   try {
     const recording = await recordSite(promo.url, work, promo.options ?? DEFAULT_OPTIONS, log);
+    // A track long enough to play once, and not the one the last promos used.
+    const need = Math.min(await lengthOf(recording.desktop), await lengthOf(recording.phone));
+    const recent = (await listPromos()).map((other) => other.music).filter((file): file is string => Boolean(file));
+    const music = pickMusic(await listTracks(), need, recent, promo.options?.music);
+    if (!music) throw new Error(`No music in ${MUSIC_DIR}`);
+    log(`promo: music ${music}`);
     const videos: Promo["videos"] = {};
     let seconds = 0;
     for (const shape of SHAPES) {
       log(`promo: composing the ${shape} video ...`);
       const file = `promo-${shape}.mp4`;
-      ({ seconds } = await composePromo({ ...recording, dir: work, shape, out: join(dir, file) }));
+      ({ seconds } = await composePromo({ ...recording, dir: work, shape, out: join(dir, file), music: join(MUSIC_DIR, music) }));
       videos[shape] = file;
     }
-    const done: Promo = { ...promo, title: recording.title || promo.host, status: "done", seconds, look: recording.look, videos };
+    const done: Promo = { ...promo, title: recording.title || promo.host, status: "done", seconds, look: recording.look, music, videos };
     await savePromo(done);
     await rm(work, { recursive: true, force: true });
     log(`promo: done, ${seconds.toFixed(1)}s in ${SHAPES.join(" and ")}`);

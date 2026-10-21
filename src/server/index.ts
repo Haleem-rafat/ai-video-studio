@@ -289,7 +289,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   }
 
   // Website promos: a site scrolling on a laptop and a phone (src/server/promos.ts).
-  if (path.startsWith("/api/promos") || path.startsWith("/promo-files/")) {
+  if (path.startsWith("/api/promos") || path.startsWith("/promo-files/") || path.startsWith("/promo-music/")) {
     const handled = await handlePromos({ path, method, url, request, response, json, body, sendFile, inside, fail: (status, message) => new HttpError(status, message) });
     if (handled) return;
   }

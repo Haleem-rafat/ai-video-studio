@@ -9,7 +9,6 @@ import { layoutFor, type Layout, type Rect, type Shape } from "./layout.ts";
 import type { Look } from "./record.ts";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const MUSIC = join(import.meta.dirname, "../../assets/music/lofi-1.mp3");
 const FPS = 30;
 
 const run = promisify(execFile);
@@ -118,12 +117,12 @@ export function promoFilter(layout: Layout, seconds: number): string {
   ].join(";");
 }
 
-/** Makes one promo video from the two recordings. */
-export async function composePromo(input: { desktop: string; phone: string; look: Look; dir: string; shape: Shape; out: string }): Promise<{ seconds: number }> {
+/** Makes one promo video from the two recordings, over `music` (a track shorter than the video loops). */
+export async function composePromo(input: { desktop: string; phone: string; look: Look; dir: string; shape: Shape; out: string; music: string }): Promise<{ seconds: number }> {
   const layout = layoutFor(input.shape);
   const layers = await drawLayers(layout, input.look, input.dir, input.shape);
   const seconds = Math.min(await lengthOf(input.desktop), await lengthOf(input.phone));
-  if (!existsSync(MUSIC)) throw new Error(`No music at ${MUSIC}`);
+  if (!existsSync(input.music)) throw new Error(`No music at ${input.music}`);
   await run(
     "ffmpeg",
     [
@@ -131,7 +130,7 @@ export async function composePromo(input: { desktop: string; phone: string; look
       ...["-loop", "1", "-framerate", String(FPS), "-i", layers.back],
       ...["-i", input.desktop, "-i", input.phone],
       ...[layers.laptop, layers.phone].flatMap((layer) => ["-loop", "1", "-framerate", String(FPS), "-i", layer]),
-      ...["-stream_loop", "-1", "-i", MUSIC],
+      ...["-stream_loop", "-1", "-i", input.music],
       ...["-filter_complex", promoFilter(layout, seconds), "-map", "[v]", "-map", "[m]"],
       ...["-t", seconds.toFixed(2), "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", input.out],
     ],
