@@ -71,7 +71,9 @@ export async function handlePrompted(ctx: Ctx): Promise<boolean> {
     }
     // A Word file carries the id of the client it was made for.
     if (format === "docx" && imported.clientId && imported.clientId !== id && !force) throw fail(409, "This file was made for another client");
-    const count = Object.values(imported.answers).filter((value) => (Array.isArray(value) ? value.length : value.trim())).length;
+    // New or changed answers only: a returned file still holds the answers it was sent with.
+    const saved = client.profile?.answers ?? {};
+    const count = Object.entries(imported.answers).filter(([qid, value]) => (Array.isArray(value) ? value.length : value.trim()) && JSON.stringify(value) !== JSON.stringify(saved[qid]?.value) && !(qid === "output.language" && value === client.language)).length;
     if (dryRun) {
       json(response, 200, { count, answers: imported.answers, errors: imported.errors });
       return true;

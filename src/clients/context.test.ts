@@ -21,6 +21,9 @@ test("the client's answers come first and win over the website and Knowledge", (
   assert.match(text, /صفحات حجز للكوتشز/);
   assert.ok(text.indexOf("صفحات حجز للكوتشز") < text.indexOf("HOW IT WORKS"), "answers before Knowledge");
   assert.match(text, /win over/i);
+  // The Knowledge no longer calls itself the source of truth once the client has answered.
+  assert.doesNotMatch(text, /source of truth/);
+  assert.match(text, /the client's answers above win/);
 });
 
 test("each writer gets only what it uses: reel direction goes to reels, not to ideas", () => {
@@ -48,6 +51,8 @@ test("restrictions reach every writer, marked as rules to always follow", () => 
 test("a current offer is kept apart from the stable facts, as temporary", () => {
   const text = businessContext(make({ "goals.hasOffer": entry("yes"), "goals.offerDetails": entry("20% off until 30 November") }), "ideas");
   assert.match(text, /CURRENT CAMPAIGN \(temporary/);
+  // An offer post is built on it; other posts use it only where it fits.
+  assert.match(text, /offer posts are built on it/);
   assert.match(text, /20% off until 30 November/);
 });
 

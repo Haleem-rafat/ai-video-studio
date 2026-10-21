@@ -67,3 +67,10 @@ test("answers are kept in the client's own file and come back after loading", as
   const loaded = await loadClient("risero");
   assert.equal(loaded.profile!.answers["overview.what"].value, "Booking pages");
 });
+
+test("re-importing a file with an unchanged answer keeps where that answer came from", () => {
+  const first = applyAnswers(base(), { "audience.who": "Coaches" }, { source: "app", confirmed: ["audience.who"] }).client;
+  const { client } = applyAnswers(first, { "audience.who": "Coaches", "overview.what": "Booking pages" }, { source: "docx", keepEmpty: true });
+  assert.equal(client.profile!.answers["audience.who"].source, "website");
+  assert.equal(client.profile!.answers["overview.what"].source, "docx");
+});

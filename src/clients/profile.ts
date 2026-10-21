@@ -58,7 +58,10 @@ export function applyAnswers(client: Client, input: unknown, options: { source: 
   const { answers, errors } = validateAnswers(input);
   // Validation drops an emptied choice; in the app any emptied field must clear its answer.
   const cleared = !options.keepEmpty && input && typeof input === "object" ? Object.entries(input as Record<string, unknown>).filter(([id, value]) => QUESTIONS.some((q) => q.id === id) && (value === "" || (Array.isArray(value) && !value.length))).map(([id]) => id) : [];
-  if (options.keepEmpty) for (const [id, value] of Object.entries(answers)) if (Array.isArray(value) ? !value.length : !value.trim()) delete answers[id];
+  const same = (a: Value, b: Value | undefined) => JSON.stringify(a) === JSON.stringify(b);
+  // An import never clears, and leaves an answer it didn't change (and its source) as it was.
+  if (options.keepEmpty)
+    for (const [id, value] of Object.entries(answers)) if ((Array.isArray(value) ? !value.length : !value.trim()) || same(value, client.profile?.answers[id]?.value)) delete answers[id];
   const next: Client = { ...client };
   const language = answers[LANGUAGE];
   if (language === "ar" || language === "en") next.language = language;
