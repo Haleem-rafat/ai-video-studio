@@ -7,9 +7,10 @@ import type { Client, Idea, IdeaDay, Post, Slide, Trend } from "../src/clients/t
 import type { Library, LibraryItem } from "../src/clients/library.ts";
 import type { Knowledge } from "../src/clients/knowledge.ts";
 import type { Promo } from "../src/promo/store.ts";
+import type { PromoOptions } from "../src/promo/record.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
 
-export type { Knowledge, Promo };
+export type { Knowledge, Promo, PromoOptions };
 export type { ArtStyleChoice, ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
 export type ArtStyleInfo = { id: ArtStyleId; label: string; preview: boolean };
 export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
@@ -115,7 +116,7 @@ export const api = {
   answerKnowledge: (id: string, questionId: string, answer: string) => call<Job>("POST", `/api/clients/${id}/knowledge/answer`, { questionId, answer }),
   promos: () => call<Promo[]>("GET", "/api/promos"),
   promo: (id: string) => call<Promo>("GET", `/api/promos/${id}`),
-  makePromo: (url: string) => call<Job & { promoId: string }>("POST", "/api/promos", { url }),
+  makePromo: (url: string, options?: PromoOptions) => call<Job & { promoId: string }>("POST", "/api/promos", { url, ...options }),
   editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[] }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
 };
 

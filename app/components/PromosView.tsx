@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, RotateCcwIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, promoFileUrl, type Job, type Promo } from "../api.ts";
+import { api, promoFileUrl, type Job, type Promo, type PromoOptions } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,12 +10,27 @@ import { JobProgress } from "./JobProgress.tsx";
 
 type Props = { id: string | null; jobs: Job[]; onOpen: (id: string | null) => void };
 
+const SPEEDS: { id: PromoOptions["speed"]; label: string; hint: string }[] = [
+  { id: "slow", label: "Slow", hint: "Every section can be read" },
+  { id: "normal", label: "Normal", hint: "A relaxed scroll" },
+  { id: "fast", label: "Fast", hint: "A quick tour of the page" },
+];
+const LENGTHS: { id: PromoOptions["length"]; label: string }[] = [
+  { id: 15, label: "15s" },
+  { id: 30, label: "30s" },
+  { id: 45, label: "45s" },
+  { id: 60, label: "60s" },
+  { id: "page", label: "Whole page" },
+];
+const optionsLabel = (options: PromoOptions) => `${SPEEDS.find((speed) => speed.id === options.speed)?.label} · ${LENGTHS.find((length) => length.id === options.length)?.label}`;
+
 const SHAPE_LABEL = { "16x9": "16:9 · YouTube, website", "9x16": "9:16 · Reels, TikTok, stories" } as const;
 
 /** Website promos: any site scrolling on a laptop and a phone, with music, in both video shapes. */
 export function PromosView({ id, jobs, onOpen }: Props) {
   const [promos, setPromos] = useState<Promo[]>([]);
   const [url, setUrl] = useState("");
+  const [options, setOptions] = useState<PromoOptions>({ speed: "slow", length: 45 });
   const promoJobs = jobs.filter((job) => job.label.startsWith("Website promo: "));
   const finished = promoJobs.filter((job) => job.status === "done" || job.status === "failed").length;
 
@@ -25,7 +40,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
 
   const make = (site: string) =>
     api
-      .makePromo(site)
+      .makePromo(site, options)
       .then((job) => {
         toast.success("Recording the website…");
         setUrl("");
@@ -35,6 +50,10 @@ export function PromosView({ id, jobs, onOpen }: Props) {
       .catch((error: Error) => toast.error(error.message));
 
   const open = id ? promos.find((promo) => promo.id === id) : undefined;
+  // Opening a promo shows the speed and length it was made with, ready to record again or adjust.
+  useEffect(() => {
+    if (open?.options) setOptions(open.options);
+  }, [open?.id]);
   const jobOf = (promo: Promo) => promoJobs.find((job) => job.link === `/marketing/promos/${promo.id}`);
 
   return (
@@ -51,6 +70,27 @@ export function PromosView({ id, jobs, onOpen }: Props) {
           <h2 className="font-semibold">Website promo</h2>
         </div>
         <p className="text-sm text-muted-foreground">The site scrolls top to bottom on a laptop and a phone, with music, as a 16:9 and a 9:16 video. Recorded on this Mac: no AI cost.</p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Speed</span>
+            {SPEEDS.map((speed) => (
+              <Button key={speed.id} type="button" size="sm" title={speed.hint} variant={options.speed === speed.id ? "default" : "outline"} onClick={() => setOptions({ ...options, speed: speed.id })}>
+                {speed.label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Length</span>
+            {LENGTHS.map((length) => (
+              <Button key={length.id} type="button" size="sm" variant={options.length === length.id ? "default" : "outline"} onClick={() => setOptions({ ...options, length: length.id })}>
+                {length.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {options.length === "page" ? "Scrolls the whole page at this speed (up to 2 minutes)." : `Scrolls at this speed for up to ${options.length}s: a long page shows its first part, a short one ends sooner.`}
+        </p>
         <div className="flex gap-2">
           <Input value={url} placeholder="https://yoursite.com" onChange={(event) => setUrl(event.target.value)} />
           <Button type="submit" disabled={!url.trim()}>
@@ -59,7 +99,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
         </div>
       </form>
 
-      {open && <PromoDetail promo={open} job={jobOf(open)} onRemake={() => make(open.url)} />}
+      {open && <PromoDetail promo={open} job={jobOf(open)} remakeWith={options} onRemake={() => make(open.url)} />}
 
       {promos.length > 0 && (
         <div className="grid gap-2">
@@ -87,7 +127,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
   );
 }
 
-function PromoDetail({ promo, job, onRemake }: { promo: Promo; job?: Job; onRemake: () => void }) {
+function PromoDetail({ promo, job, remakeWith, onRemake }: { promo: Promo; job?: Job; remakeWith: PromoOptions; onRemake: () => void }) {
   const running = job && (job.status === "queued" || job.status === "running");
   return (
     <div className="grid gap-4 rounded-xl border p-4">
@@ -102,8 +142,9 @@ function PromoDetail({ promo, job, onRemake }: { promo: Promo; job?: Job; onRema
           $0.00
         </Badge>
         {promo.seconds && <Badge variant="outline">{Math.round(promo.seconds)}s · music</Badge>}
-        <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake}>
-          <RotateCcwIcon /> Record again
+        {promo.options && <Badge variant="outline">{optionsLabel(promo.options)}</Badge>}
+        <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake} title="With the speed and length chosen above">
+          <RotateCcwIcon /> Record again ({optionsLabel(remakeWith)})
         </Button>
       </div>
       {running && <JobProgress job={job} compact />}

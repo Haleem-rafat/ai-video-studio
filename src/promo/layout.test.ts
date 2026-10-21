@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { concatList, scrollAt, VIEWPORTS } from "./record.ts";
+import { concatList, scrollAt, scrollPlan, SPEEDS, VIEWPORTS } from "./record.ts";
 import { layoutFor, SHAPES, type Rect } from "./layout.ts";
 
 const inside = (rect: Rect, width: number, height: number) => rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= width && rect.y + rect.h <= height;
@@ -42,14 +42,42 @@ for (const shape of SHAPES) {
   });
 }
 
-test("the scroll eases from the top to exactly the bottom, never past either", () => {
-  assert.equal(scrollAt(-1, 5000), 0);
-  assert.equal(scrollAt(0, 5000), 0);
-  assert.equal(scrollAt(0.5, 5000), 2500);
-  assert.equal(scrollAt(1, 5000), 5000);
-  assert.equal(scrollAt(2, 5000), 5000);
-  assert.ok(scrollAt(0.05, 5000) < 50, "the start is gentle");
-  for (let t = 0; t < 1; t += 0.01) assert.ok(scrollAt(t + 0.01, 5000) >= scrollAt(t, 5000), "it never scrolls back");
+test("the scroll starts and stops softly, moves at a steady speed between, and never passes either end", () => {
+  const ramp = 0.1;
+  assert.equal(scrollAt(-1, 5000, ramp), 0);
+  assert.equal(scrollAt(0, 5000, ramp), 0);
+  assert.equal(scrollAt(0.5, 5000, ramp), 2500);
+  assert.equal(scrollAt(1, 5000, ramp), 5000);
+  assert.equal(scrollAt(2, 5000, ramp), 5000);
+  assert.ok(scrollAt(0.02, 5000, ramp) < 30, "the start is gentle");
+  // Steady in the middle: equal time, equal distance.
+  const step = (t: number) => scrollAt(t + 0.1, 5000, ramp) - scrollAt(t, 5000, ramp);
+  assert.ok(Math.abs(step(0.3) - step(0.6)) <= 1);
+  for (let t = 0; t < 1; t += 0.01) assert.ok(scrollAt(t + 0.01, 5000, ramp) >= scrollAt(t, 5000, ramp), "it never scrolls back");
+});
+
+test("slow, normal and fast are real reading speeds, slow the slowest", () => {
+  assert.ok(SPEEDS.slow < SPEEDS.normal && SPEEDS.normal < SPEEDS.fast);
+  assert.ok(SPEEDS.slow <= 160, "slow lets a viewer read");
+});
+
+test("the whole page takes as long as its speed needs; a set length shows the part of the page that fits", () => {
+  const whole = scrollPlan(10000, { speed: "slow", length: "page" });
+  assert.equal(whole.share, 1);
+  assert.ok(Math.abs(whole.seconds - 10000 / SPEEDS.slow) < 1.5);
+
+  const short = scrollPlan(10000, { speed: "slow", length: 30 });
+  assert.ok(short.seconds <= 30);
+  assert.ok(short.share < 1 && short.share > 0.3);
+
+  // A short page at a set length ends when the page does, not padded to the length.
+  const tiny = scrollPlan(900, { speed: "normal", length: 60 });
+  assert.equal(tiny.share, 1);
+  assert.ok(tiny.seconds < 10);
+
+  // A page that doesn't scroll still gets a moment on screen; a huge one is capped.
+  assert.ok(scrollPlan(0, { speed: "fast", length: "page" }).seconds >= 3);
+  assert.ok(scrollPlan(200000, { speed: "slow", length: "page" }).seconds <= 120);
 });
 
 test("each frame plays for as long as it was on screen, and the last one is not dropped", () => {

@@ -1,5 +1,5 @@
 import { hostOf } from "../clients/library.ts";
-import { listPromos, loadPromo, makePromo, promoDir, recoverPromos, startPromo } from "../promo/store.ts";
+import { listPromos, loadPromo, makePromo, promoDir, promoOptions, recoverPromos, startPromo } from "../promo/store.ts";
 import type { Ctx } from "./clients.ts";
 import { enqueue } from "./jobs.ts";
 
@@ -22,8 +22,8 @@ export async function handlePromos(ctx: Ctx): Promise<boolean> {
   }
 
   if (path === "/api/promos" && method === "POST") {
-    const { url } = await body<{ url?: string }>(request);
-    const promo = await startPromo(url ?? "").catch((error: Error) => {
+    const { url, speed, length } = await body<{ url?: string; speed?: unknown; length?: unknown }>(request);
+    const promo = await startPromo(url ?? "", promoOptions({ speed, length })).catch((error: Error) => {
       throw fail(400, error.message);
     });
     // Chrome and ffmpeg only: nothing is paid, so no cost file.

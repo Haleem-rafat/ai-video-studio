@@ -6,7 +6,7 @@ import { OUTPUT_DIR } from "../config.ts";
 import { hostOf } from "../clients/library.ts";
 import { composePromo } from "./compose.ts";
 import { SHAPES, type Shape } from "./layout.ts";
-import { recordSite, type Look } from "./record.ts";
+import { DEFAULT_OPTIONS, LENGTHS, recordSite, SPEEDS, type Look, type PromoOptions } from "./record.ts";
 
 /** A website promo: the site scrolling on a laptop and a phone, in both video shapes. */
 export type Promo = {
@@ -17,6 +17,8 @@ export type Promo = {
   title: string;
   createdAt: string;
   status: "making" | "done" | "failed";
+  /** How fast and how long it scrolls; promos from before the choice have none (they scrolled 16s). */
+  options?: PromoOptions;
   error?: string;
   seconds?: number;
   look?: Look;
@@ -64,12 +66,19 @@ export async function listPromos(): Promise<Promo[]> {
   return promos.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** Speed and length as the app sent them; anything unknown is the default. */
+export function promoOptions(input: Partial<Record<keyof PromoOptions, unknown>> | undefined): PromoOptions {
+  const speed = typeof input?.speed === "string" && input.speed in SPEEDS ? (input.speed as PromoOptions["speed"]) : DEFAULT_OPTIONS.speed;
+  const length = LENGTHS.find((option) => option === input?.length) ?? DEFAULT_OPTIONS.length;
+  return { speed, length };
+}
+
 /** Starts a promo's record so its page can show it while it is made. */
-export async function startPromo(url: string): Promise<Promo> {
+export async function startPromo(url: string, options: PromoOptions = DEFAULT_OPTIONS): Promise<Promo> {
   const site = siteUrl(url);
   let id = promoIdFor(site);
   for (let n = 2; existsSync(promoDir(id)); n++) id = `${promoIdFor(site)}-${n}`;
-  const promo: Promo = { id, url: site, host: hostOf(site), title: hostOf(site), createdAt: new Date().toISOString(), status: "making" };
+  const promo: Promo = { id, url: site, host: hostOf(site), title: hostOf(site), createdAt: new Date().toISOString(), status: "making", options };
   await savePromo(promo);
   return promo;
 }
@@ -80,7 +89,7 @@ export async function makePromo(id: string, log: (message: string) => void = con
   const dir = promoDir(id);
   const work = join(dir, "work");
   try {
-    const recording = await recordSite(promo.url, work, log);
+    const recording = await recordSite(promo.url, work, promo.options ?? DEFAULT_OPTIONS, log);
     const videos: Promo["videos"] = {};
     let seconds = 0;
     for (const shape of SHAPES) {
