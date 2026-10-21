@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { lengthOf } from "./compose.ts";
 
-/** Promo music: every .mp3 here is a track. */
-export const MUSIC_DIR = join(import.meta.dirname, "../../assets/music");
+/** Promo music: every .mp3 here is a track (PROMO_MUSIC_DIR in tests). */
+export const MUSIC_DIR = process.env.PROMO_MUSIC_DIR ?? join(import.meta.dirname, "../../assets/music");
 
 export type Track = { file: string; seconds: number };
 
@@ -70,4 +70,53 @@ export async function composeTrack(mood: Mood, log: (message: string) => void): 
   await writeFile(join(MUSIC_DIR, file), new Uint8Array(await response.arrayBuffer()));
   log(`promo: new track ${file} added to the music library`);
   return file;
+}
+
+/** A name as a safe file name: "My Song (final).MP3" → "my-song-final.mp3". */
+export function trackSlug(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/\.mp3$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${base || "track"}.mp3`;
+}
+
+const isTrack = (file: string) => /^[\w.-]+\.mp3$/i.test(file) && existsSync(join(MUSIC_DIR, file));
+
+/** The slug, or the slug with the first free number. */
+function freeName(name: string, taken: string[]): string {
+  const slug = trackSlug(name);
+  if (!taken.includes(slug)) return slug;
+  for (let n = 2; ; n++) if (!taken.includes(slug.replace(/\.mp3$/, `-${n}.mp3`))) return slug.replace(/\.mp3$/, `-${n}.mp3`);
+}
+
+/** Adds an uploaded song to the library; refuses anything that isn't audio. */
+export async function addTrack(name: string, bytes: Uint8Array): Promise<Track> {
+  await mkdir(MUSIC_DIR, { recursive: true });
+  const file = freeName(name, await readdir(MUSIC_DIR));
+  const path = join(MUSIC_DIR, file);
+  await writeFile(path, bytes);
+  const seconds = await lengthOf(path).catch(() => NaN);
+  if (!(seconds > 1)) {
+    await rm(path, { force: true });
+    throw new Error(`"${name}" is not a sound file`);
+  }
+  return { file, seconds };
+}
+
+/** Renames a track; returns its new file name. */
+export async function renameTrack(file: string, name: string): Promise<string> {
+  if (!isTrack(file)) throw new Error(`No track "${file}"`);
+  const next = trackSlug(name);
+  if (next === file) return file;
+  if (existsSync(join(MUSIC_DIR, next))) throw new Error(`A track named "${next}" is already in the library`);
+  await rename(join(MUSIC_DIR, file), join(MUSIC_DIR, next));
+  return next;
+}
+
+/** Deletes a track; promos already made keep their sound. */
+export async function deleteTrack(file: string): Promise<void> {
+  if (!isTrack(file)) throw new Error(`No track "${file}"`);
+  await rm(join(MUSIC_DIR, file));
 }

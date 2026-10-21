@@ -1,12 +1,16 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { OUTPUT_DIR } from "../config.ts";
 import { hostOf } from "../clients/library.ts";
 import { composePromo, lengthOf } from "./compose.ts";
 import { composeTrack, listTracks, MOODS, MUSIC_DIR, pickMusic, type Mood } from "./music.ts";
 import { SHAPES, type Shape } from "./layout.ts";
+
+const run = promisify(execFile);
 import { DEFAULT_OPTIONS, LENGTHS, recordSite, SPEEDS, type Look, type PromoOptions } from "./record.ts";
 
 /** A website promo: the site scrolling on a laptop and a phone, in both video shapes. */
@@ -17,6 +21,8 @@ export type Promo = {
   /** The page's title, once recorded. */
   title: string;
   createdAt: string;
+  /** When its record last changed: new music or a new name. */
+  updatedAt?: string;
   status: "making" | "done" | "failed";
   /** How fast and how long it scrolls; promos from before the choice have none (they scrolled 16s). */
   options?: PromoOptions;
@@ -54,7 +60,7 @@ export function promoIdFor(url: string, at = new Date()): string {
 
 export async function savePromo(promo: Promo): Promise<void> {
   await mkdir(promoDir(promo.id), { recursive: true });
-  await writeFile(join(promoDir(promo.id), "promo.json"), `${JSON.stringify(promo, null, 2)}\n`);
+  await writeFile(join(promoDir(promo.id), "promo.json"), `${JSON.stringify({ ...promo, updatedAt: new Date().toISOString() }, null, 2)}\n`);
 }
 
 export async function loadPromo(id: string): Promise<Promo> {
@@ -91,38 +97,97 @@ export async function startPromo(url: string, options: PromoOptions = DEFAULT_OP
   return promo;
 }
 
+/** The screen recordings, kept so the music can change without recording again. */
+const recordingsOf = (id: string) => ({ desktop: join(promoDir(id), "rec", "desktop.mp4"), phone: join(promoDir(id), "rec", "phone.mp4") });
+
+/** The track for `wanted` (Auto, a library file, "none" or "new:<mood>"), for a promo `need` seconds long. */
+async function chooseMusic(wanted: string | undefined, need: number, log: (message: string) => void): Promise<string | undefined> {
+  if (wanted === "none") return undefined;
+  if (wanted?.startsWith("new:")) return composeTrack(wanted.slice(4) as Mood, log);
+  // A track long enough to play once, and not the one the last promos used.
+  const recent = (await listPromos()).map((other) => other.music).filter((file): file is string => Boolean(file));
+  const music = pickMusic(await listTracks(), need, recent, wanted);
+  if (!music) throw new Error(`No music in ${MUSIC_DIR}`);
+  return music;
+}
+
+/** Composes both shapes from the recordings over `music` (none is silent); old muted copies are dropped. */
+async function composeShapes(id: string, look: Look, music: string | undefined, log: (message: string) => void): Promise<{ videos: Promo["videos"]; seconds: number }> {
+  const dir = promoDir(id);
+  const rec = recordingsOf(id);
+  log(music ? `promo: music ${music}` : "promo: no music");
+  const videos: Promo["videos"] = {};
+  let seconds = 0;
+  for (const shape of SHAPES) {
+    log(`promo: composing the ${shape} video ...`);
+    const file = `promo-${shape}.mp4`;
+    const next = join(dir, `next-${file}`);
+    ({ seconds } = await composePromo({ ...rec, look, dir: join(dir, "rec"), shape, out: next, music: music ? join(MUSIC_DIR, music) : undefined }));
+    // The finished file replaces the old one in one step, so a download never gets half a video.
+    await rename(next, join(dir, file));
+    await rm(join(dir, mutedName(shape)), { force: true });
+    videos[shape] = file;
+  }
+  for (const layer of await readdir(join(dir, "rec"))) if (layer.endsWith(".png")) await rm(join(dir, "rec", layer));
+  return { videos, seconds };
+}
+
 /** Records the site and makes both videos; the promo's record says how it went. */
 export async function makePromo(id: string, log: (message: string) => void = console.log): Promise<Promo> {
   const promo = await loadPromo(id);
-  const dir = promoDir(id);
-  const work = join(dir, "work");
   try {
-    const recording = await recordSite(promo.url, work, promo.options ?? DEFAULT_OPTIONS, log);
-    // A track long enough to play once, and not the one the last promos used.
+    const recording = await recordSite(promo.url, join(promoDir(id), "rec"), promo.options ?? DEFAULT_OPTIONS, log);
     const need = Math.min(await lengthOf(recording.desktop), await lengthOf(recording.phone));
-    const recent = (await listPromos()).map((other) => other.music).filter((file): file is string => Boolean(file));
-    const wanted = promo.options?.music;
-    const music =
-      wanted === "none" ? undefined : wanted?.startsWith("new:") ? await composeTrack(wanted.slice(4) as Mood, log) : pickMusic(await listTracks(), need, recent, wanted);
-    if (music === "") throw new Error(`No music in ${MUSIC_DIR}`);
-    log(music ? `promo: music ${music}` : "promo: no music");
-    const videos: Promo["videos"] = {};
-    let seconds = 0;
-    for (const shape of SHAPES) {
-      log(`promo: composing the ${shape} video ...`);
-      const file = `promo-${shape}.mp4`;
-      ({ seconds } = await composePromo({ ...recording, dir: work, shape, out: join(dir, file), music: music ? join(MUSIC_DIR, music) : undefined }));
-      videos[shape] = file;
-    }
+    const music = await chooseMusic(promo.options?.music, need, log);
+    const { videos, seconds } = await composeShapes(id, recording.look, music, log);
     const done: Promo = { ...promo, title: recording.title || promo.host, status: "done", seconds, look: recording.look, ...(music ? { music } : {}), videos };
     await savePromo(done);
-    await rm(work, { recursive: true, force: true });
     log(`promo: done, ${seconds.toFixed(1)}s in ${SHAPES.join(" and ")}`);
     return done;
   } catch (error) {
     await savePromo({ ...promo, status: "failed", error: error instanceof Error ? error.message : String(error) });
     throw error;
   }
+}
+
+/** Whether the promo's screen recordings are kept (promos from before 2026-10-21 deleted them). */
+export const canChangeMusic = (id: string) => Object.values(recordingsOf(id)).every((path) => existsSync(path));
+
+/** Puts other music under a finished promo (Auto, a library file, "none" or "new:<mood>"), without recording again. */
+export async function changeMusic(id: string, wanted: string, log: (message: string) => void = console.log): Promise<Promo> {
+  const promo = await loadPromo(id);
+  if (promo.status !== "done") throw new Error("Only a finished promo can change its music");
+  if (!canChangeMusic(id) || !promo.look) throw new Error("This promo was made before recordings were kept. Record again to change its music.");
+  const rec = recordingsOf(id);
+  const need = Math.min(await lengthOf(rec.desktop), await lengthOf(rec.phone));
+  const music = await chooseMusic(wanted || undefined, need, log);
+  const { videos, seconds } = await composeShapes(id, promo.look, music, log);
+  const { music: _old, ...rest } = promo;
+  const next: Promo = { ...rest, ...(music ? { music } : {}), seconds, videos, options: { ...(promo.options ?? DEFAULT_OPTIONS), ...(wanted ? { music: wanted } : {}) } };
+  if (!wanted && next.options) delete next.options.music;
+  await savePromo(next);
+  return next;
+}
+
+/** Renames a promo. */
+export async function renamePromo(id: string, title: string): Promise<Promo> {
+  const name = title.trim();
+  if (!name) throw new Error("A promo needs a name");
+  const next = { ...(await loadPromo(id)), title: name };
+  await savePromo(next);
+  return next;
+}
+
+const mutedName = (shape: Shape) => `promo-${shape}-muted.mp4`;
+
+/** The promo's video in `shape` without sound (made once, then kept until the video changes). */
+export async function mutedFile(id: string, shape: Shape): Promise<string> {
+  const promo = await loadPromo(id);
+  const file = promo.videos?.[shape];
+  if (!file || !existsSync(join(promoDir(id), file))) throw new Error(`No ${shape} video in this promo`);
+  const muted = join(promoDir(id), mutedName(shape));
+  if (!existsSync(muted)) await run("ffmpeg", ["-v", "error", "-y", "-i", join(promoDir(id), file), "-an", "-c:v", "copy", "-movflags", "+faststart", muted]);
+  return muted;
 }
 
 /** Promos left "making" when the studio stopped: their job is gone. */

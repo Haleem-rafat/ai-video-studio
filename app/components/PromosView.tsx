@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
+import { CheckIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, MusicIcon, PencilIcon, RotateCcwIcon, Trash2Icon, VolumeXIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, promoFileUrl, type Job, type Promo, type PromoOptions } from "../api.ts";
+import { api, promoFileUrl, type Job, type PromoOptions, type PromoState } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JobProgress } from "./JobProgress.tsx";
+import { MusicLibrary } from "./MusicLibrary.tsx";
+import { MOOD_LABEL, MOODS, trackName, type Track } from "./promo-music.ts";
 
 type Props = { id: string | null; jobs: Job[]; onOpen: (id: string | null) => void };
 
@@ -22,33 +24,50 @@ const LENGTHS: { id: PromoOptions["length"]; label: string }[] = [
   { id: 60, label: "60s" },
   { id: "page", label: "Whole page" },
 ];
-const MOODS = ["calm", "upbeat", "corporate", "cinematic", "lofi"] as const;
-const MOOD_LABEL: Record<(typeof MOODS)[number], string> = { calm: "calm", upbeat: "upbeat", corporate: "corporate", cinematic: "cinematic", lofi: "lo-fi" };
-
-/** "calm-piano.mp3" → "Calm piano"; "none" → "No music"; "new:upbeat" → "New upbeat track". */
-const trackName = (file: string) =>
-  file === "none"
-    ? "No music"
-    : file.startsWith("new:")
-      ? `New ${MOOD_LABEL[file.slice(4) as (typeof MOODS)[number]] ?? file.slice(4)} track`
-      : file.replace(/\.mp3$/i, "").replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase());
 const optionsLabel = (options: PromoOptions) =>
   `${SPEEDS.find((speed) => speed.id === options.speed)?.label} · ${LENGTHS.find((length) => length.id === options.length)?.label}${options.music ? ` · ${trackName(options.music)}` : ""}`;
 
 const SHAPE_LABEL = { "16x9": "16:9 · YouTube, website", "9x16": "9:16 · Reels, TikTok, stories" } as const;
 
+/** Every music choice: Auto, none, a new AI track, or a library track. */
+function MusicSelect({ value, tracks, onChange }: { value: string; tracks: Track[]; onChange: (value: string) => void }) {
+  return (
+    <select className="h-8 rounded-md border bg-background px-2 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>
+      <option value="">Auto: a different track each time</option>
+      <option value="none">No music</option>
+      <optgroup label="Make a new AI track (ElevenLabs)">
+        {MOODS.map((mood) => (
+          <option key={mood} value={`new:${mood}`}>
+            New {MOOD_LABEL[mood].toLowerCase()} track
+          </option>
+        ))}
+      </optgroup>
+      <optgroup label="Library">
+        {tracks.map((track) => (
+          <option key={track.file} value={track.file}>
+            {trackName(track.file)} ({Math.round(track.seconds)}s)
+          </option>
+        ))}
+      </optgroup>
+    </select>
+  );
+}
+
 /** Website promos: any site scrolling on a laptop and a phone, with music, in both video shapes. */
 export function PromosView({ id, jobs, onOpen }: Props) {
-  const [promos, setPromos] = useState<Promo[]>([]);
+  const [promos, setPromos] = useState<PromoState[]>([]);
   const [url, setUrl] = useState("");
   const [options, setOptions] = useState<PromoOptions>({ speed: "slow", length: 45 });
-  const [tracks, setTracks] = useState<{ file: string; seconds: number }[]>([]);
-  useEffect(() => void api.promoMusic().then(setTracks).catch(() => setTracks([])), []);
-  const promoJobs = jobs.filter((job) => job.label.startsWith("Website promo: "));
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const promoJobs = jobs.filter((job) => /^(Website promo|Promo music|New music): /.test(job.label));
   const finished = promoJobs.filter((job) => job.status === "done" || job.status === "failed").length;
 
-  const refresh = useCallback(() => api.promos().then(setPromos).catch(() => setPromos([])), []);
-  // Reload whenever a promo job finishes.
+  const refreshTracks = useCallback(() => api.promoMusic().then(setTracks).catch(() => setTracks([])), []);
+  const refresh = useCallback(() => {
+    void api.promos().then(setPromos).catch(() => setPromos([]));
+    void refreshTracks();
+  }, [refreshTracks]);
+  // Reload whenever a promo, music change or new track job finishes.
   useEffect(() => void refresh(), [refresh, finished]);
 
   const make = (site: string) =>
@@ -67,7 +86,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
   useEffect(() => {
     if (open?.options) setOptions(open.options);
   }, [open?.id]);
-  const remove = (promo: Promo) => {
+  const remove = (promo: PromoState) => {
     if (!confirm(`Delete this promo of ${promo.host} and its videos?`)) return;
     api
       .deletePromo(promo.id)
@@ -79,7 +98,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
       .catch((error: Error) => toast.error(error.message));
   };
   const failedCount = promos.filter((promo) => promo.status === "failed").length;
-  const jobOf = (promo: Promo) => promoJobs.find((job) => job.link === `/marketing/promos/${promo.id}`);
+  const jobOf = (promo: PromoState) => promoJobs.find((job) => job.link === `/marketing/promos/${promo.id}` && (job.status === "queued" || job.status === "running"));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-6">
@@ -115,28 +134,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">Music</span>
-          <select
-            className="h-8 rounded-md border bg-background px-2 text-sm"
-            value={options.music ?? ""}
-            onChange={(event) => setOptions({ ...options, music: event.target.value || undefined })}
-          >
-            <option value="">Auto: a different track each time</option>
-            <option value="none">No music</option>
-            <optgroup label="Make a new AI track (ElevenLabs)">
-              {MOODS.map((mood) => (
-                <option key={mood} value={`new:${mood}`}>
-                  New {MOOD_LABEL[mood]} track
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Library">
-              {tracks.map((track) => (
-                <option key={track.file} value={track.file}>
-                  {trackName(track.file)} ({Math.round(track.seconds)}s)
-                </option>
-              ))}
-            </optgroup>
-          </select>
+          <MusicSelect value={options.music ?? ""} tracks={tracks} onChange={(music) => setOptions({ ...options, music: music || undefined })} />
           {options.music?.startsWith("new:") && <span className="text-xs text-muted-foreground">About a minute more; billed by ElevenLabs. It joins the library for later promos.</span>}
           {options.music?.endsWith(".mp3") && <audio key={options.music} src={`/promo-music/${options.music}`} controls preload="none" className="h-8" />}
         </div>
@@ -151,7 +149,16 @@ export function PromosView({ id, jobs, onOpen }: Props) {
         </div>
       </form>
 
-      {open && <PromoDetail promo={open} job={jobOf(open)} remakeWith={options} onRemake={() => make(open.url)} onDelete={() => remove(open)} />}
+      {open && <PromoDetail key={open.id} promo={open} job={jobOf(open)} tracks={tracks} remakeWith={options} onRemake={() => make(open.url)} onDelete={() => remove(open)} onChanged={refresh} />}
+
+      <details className="group rounded-xl border p-4">
+        <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+          <MusicIcon className="size-4 text-muted-foreground" /> Music library <span className="font-mono text-xs text-muted-foreground">{tracks.length}</span>
+        </summary>
+        <div className="pt-3">
+          <MusicLibrary tracks={tracks} jobs={jobs} onChanged={refresh} />
+        </div>
+      </details>
 
       {promos.length > 0 && (
         <div className="grid gap-2">
@@ -181,7 +188,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
             {promos.map((promo) => (
               <button key={promo.id} type="button" onClick={() => onOpen(promo.id)} className={`grid gap-2 rounded-xl border p-3 text-left hover:bg-muted/40 ${promo.id === id ? "ring-2 ring-primary" : ""}`}>
                 {promo.status === "done" && promo.videos?.["16x9"] ? (
-                  <video src={`${promoFileUrl(promo.id, promo.videos["16x9"])}#t=4`} preload="metadata" muted className="aspect-video w-full rounded-lg border bg-black object-cover" />
+                  <video src={`${promoFileUrl(promo.id, promo.videos["16x9"], promo.updatedAt)}#t=4`} preload="metadata" muted className="aspect-video w-full rounded-lg border bg-black object-cover" />
                 ) : (
                   <div className="flex aspect-video w-full items-center justify-center rounded-lg border bg-muted text-xs text-muted-foreground">{promo.status === "failed" ? "Failed" : "Recording…"}</div>
                 )}
@@ -200,14 +207,64 @@ export function PromosView({ id, jobs, onOpen }: Props) {
   );
 }
 
-function PromoDetail({ promo, job, remakeWith, onRemake, onDelete }: { promo: Promo; job?: Job; remakeWith: PromoOptions; onRemake: () => void; onDelete: () => void }) {
-  const running = job && (job.status === "queued" || job.status === "running");
+function PromoDetail({
+  promo,
+  job,
+  tracks,
+  remakeWith,
+  onRemake,
+  onDelete,
+  onChanged,
+}: {
+  promo: PromoState;
+  job?: Job;
+  tracks: Track[];
+  remakeWith: PromoOptions;
+  onRemake: () => void;
+  onDelete: () => void;
+  onChanged: () => void;
+}) {
+  const running = Boolean(job);
+  const [renaming, setRenaming] = useState(false);
+  const [title, setTitle] = useState(promo.title);
+  const [music, setMusic] = useState(promo.options?.music ?? "");
+  const act = (work: Promise<unknown>, done: string) =>
+    work
+      .then(() => {
+        toast.success(done);
+        onChanged();
+      })
+      .catch((error: Error) => toast.error(error.message));
+
   return (
     <div className="grid gap-4 rounded-xl border p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="min-w-0 truncate font-semibold" dir="auto">
-          {promo.title}
-        </span>
+        {renaming ? (
+          <form
+            className="flex min-w-0 flex-1 items-center gap-1.5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              act(api.renamePromo(promo.id, title), "Promo renamed").then(() => setRenaming(false));
+            }}
+          >
+            <Input autoFocus dir="auto" value={title} onChange={(event) => setTitle(event.target.value)} className="h-8" />
+            <Button size="icon" type="submit" variant="ghost" disabled={!title.trim()} title="Save">
+              <CheckIcon />
+            </Button>
+            <Button size="icon" type="button" variant="ghost" title="Cancel" onClick={() => setRenaming(false)}>
+              <XIcon />
+            </Button>
+          </form>
+        ) : (
+          <>
+            <span className="min-w-0 truncate font-semibold" dir="auto">
+              {promo.title}
+            </span>
+            <Button size="icon" variant="ghost" className="size-7" title="Rename" onClick={() => setRenaming(true)}>
+              <PencilIcon />
+            </Button>
+          </>
+        )}
         <a href={promo.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:underline">
           {promo.host} <ExternalLinkIcon className="size-3" />
         </a>
@@ -215,35 +272,63 @@ function PromoDetail({ promo, job, remakeWith, onRemake, onDelete }: { promo: Pr
           $0.00
         </Badge>
         {promo.seconds && <Badge variant="outline">{Math.round(promo.seconds)}s</Badge>}
-        {promo.options && <Badge variant="outline">{optionsLabel(promo.options)}</Badge>}
+        {promo.options && <Badge variant="outline">{optionsLabel({ ...promo.options, music: undefined })}</Badge>}
         {promo.status === "done" && <Badge variant="outline">{promo.music ? `♪ ${trackName(promo.music)}` : "No music"}</Badge>}
-        <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake} title="With the speed and length chosen above">
+        <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake} title="With the speed, length and music chosen above">
           <RotateCcwIcon /> Record again ({optionsLabel(remakeWith)})
         </Button>
-        <Button size="sm" variant="ghost" className="text-destructive" disabled={promo.status === "making"} title={promo.status === "making" ? "It is being made" : "Delete this promo and its videos"} onClick={onDelete}>
+        <Button size="sm" variant="ghost" className="text-destructive" disabled={promo.status === "making" || running} title={promo.status === "making" ? "It is being made" : "Delete this promo and its videos"} onClick={onDelete}>
           <Trash2Icon /> Delete
         </Button>
       </div>
-      {running && <JobProgress job={job} compact />}
+      {job && <JobProgress job={job} compact />}
       {promo.status === "failed" && !running && <p className="text-sm text-destructive">Failed: {promo.error ?? "unknown error"}</p>}
-      {promo.status === "making" && !running && !job && <p className="text-sm text-muted-foreground">Waiting to record…</p>}
+      {promo.status === "making" && !running && <p className="text-sm text-muted-foreground">Waiting to record…</p>}
+      {promo.status === "done" && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
+          <MusicIcon className="size-4 text-muted-foreground" />
+          <span className="text-sm">Change music</span>
+          <MusicSelect value={music} tracks={tracks} onChange={setMusic} />
+          <Button
+            size="sm"
+            disabled={running || !promo.canChangeMusic}
+            title={promo.canChangeMusic ? "Keeps the recording; only the music changes (a few seconds)" : "Made before recordings were kept: record again to change its music"}
+            onClick={() => act(api.changePromoMusic(promo.id, music), "Changing the music…")}
+          >
+            Apply
+          </Button>
+          {!promo.canChangeMusic && <span className="text-xs text-muted-foreground">This older promo has no saved recording: record again to change its music.</span>}
+        </div>
+      )}
       {promo.status === "done" && promo.videos && (
         <div className="grid items-start gap-4 lg:grid-cols-[2fr_1fr]">
-          {(["16x9", "9x16"] as const).map((shape) =>
-            promo.videos?.[shape] ? (
+          {(["16x9", "9x16"] as const).map((shape) => {
+            const file = promo.videos?.[shape];
+            if (!file) return null;
+            const name = `${promo.host}-promo-${shape}`;
+            return (
               <div key={shape} className="grid gap-2">
-                <video src={promoFileUrl(promo.id, promo.videos[shape]!)} controls preload="metadata" className={`w-full rounded-lg border bg-black ${shape === "16x9" ? "aspect-video" : "mx-auto aspect-[9/16] max-h-[640px] w-auto"}`} />
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <video src={promoFileUrl(promo.id, file, promo.updatedAt)} controls preload="metadata" className={`w-full rounded-lg border bg-black ${shape === "16x9" ? "aspect-video" : "mx-auto aspect-[9/16] max-h-[640px] w-auto"}`} />
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   {SHAPE_LABEL[shape]}
-                  <Button size="sm" variant="outline" className="ms-auto" asChild>
-                    <a href={promoFileUrl(promo.id, promo.videos[shape]!)} download={`${promo.host}-promo-${shape}.mp4`}>
-                      <DownloadIcon /> Download
-                    </a>
-                  </Button>
+                  <span className="ms-auto flex gap-1.5">
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={promoFileUrl(promo.id, file, promo.updatedAt)} download={`${name}.mp4`}>
+                        <DownloadIcon /> {promo.music ? "With music" : "Download"}
+                      </a>
+                    </Button>
+                    {promo.music && (
+                      <Button size="sm" variant="outline" asChild>
+                        <a href={promoFileUrl(promo.id, `promo-${shape}-muted.mp4`, promo.updatedAt)} download={`${name}-muted.mp4`}>
+                          <VolumeXIcon /> Muted
+                        </a>
+                      </Button>
+                    )}
+                  </span>
                 </div>
               </div>
-            ) : null,
-          )}
+            );
+          })}
         </div>
       )}
     </div>

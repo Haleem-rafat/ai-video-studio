@@ -11,6 +11,8 @@ import type { PromoOptions } from "../src/promo/record.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
 
 export type { Knowledge, Promo, PromoOptions };
+/** A promo with whether its music can change without recording again. */
+export type PromoState = Promo & { canChangeMusic: boolean };
 export type { ArtStyleChoice, ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
 export type ArtStyleInfo = { id: ArtStyleId; label: string; preview: boolean };
 export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
@@ -114,8 +116,20 @@ export const api = {
   library: (id: string) => call<Library>("GET", `/api/clients/${id}/library`),
   draftKnowledge: (id: string) => call<Job>("POST", `/api/clients/${id}/knowledge/draft`),
   answerKnowledge: (id: string, questionId: string, answer: string) => call<Job>("POST", `/api/clients/${id}/knowledge/answer`, { questionId, answer }),
-  promos: () => call<Promo[]>("GET", "/api/promos"),
-  promo: (id: string) => call<Promo>("GET", `/api/promos/${id}`),
+  promos: () => call<PromoState[]>("GET", "/api/promos"),
+  promo: (id: string) => call<PromoState>("GET", `/api/promos/${id}`),
+  renamePromo: (id: string, title: string) => call<PromoState>("PUT", `/api/promos/${id}`, { title }),
+  changePromoMusic: (id: string, music: string) => call<Job>("POST", `/api/promos/${id}/music`, { music }),
+  renameTrack: (file: string, name: string) => call<{ file: string }>("PUT", `/api/promos/music/${file}`, { name }),
+  deleteTrack: (file: string) => call<{ deleted: string }>("DELETE", `/api/promos/music/${file}`),
+  newTrack: (mood: string) => call<Job>("POST", "/api/promos/music/new", { mood }),
+  /** Sends the song's bytes as they are; the server checks it is audio. */
+  uploadTrack: async (file: File) => {
+    const response = await fetch(`/api/promos/music?name=${encodeURIComponent(file.name)}`, { method: "POST", body: file });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? `Upload failed (${response.status})`);
+    return data as { file: string; seconds: number };
+  },
   promoMusic: () => call<{ file: string; seconds: number }[]>("GET", "/api/promos/music"),
   deletePromo: (id: string) => call<{ deleted: string[] }>("DELETE", `/api/promos/${id}`),
   deleteFailedPromos: () => call<{ deleted: string[] }>("DELETE", "/api/promos/failed"),
@@ -151,8 +165,8 @@ export function jobLink(job: Job): string | undefined {
 /** A client's file: its logo, or a post's slides and art. */
 export const clientFileUrl = (client: string, file: string) => `/client-files/${client}/${file}`;
 
-/** A website promo's video. */
-export const promoFileUrl = (promo: string, file: string) => `/promo-files/${promo}/${file}`;
+/** A website promo's video; `version` makes the browser fetch it again after its music changes. */
+export const promoFileUrl = (promo: string, file: string, version?: string) => `/promo-files/${promo}/${file}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
 
 export type Privacy = "private" | "unlisted" | "public";
 

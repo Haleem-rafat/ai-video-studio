@@ -3,9 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const run = promisify(execFile);
 
 process.env.PROMOS_DIR = await mkdtemp(join(tmpdir(), "promos-"));
-const { deleteFailedPromos, deletePromo, listPromos, loadPromo, promoIdFor, promoOptions, savePromo, siteUrl, startPromo } = await import("./store.ts");
+const { changeMusic, mutedFile, renamePromo, deleteFailedPromos, deletePromo, listPromos, loadPromo, promoIdFor, promoOptions, savePromo, siteUrl, startPromo } = await import("./store.ts");
 const { DEFAULT_OPTIONS } = await import("./record.ts");
 
 test("a promo id carries the time and the site, so promos of one site never collide", () => {
@@ -82,4 +86,29 @@ test("music can be turned off, or a new AI track asked for in a known mood", () 
   assert.equal(promoOptions({ music: "none" }).music, "none");
   assert.equal(promoOptions({ music: "new:upbeat" }).music, "new:upbeat");
   assert.equal(promoOptions({ music: "new:dubstep" }).music, undefined);
+});
+
+test("a promo can be renamed; an empty name is refused", async () => {
+  const promo = await startPromo("https://g.example.com", { speed: "fast", length: 15 });
+  await savePromo({ ...(await loadPromo(promo.id)), status: "done" });
+  assert.equal((await renamePromo(promo.id, "  Spring offer  ")).title, "Spring offer");
+  assert.equal((await loadPromo(promo.id)).title, "Spring offer");
+  await assert.rejects(() => renamePromo(promo.id, "   "), /name/);
+});
+
+test("changing the music needs the screen recordings; promos made before they were kept say to record again", async () => {
+  const promo = await startPromo("https://h.example.com", { speed: "fast", length: 15 });
+  await savePromo({ ...(await loadPromo(promo.id)), status: "done", videos: { "16x9": "promo-16x9.mp4" } });
+  await assert.rejects(() => changeMusic(promo.id, "none", () => {}), /Record again/);
+});
+
+test("the muted download is the same video without sound", async () => {
+  const promo = await startPromo("https://i.example.com", { speed: "fast", length: 15 });
+  const dir = join(process.env.PROMOS_DIR!, promo.id);
+  await run("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc=size=320x240:duration=2", "-f", "lavfi", "-i", "sine=duration=2", "-shortest", "-c:v", "libx264", "-c:a", "aac", join(dir, "promo-16x9.mp4")]);
+  await savePromo({ ...(await loadPromo(promo.id)), status: "done", videos: { "16x9": "promo-16x9.mp4" } });
+  const muted = await mutedFile(promo.id, "16x9");
+  const { stdout } = await run("ffprobe", ["-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", muted]);
+  assert.deepEqual(stdout.trim().split("\n"), ["video"]);
+  await assert.rejects(() => mutedFile(promo.id, "9x16"), /No 9x16/);
 });
