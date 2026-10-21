@@ -4,10 +4,11 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import puppeteer, { type Page } from "puppeteer-core";
+import puppeteer, { type Browser, type Page } from "puppeteer-core";
 
 import { openParts } from "./parts.ts";
 import { watchNetwork, whenOnline } from "./settle.ts";
+import { anchorsOf, matchAnchors, positionAt, syncPlan } from "./sync.ts";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -38,15 +39,8 @@ const MAX_SECONDS = 120;
 /** Seconds to speed up at the start and slow down at the end. */
 const RAMP_SECONDS = 1.2;
 
-/**
- * How long the scroll runs, and the share of the page it covers: the whole
- * page at the chosen speed, or as much of it as fits in the chosen length.
- */
-export function scrollPlan(distance: number, options: PromoOptions): { seconds: number; share: number } {
-  const need = Math.max(0, distance) / SPEEDS[options.speed];
-  const cap = options.length === "page" ? MAX_SECONDS : options.length;
-  return { seconds: Math.max(3, Math.min(need, cap)), share: need <= cap ? 1 : cap / need };
-}
+/** How many seconds a promo of this length may scroll for. */
+export const capFor = (length: Length) => (length === "page" ? MAX_SECONDS : length);
 
 /** The part of the scroll spent speeding up (and again slowing down). */
 export const rampFor = (seconds: number) => Math.min(0.25, RAMP_SECONDS / seconds);
@@ -55,15 +49,15 @@ const run = promisify(execFile);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Where the scroll is `t` of the way through: it speeds up over the first
- * `ramp` of the time, moves at one steady speed, and slows down over the last.
+ * How far through the scroll it is (0 to 1) when `t` of the time has passed:
+ * it speeds up over the first `ramp` of the time, moves steadily, and slows
+ * down over the last. Self-contained: the recorder runs it inside the page.
  */
-export function scrollAt(t: number, distance: number, ramp: number): number {
+export function easeAt(t: number, ramp: number): number {
   const x = Math.min(1, Math.max(0, t));
-  if (ramp <= 0) return Math.round(x * distance);
+  if (ramp <= 0) return x;
   const v = 1 / (1 - ramp);
-  const p = x < ramp ? (v * x * x) / (2 * ramp) : x <= 1 - ramp ? v * (x - ramp / 2) : 1 - (v * (1 - x) * (1 - x)) / (2 * ramp);
-  return Math.round(p * distance);
+  return x < ramp ? (v * x * x) / (2 * ramp) : x <= 1 - ramp ? v * (x - ramp / 2) : 1 - (v * (1 - x) * (1 - x)) / (2 * ramp);
 }
 
 export type Look = { background: string; accent: string; dark: boolean };
@@ -170,10 +164,10 @@ export function concatList(frames: { file: string; at: number }[], end: number):
 }
 
 /**
- * Records one device scrolling the page top to bottom, as a visitor would see it.
- * The scroll runs in the page on animation frames, so it is smooth whatever the length.
+ * Opens the page on a device and gets it ready to record: everything
+ * downloaded, lazy parts woken, closed parts opened, banners hidden.
  */
-async function recordDevice(page: Page, url: string, device: Device, out: string, plan: (distance: number) => { seconds: number; share: number }, log: (message: string) => void): Promise<{ seconds: number; share: number }> {
+async function prepare(page: Page, url: string, device: Device, log: (message: string) => void): Promise<void> {
   await page.setViewport(VIEWPORTS[device]);
   log(`promo: opening ${url} on a ${device} ...`);
   const network = await watchNetwork(page);
@@ -188,21 +182,25 @@ async function recordDevice(page: Page, url: string, device: Device, out: string
   await openParts(page, log);
   await network.stop();
   await tidy(page);
-  const height = await page.evaluate(() => document.documentElement.scrollHeight);
-  const full = Math.max(0, height - VIEWPORTS[device].height);
-  const { seconds, share } = plan(full);
-  const distance = Math.round(full * share);
-  log(`promo: recording the ${device} scroll (${height}px page, ${share < 1 ? `the first ${Math.round(share * 100)}%` : "all of it"} in ${seconds.toFixed(0)}s) ...`);
+}
+
+/**
+ * Records a prepared page scrolling through `ys` (its positions at the shared
+ * places `at`), so both devices pass every paired heading at the same moment.
+ * The scroll runs in the page on animation frames, so it is smooth whatever the length.
+ */
+async function recordScroll(page: Page, out: string, plan: { ys: number[]; at: number[]; seconds: number }): Promise<void> {
   const stream = await capture(page, out);
   await page.evaluate(
-    async ({ distance, hold, scroll, end, ramp, ease }) => {
-      const at = new Function(`return ${ease}`)() as (t: number, distance: number, ramp: number) => number;
+    async ({ ys, at, hold, scroll, end, ramp, ease, position }) => {
+      const easeAt = new Function(`return ${ease}`)() as (t: number, ramp: number) => number;
+      const positionAt = new Function(`return ${position}`)() as (ys: number[], at: number[], u: number) => number;
       await new Promise((resolve) => setTimeout(resolve, hold * 1000));
       const start = performance.now();
       await new Promise<void>((resolve) => {
         const step = (now: number) => {
           const t = (now - start) / (scroll * 1000);
-          window.scrollTo(0, at(t, distance, ramp));
+          window.scrollTo(0, Math.round(positionAt(ys, at, easeAt(t, ramp))));
           if (t < 1) requestAnimationFrame(step);
           else resolve();
         };
@@ -210,46 +208,53 @@ async function recordDevice(page: Page, url: string, device: Device, out: string
       });
       await new Promise((resolve) => setTimeout(resolve, end * 1000));
     },
-    // The page runs the same easing the tests check.
-    { distance, ...TIMING, scroll: seconds, ramp: rampFor(seconds), ease: scrollAt.toString() },
+    // The page runs the same functions the tests check.
+    { ys: plan.ys, at: plan.at, ...TIMING, scroll: plan.seconds, ramp: rampFor(plan.seconds), ease: easeAt.toString(), position: positionAt.toString() },
   );
   await stream.stop();
-  return { seconds, share };
 }
 
 /** A browser drawing at the device's pixel density: Chrome's frame stream ignores the page's own setting. */
-async function withDevice<T>(device: Device, work: (page: Page) => Promise<T>): Promise<T> {
+async function openDevice(device: Device): Promise<{ browser: Browser; page: Page }> {
   const scale = VIEWPORTS[device].deviceScaleFactor;
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ["--hide-scrollbars", `--force-device-scale-factor=${scale}`] });
-  try {
-    return await work(await browser.newPage());
-  } finally {
-    await browser.close();
-  }
+  return { browser, page: await browser.newPage() };
 }
 
 export type Recording = { desktop: string; phone: string; look: Look; title: string };
 
 /**
  * Records the page on a desktop and a phone into `dir`, and reads its colors.
- * The desktop's page length sets the time; the phone scrolls the same share of
- * its page in the same time, so both screens reach the same section together.
+ * Both pages are prepared first and their headings paired, so the laptop and
+ * the phone reach every shared heading at the same moment of the video.
  */
 export async function recordSite(url: string, dir: string, options: PromoOptions = DEFAULT_OPTIONS, log: (message: string) => void = console.log): Promise<Recording> {
   if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
   if (!existsSync(CHROME)) throw new Error("Google Chrome is needed to record a website");
   await mkdir(dir, { recursive: true });
-  const desktop = join(dir, "desktop.mp4");
-  const phone = join(dir, "phone.mp4");
-  // A dropped connection records that device again once the internet is back.
-  const { look, title, timing } = await whenOnline(
-    () =>
-      withDevice("desktop", async (page) => {
-        const timing = await recordDevice(page, url, "desktop", desktop, (distance) => scrollPlan(distance, options), log);
-        return { look: await lookOf(page), title: await page.title(), timing };
-      }),
-    log,
-  );
-  await whenOnline(() => withDevice("phone", (page) => recordDevice(page, url, "phone", phone, () => timing, log)), log);
-  return { desktop, phone, look, title };
+  const desktopFile = join(dir, "desktop.mp4");
+  const phoneFile = join(dir, "phone.mp4");
+  // A dropped connection starts the recording again once the internet is back.
+  return whenOnline(async () => {
+    const desktop = await openDevice("desktop");
+    const phone = await openDevice("phone");
+    try {
+      await prepare(desktop.page, url, "desktop", log);
+      await prepare(phone.page, url, "phone", log);
+      const [d, p] = await Promise.all([anchorsOf(desktop.page), anchorsOf(phone.page)]);
+      const pairs = matchAnchors(d.anchors, p.anchors, d.max, p.max);
+      const plan = syncPlan(pairs, { speed: SPEEDS[options.speed], cap: capFor(options.length) });
+      const whole = plan.desktop.at(-1)! >= d.max && plan.phone.at(-1)! >= p.max;
+      log(`promo: laptop and phone matched at ${Math.max(0, pairs.length - 2)} headings; ${whole ? "the whole page" : "the first part"} in ${plan.seconds.toFixed(0)}s`);
+      log("promo: recording the desktop scroll ...");
+      await recordScroll(desktop.page, desktopFile, { ys: plan.desktop, at: plan.at, seconds: plan.seconds });
+      const look = await lookOf(desktop.page);
+      const title = await desktop.page.title();
+      log("promo: recording the phone scroll ...");
+      await recordScroll(phone.page, phoneFile, { ys: plan.phone, at: plan.at, seconds: plan.seconds });
+      return { desktop: desktopFile, phone: phoneFile, look, title };
+    } finally {
+      await Promise.all([desktop.browser.close(), phone.browser.close()]);
+    }
+  }, log);
 }

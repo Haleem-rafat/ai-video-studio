@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { concatList, scrollAt, scrollPlan, SPEEDS, VIEWPORTS } from "./record.ts";
+import { concatList, easeAt, SPEEDS, VIEWPORTS } from "./record.ts";
+const scrollAt = (t: number, distance: number, ramp: number) => Math.round(easeAt(t, ramp) * distance);
 import { layoutFor, SHAPES, type Rect } from "./layout.ts";
 import { promoFilter } from "./compose.ts";
 
@@ -60,25 +61,6 @@ test("the scroll starts and stops softly, moves at a steady speed between, and n
 test("slow, normal and fast are real reading speeds, slow the slowest", () => {
   assert.ok(SPEEDS.slow < SPEEDS.normal && SPEEDS.normal < SPEEDS.fast);
   assert.ok(SPEEDS.slow <= 160, "slow lets a viewer read");
-});
-
-test("the whole page takes as long as its speed needs; a set length shows the part of the page that fits", () => {
-  const whole = scrollPlan(10000, { speed: "slow", length: "page" });
-  assert.equal(whole.share, 1);
-  assert.ok(Math.abs(whole.seconds - 10000 / SPEEDS.slow) < 1.5);
-
-  const short = scrollPlan(10000, { speed: "slow", length: 30 });
-  assert.ok(short.seconds <= 30);
-  assert.ok(short.share < 1 && short.share > 0.3);
-
-  // A short page at a set length ends when the page does, not padded to the length.
-  const tiny = scrollPlan(900, { speed: "normal", length: 60 });
-  assert.equal(tiny.share, 1);
-  assert.ok(tiny.seconds < 10);
-
-  // A page that doesn't scroll still gets a moment on screen; a huge one is capped.
-  assert.ok(scrollPlan(0, { speed: "fast", length: "page" }).seconds >= 3);
-  assert.ok(scrollPlan(200000, { speed: "slow", length: "page" }).seconds <= 120);
 });
 
 test("each frame plays for as long as it was on screen, and the last one is not dropped", () => {
