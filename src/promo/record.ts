@@ -6,6 +6,8 @@ import { promisify } from "node:util";
 
 import puppeteer, { type Page } from "puppeteer-core";
 
+import { watchNetwork } from "./settle.ts";
+
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 export type Device = "desktop" | "phone";
@@ -172,10 +174,15 @@ export function concatList(frames: { file: string; at: number }[], end: number):
 async function recordDevice(page: Page, url: string, device: Device, out: string, plan: (distance: number) => { seconds: number; share: number }, log: (message: string) => void): Promise<{ seconds: number; share: number }> {
   await page.setViewport(VIEWPORTS[device]);
   log(`promo: opening ${url} on a ${device} ...`);
+  const network = await watchNetwork(page);
   await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
-  await wait(1200);
+  // Sites that stream a big video behind a loading ring look "loaded" long before it arrives.
+  await network.settled(log);
   await tidy(page);
   await wakeUp(page);
+  // Waking the page up can start lazy pictures and videos further down.
+  await network.settled(log, 30000);
+  await network.stop();
   await tidy(page);
   const height = await page.evaluate(() => document.documentElement.scrollHeight);
   const full = Math.max(0, height - VIEWPORTS[device].height);
