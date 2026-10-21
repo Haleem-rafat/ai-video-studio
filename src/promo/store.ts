@@ -116,3 +116,17 @@ export async function makePromo(id: string, log: (message: string) => void = con
 export async function recoverPromos(): Promise<void> {
   for (const promo of await listPromos()) if (promo.status === "making") await savePromo({ ...promo, status: "failed", error: "The studio stopped while this was being made" });
 }
+
+/** Deletes a promo's folder and videos; one still being made is kept, since its job would write it back. */
+export async function deletePromo(id: string): Promise<void> {
+  if (!/^[a-z0-9-]+$/.test(id) || !existsSync(join(promoDir(id), "promo.json"))) throw new Error(`No promo "${id}"`);
+  if ((await loadPromo(id)).status === "making") throw new Error("This promo is being made; delete it once it is done or failed");
+  await rm(promoDir(id), { recursive: true, force: true });
+}
+
+/** Deletes every failed promo; returns their ids. */
+export async function deleteFailedPromos(): Promise<string[]> {
+  const failed = (await listPromos()).filter((promo) => promo.status === "failed").map((promo) => promo.id);
+  for (const id of failed) await deletePromo(id);
+  return failed;
+}

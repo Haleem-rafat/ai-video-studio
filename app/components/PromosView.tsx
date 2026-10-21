@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, RotateCcwIcon } from "lucide-react";
+import { DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, promoFileUrl, type Job, type Promo, type PromoOptions } from "../api.ts";
@@ -54,6 +54,18 @@ export function PromosView({ id, jobs, onOpen }: Props) {
   useEffect(() => {
     if (open?.options) setOptions(open.options);
   }, [open?.id]);
+  const remove = (promo: Promo) => {
+    if (!confirm(`Delete this promo of ${promo.host} and its videos?`)) return;
+    api
+      .deletePromo(promo.id)
+      .then(() => {
+        toast.success("Promo deleted");
+        onOpen(null);
+        refresh();
+      })
+      .catch((error: Error) => toast.error(error.message));
+  };
+  const failedCount = promos.filter((promo) => promo.status === "failed").length;
   const jobOf = (promo: Promo) => promoJobs.find((job) => job.link === `/marketing/promos/${promo.id}`);
 
   return (
@@ -99,11 +111,32 @@ export function PromosView({ id, jobs, onOpen }: Props) {
         </div>
       </form>
 
-      {open && <PromoDetail promo={open} job={jobOf(open)} remakeWith={options} onRemake={() => make(open.url)} />}
+      {open && <PromoDetail promo={open} job={jobOf(open)} remakeWith={options} onRemake={() => make(open.url)} onDelete={() => remove(open)} />}
 
       {promos.length > 0 && (
         <div className="grid gap-2">
-          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">All promos</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">All promos</span>
+            {failedCount > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ms-auto text-destructive"
+                onClick={() =>
+                  api
+                    .deleteFailedPromos()
+                    .then(({ deleted }) => {
+                      toast.success(`Deleted ${deleted.length} failed ${deleted.length === 1 ? "promo" : "promos"}`);
+                      if (id && deleted.includes(id)) onOpen(null);
+                      refresh();
+                    })
+                    .catch((error: Error) => toast.error(error.message))
+                }
+              >
+                <Trash2Icon /> Delete failed ({failedCount})
+              </Button>
+            )}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {promos.map((promo) => (
               <button key={promo.id} type="button" onClick={() => onOpen(promo.id)} className={`grid gap-2 rounded-xl border p-3 text-left hover:bg-muted/40 ${promo.id === id ? "ring-2 ring-primary" : ""}`}>
@@ -127,7 +160,7 @@ export function PromosView({ id, jobs, onOpen }: Props) {
   );
 }
 
-function PromoDetail({ promo, job, remakeWith, onRemake }: { promo: Promo; job?: Job; remakeWith: PromoOptions; onRemake: () => void }) {
+function PromoDetail({ promo, job, remakeWith, onRemake, onDelete }: { promo: Promo; job?: Job; remakeWith: PromoOptions; onRemake: () => void; onDelete: () => void }) {
   const running = job && (job.status === "queued" || job.status === "running");
   return (
     <div className="grid gap-4 rounded-xl border p-4">
@@ -145,6 +178,9 @@ function PromoDetail({ promo, job, remakeWith, onRemake }: { promo: Promo; job?:
         {promo.options && <Badge variant="outline">{optionsLabel(promo.options)}</Badge>}
         <Button size="sm" variant="outline" className="ms-auto" disabled={running} onClick={onRemake} title="With the speed and length chosen above">
           <RotateCcwIcon /> Record again ({optionsLabel(remakeWith)})
+        </Button>
+        <Button size="sm" variant="ghost" className="text-destructive" disabled={promo.status === "making"} title={promo.status === "making" ? "It is being made" : "Delete this promo and its videos"} onClick={onDelete}>
+          <Trash2Icon /> Delete
         </Button>
       </div>
       {running && <JobProgress job={job} compact />}

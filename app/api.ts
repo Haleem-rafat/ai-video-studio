@@ -116,6 +116,8 @@ export const api = {
   answerKnowledge: (id: string, questionId: string, answer: string) => call<Job>("POST", `/api/clients/${id}/knowledge/answer`, { questionId, answer }),
   promos: () => call<Promo[]>("GET", "/api/promos"),
   promo: (id: string) => call<Promo>("GET", `/api/promos/${id}`),
+  deletePromo: (id: string) => call<{ deleted: string[] }>("DELETE", `/api/promos/${id}`),
+  deleteFailedPromos: () => call<{ deleted: string[] }>("DELETE", "/api/promos/failed"),
   makePromo: (url: string, options?: PromoOptions) => call<Job & { promoId: string }>("POST", "/api/promos", { url, ...options }),
   editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[] }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
 };

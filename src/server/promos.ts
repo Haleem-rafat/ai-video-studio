@@ -1,5 +1,5 @@
 import { hostOf } from "../clients/library.ts";
-import { listPromos, loadPromo, makePromo, promoDir, promoOptions, recoverPromos, startPromo } from "../promo/store.ts";
+import { deleteFailedPromos, deletePromo, listPromos, loadPromo, makePromo, promoDir, promoOptions, recoverPromos, startPromo } from "../promo/store.ts";
 import type { Ctx } from "./clients.ts";
 import { enqueue } from "./jobs.ts";
 
@@ -32,6 +32,19 @@ export async function handlePromos(ctx: Ctx): Promise<boolean> {
       { link: promoPage(promo.id) },
     );
     json(response, 202, { ...job, promoId: promo.id });
+    return true;
+  }
+
+  if (path === "/api/promos/failed" && method === "DELETE") {
+    json(response, 200, { deleted: await deleteFailedPromos() });
+    return true;
+  }
+
+  if ((match = path.match(/^\/api\/promos\/([a-z0-9-]+)$/)) && method === "DELETE") {
+    await deletePromo(match[1]).catch((error: Error) => {
+      throw fail(/No promo/.test(error.message) ? 404 : 409, error.message);
+    });
+    json(response, 200, { deleted: [match[1]] });
     return true;
   }
 

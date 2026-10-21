@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.PROMOS_DIR = await mkdtemp(join(tmpdir(), "promos-"));
-const { listPromos, loadPromo, promoIdFor, promoOptions, savePromo, siteUrl, startPromo } = await import("./store.ts");
+const { deleteFailedPromos, deletePromo, listPromos, loadPromo, promoIdFor, promoOptions, savePromo, siteUrl, startPromo } = await import("./store.ts");
 const { DEFAULT_OPTIONS } = await import("./record.ts");
 
 test("a promo id carries the time and the site, so promos of one site never collide", () => {
@@ -55,4 +55,20 @@ test("a promo of the same site with the same speed and length can't be started t
   // Once it is done (or failed), the same one can be made again.
   await savePromo({ ...(await loadPromo(first.id)), status: "done" });
   await startPromo("https://c.example.com", { speed: "slow", length: 30 });
+});
+
+test("a promo can be deleted with its videos, but not while it is being made; failed ones can be cleared at once", async () => {
+  const done = await startPromo("https://d.example.com", { speed: "fast", length: 15 });
+  await savePromo({ ...(await loadPromo(done.id)), status: "done" });
+  await deletePromo(done.id);
+  assert.ok(!(await listPromos()).some((promo) => promo.id === done.id));
+
+  const making = await startPromo("https://e.example.com", { speed: "fast", length: 15 });
+  await assert.rejects(() => deletePromo(making.id), /being made/);
+  await assert.rejects(() => deletePromo("../.."), /No promo/);
+
+  const broken = await startPromo("https://f.example.com", { speed: "fast", length: 15 });
+  await savePromo({ ...(await loadPromo(broken.id)), status: "failed", error: "net::ERR_INTERNET_DISCONNECTED" });
+  assert.deepEqual(await deleteFailedPromos(), [broken.id]);
+  assert.ok((await listPromos()).some((promo) => promo.id === making.id), "promos being made are kept");
 });
