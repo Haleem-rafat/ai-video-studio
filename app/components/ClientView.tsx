@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, PaletteIcon, SparklesIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, PaletteIcon, SparklesIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo, type PostFormatId, type FormatInfo, type ReelStyleId, type ReelStyleInfo } from "../api.ts";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Field } from "./shared.tsx";
+import { Confirm, Field } from "./shared.tsx";
 import { JobProgress } from "./JobProgress.tsx";
 import { KnowledgePanel } from "./KnowledgePanel.tsx";
 import { DesignPicker } from "./DesignPicker.tsx";
@@ -184,17 +184,13 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                 design={designProps}
                 formats={formats}
                 reelStyles={reelStyles}
-                onMake={(options) => {
+                onMake={(options, force) => {
                   const made = `Making the ${FORMAT_LABEL[idea.format].toLowerCase()}…`;
                   api
-                    .makeIdea(client.id, idea.id, options)
+                    .makeIdea(client.id, idea.id, { ...options, ...(force ? { force: true } : {}) })
                     .then(() => (toast.success(made), refresh()))
-                    .catch((error: Error) =>
-                      // A repeat of something already made: nothing was spent; offer to make it anyway.
-                      error.message.startsWith("Too close to")
-                        ? toast.warning(error.message, { duration: 15000, action: { label: "Make anyway", onClick: () => act(api.makeIdea(client.id, idea.id, { ...options, force: true }), made) } })
-                        : toast.error(error.message),
-                    );
+                    // A repeat is refused before anything is spent; the card shows it and asks before making it anyway.
+                    .catch((error: Error) => (error.message.startsWith("Too close to") ? (toast.warning(`${error.message.split(". Make anyway")[0]}. Nothing was spent.`), refresh()) : toast.error(error.message)));
                 }}
                 onSkip={() => act(api.skipIdea(client.id, idea.id), "Skipped")}
               />
@@ -308,6 +304,13 @@ function StyleGrid({ styles, value, onChange, size = "md" }: { styles: ArtStyleI
   );
 }
 
+/** About what making an idea costs, from what the studio has spent on each kind (AI writing, pictures, voice). */
+function estimate(idea: Idea, options: MakeOptions): string {
+  if (idea.format === "reel") return "$1.00";
+  const pictures = options.pictures === "none" ? 0 : idea.format === "single" ? 1 : options.pictures === "rich" ? 7 : 3;
+  return `$${(0.12 + pictures * 0.05).toFixed(2)}`;
+}
+
 /** Formats or reel styles as chips; Auto picks one the client's recent posts didn't use. */
 function ChoiceChips<T extends string>({ options, value, onChange }: { options: { id: T; label: { en: string }; description: { en: string } }[]; value: T | "auto"; onChange: (id: T | "auto") => void }) {
   return (
@@ -356,7 +359,7 @@ function IdeaCard({
   design: DesignProps;
   formats: FormatInfo[];
   reelStyles: ReelStyleInfo[];
-  onMake: (options: Partial<MakeOptions>) => void;
+  onMake: (options: Partial<MakeOptions>, force?: boolean) => void;
   onSkip: () => void;
 }) {
   const [choosing, setChoosing] = useState(false);
@@ -370,6 +373,14 @@ function IdeaCard({
         <Badge variant="outline">{idea.angle}</Badge>
         {idea.status !== "new" && <Badge variant="secondary">{idea.status}</Badge>}
       </div>
+      {idea.repeats && idea.status === "new" && (
+        <p className="flex items-start gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+          <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+          <span dir="auto">
+            Too close to «{idea.repeats.title}» (made {new Date(idea.repeats.createdAt).toLocaleDateString()}). Making it would pay for the same message again; skip it or make it only if you mean to.
+          </span>
+        </p>
+      )}
       <p className="font-medium" dir="auto">
         {idea.hook}
       </p>
@@ -429,15 +440,32 @@ function IdeaCard({
             </>
           )}
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => {
-                setChoosing(false);
-                onMake(options);
-              }}
-            >
-              Make it
-            </Button>
+            {idea.repeats ? (
+              <Confirm
+                trigger={
+                  <Button size="sm" variant="outline" className="border-amber-500/50">
+                    <TriangleAlertIcon /> Make anyway…
+                  </Button>
+                }
+                title="This repeats an earlier post"
+                description={`It is too close to «${idea.repeats.title}». Making it spends about ${estimate(idea, options)} on the same message again.`}
+                action="Make anyway"
+                onConfirm={() => {
+                  setChoosing(false);
+                  onMake(options, true);
+                }}
+              />
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setChoosing(false);
+                  onMake(options);
+                }}
+              >
+                Make it · ~{estimate(idea, options)}
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={() => setChoosing(false)}>
               Cancel
             </Button>

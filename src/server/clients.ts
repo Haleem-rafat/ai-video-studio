@@ -12,7 +12,7 @@ import { FORMAT_IDS, FORMATS, type FormatId } from "../clients/formats.ts";
 import { REEL_STYLE_IDS, REEL_STYLES, type ReelStyleId } from "../clients/reel-styles.ts";
 import { designPreviewPath, PREVIEW_SLIDES, renderDesignPreviews } from "../clients/design-previews.ts";
 import { ART_STYLE_IDS, ART_STYLES, type ArtStyleChoice, type PictureAmount } from "../clients/styles.ts";
-import { duplicateOf, loadHistory } from "../clients/history.ts";
+import { duplicateOf, flagRepeats, loadHistory } from "../clients/history.ts";
 import { clientFromMarketingProject, clientFromUrl } from "../clients/onboard.ts";
 import { startSchedule } from "../clients/schedule.ts";
 import { clientDir, listClients, listPosts, loadClient, loadIdeas, loadPost, localDate, postDir, saveClient, saveIdeas } from "../clients/store.ts";
@@ -180,7 +180,11 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
     const client = await find(match[1]);
     if (method === "GET") {
       const date = url.searchParams.get("date") ?? localDate();
-      json(response, 200, (await loadIdeas(client.id, date)) ?? { date, trends: [], ideas: [] });
+      const day = (await loadIdeas(client.id, date)) ?? { date, trends: [], ideas: [] };
+      // Each idea still to make shows what it repeats, before anything is spent on it.
+      const [history, posts] = await Promise.all([loadHistory(client.id), listPosts(client.id)]);
+      const reelOf = Object.fromEntries(posts.filter((post) => post.projectId).map((post) => [post.id, post.projectId!]));
+      json(response, 200, { ...day, ideas: flagRepeats(day.ideas, history, reelOf) });
       return true;
     }
     if (method === "POST") {

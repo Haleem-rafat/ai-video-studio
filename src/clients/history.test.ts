@@ -161,3 +161,17 @@ test("a reel's history remembers its style", async () => {
   const reel = madeFromProject({ id: "r", title: "", createdAt: "", scenes: [], marketing: { narrator: {}, reelStyle: "countdown" } } as never, "reel");
   assert.equal(reel.reelStyle, "countdown");
 });
+
+test("new ideas are flagged up front when they repeat something made; made ideas never match their own post or reel", async () => {
+  const { flagRepeats } = await import("./history.ts");
+  const history = [made({ id: "post-1", title: "حجز عميل واحد.. بيعدي على ٥ تطبيقات؟", lines: ["العميل بيعدي على واتساب وجوجل فورم وتقويم وانستجرام"] }), made({ id: "proj-9", kind: "reel", title: "لينك واحد بدل رسايل رايحة جاية" })];
+  const ideas = [
+    { id: "i1", status: "new", hook: "حجز عميل واحد بيعدي على ٥ تطبيقات", outline: ["واتساب وجوجل فورم وتقويم وانستجرام"] },
+    { id: "i2", status: "new", hook: "سمّي لينك كل ريل برقمه", outline: ["وبعد أسبوع هتعرف تكرر إيه"] },
+    { id: "i3", status: "made", postId: "p", projectId: "proj-9", hook: "لينك واحد بدل رسايل رايحة جاية", outline: [] },
+  ];
+  const flagged = flagRepeats(ideas as never, history, { p: "proj-9" });
+  assert.equal(flagged[0].repeats?.title, "حجز عميل واحد.. بيعدي على ٥ تطبيقات؟");
+  assert.equal(flagged[1].repeats, undefined);
+  assert.equal(flagged[2].repeats, undefined, "a made reel idea is not a repeat of its own reel");
+});

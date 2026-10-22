@@ -65,6 +65,8 @@ export type Idea = {
   trend?: string;
   status: "new" | "making" | "made" | "skipped";
   postId?: string;
+  /** Sent to the app, not saved: what this idea repeats from what was already made. */
+  repeats?: { title: string; createdAt: string; score: number };
 };
 
 export type ScriptReview = { understand: number; feel: number; truthful: number; notes: string[]; rewritten: boolean };

@@ -160,6 +160,20 @@ export function pickDesign(history: { design?: string }[]): DesignId {
   return [...DESIGN_IDS].sort((a, b) => recent.indexOf(b) - recent.indexOf(a))[0];
 }
 
+/**
+ * New ideas marked with what they repeat, so a repeat is seen before anything
+ * is spent. Only ideas still to make are checked; `reelOf` maps a post to its
+ * reel's project, which history knows the reel by.
+ */
+export function flagRepeats<T extends Pick<Idea, "status" | "hook" | "outline"> & { postId?: string }>(ideas: T[], history: Made[], reelOf: Record<string, string> = {}): (T & { repeats?: { title: string; createdAt: string; score: number } })[] {
+  return ideas.map((idea) => {
+    if (idea.status !== "new") return idea;
+    const own = new Set([idea.postId, idea.postId && reelOf[idea.postId]].filter(Boolean));
+    const twin = duplicateOf([idea.hook, ...idea.outline].join(" "), history.filter((made) => !own.has(made.id)));
+    return twin ? { ...idea, repeats: { title: twin.made.title, createdAt: twin.made.createdAt, score: twin.score } } : idea;
+  });
+}
+
 /** The design for a new post: the one chosen, or for Rotate one the recent carousels and images haven't used. */
 export function chooseDesign(choice: DesignChoice | undefined, history: { kind: string; design?: string }[]): DesignId | undefined {
   if (choice !== "rotate") return choice;
