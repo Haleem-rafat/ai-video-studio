@@ -9,11 +9,13 @@ import type { MarketingBrief, Project } from "../types.ts";
 import { prepareSpeech, proofread } from "./arabic.ts";
 import { nextCreativity, nextVoice, reelProblems, type Made } from "./history.ts";
 import { businessContext } from "./context.ts";
-import { dialectLanguage, directionNotes, pitchProblems, samePitch, type Dialect } from "./direction.ts";
+import { dialectLanguage, dialectProblems, directionNotes, pitchProblems, samePitch, type Dialect } from "./direction.ts";
 import { autoReelStyle, reelStyleNotes, reelStyleOf, reelStyleProblems, type ReelStyleId } from "./reel-styles.ts";
 import { needsRewrite, reviewScript, rewriteNotes, scriptOf } from "./review.ts";
 import { clientDir } from "./store.ts";
 import type { Client, Idea, ScriptReview } from "./types.ts";
+
+const GULF_STYLE = "اقرأ باللهجة الخليجية، بصوت طبيعي وهادي وواثق، كأنك تشرح فكرة لصاحب بيزنس، مو تقرأ إعلان. انطق أسماء البراندات والمنصات بالإنجليزي.";
 
 const GOAL_DIRECTION: Record<Idea["goal"], string> = {
   awareness: "reach people who don't know the brand yet; lead with their pain, mention the brand late",
@@ -98,9 +100,12 @@ export async function createReel(
   const beatsOf = (scenes: typeof draft.scenes) => scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? "");
   // The message too: a value reel never pitches; an ad never tours the same features as an earlier reel.
   const messageProblems = (lines: string[]) => {
-    if (!sell) return pitchProblems(lines, client);
-    const twin = samePitch(lines, history, client.brief.features);
-    return twin ? [`It walks through the same product features as "${twin.title}" — that is the same video in new words. Focus on ONE thing that video didn't say, from a new angle.`] : [];
+    const twin = sell ? samePitch(lines, history, client.brief.features) : undefined;
+    return [
+      ...dialectProblems(lines, dialect),
+      ...(sell ? [] : pitchProblems(lines, client)),
+      ...(twin ? [`It walks through the same product features as "${twin.title}" — that is the same video in new words. Focus on ONE thing that video didn't say, from a new angle.`] : []),
+    ];
   };
   const problems = [...reelProblems({ beats: beatsOf(draft.scenes), lines: draft.scenes.map((scene) => scene.narration) }, history), ...reelStyleProblems(beatsOf(draft.scenes), reelStyle), ...messageProblems(draft.scenes.map((scene) => scene.narration))];
   if (problems.length) {
@@ -120,9 +125,9 @@ export async function createReel(
   }
   // Spelling is checked before anything is voiced or drawn; then the voice gets its own spoken text.
   const text = { scenes: draft.scenes, caption: draft.caption, hashtags: draft.hashtags };
-  await proofread(text, log);
+  await proofread(text, log, dialect);
   draft = { ...draft, caption: text.caption, hashtags: text.hashtags };
-  await prepareSpeech(draft.scenes, client, log);
+  await prepareSpeech(draft.scenes, client, log, dialect);
   const now = new Date().toISOString();
   const project: Project = {
     id: newProjectId(MARKETING_OWNER, "short", `${client.name} reel ${idea.goal}`),
@@ -138,7 +143,8 @@ export async function createReel(
       brief,
       creativity,
       language: client.language,
-      narrator: { voice, style: MARKETING_STYLE[client.language] },
+      // A Gulf reel is read in a Gulf accent.
+      narrator: { voice, style: dialect === "gulf" ? GULF_STYLE : MARKETING_STYLE[client.language] },
       // Prompted mode's subtitles answer, when given, decides; else the brief.
       captions: subtitles !== undefined ? subtitles === "yes" : (style?.captions ?? Boolean(brief.captions)),
       ...(style && style.id !== "classic" ? { reelStyle: style.id } : {}),

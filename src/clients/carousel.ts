@@ -10,7 +10,7 @@ import { proofread, textsOf } from "./arabic.ts";
 import { FLAT_SLIDE, fitSlides, slideProblems, toSlide } from "./slides.ts";
 import { styleOf, withPictures, type PictureAmount } from "./styles.ts";
 import { businessContext } from "./context.ts";
-import { dialectLanguage, directionNotes, pitchProblems, type Dialect } from "./direction.ts";
+import { dialectLanguage, dialectProblems, directionNotes, pitchProblems, type Dialect } from "./direction.ts";
 import type { Made } from "./history.ts";
 import { formatForIdea, formatOf, formatProblems, type FormatId } from "./formats.ts";
 import { pictureRepeats } from "./history.ts";
@@ -101,7 +101,7 @@ export async function writeCarousel(
     // The last slide may carry the brand's name: it is left last, so the check skips it.
     const texts = slides.map((slide) => textsOf(slide).map((ref) => ref.get()).join(" "));
     const pitch = sell ? [] : pitchProblems([...texts.slice(0, -1), output.caption, texts.at(-1) ?? ""], client);
-    const problems = [...slideProblems(slides, kind), ...formatProblems(slides, format), ...repeats.map((prompt) => `The picture "${prompt}" repeats one this client already used: give that slide a new picture idea.`), ...pitch];
+    const problems = [...slideProblems(slides, kind), ...formatProblems(slides, format), ...repeats.map((prompt) => `The picture "${prompt}" repeats one this client already used: give that slide a new picture idea.`), ...pitch, ...dialectProblems([...texts, output.caption], dialect)];
     if (problems.length) {
       log(`carousel: fixing ${problems.length} problem(s) ...`);
       ({ output } = await write(`${extra}\n\nYOUR ANSWER HAD THESE PROBLEMS:\n${problems.map((p) => `- ${p}`).join("\n")}\nWrite the slides again without them.`));
@@ -125,7 +125,7 @@ export async function writeCarousel(
     review = (await reviewScript(client, { kind, idea, script: `${scriptOf(result)}\nCAPTION: ${result.caption}`, sell }, log)) ?? review;
     rewritten = true;
   }
-  await proofread(result, log);
+  await proofread(result, log, dialect);
   // A fix can make a text longer than its slide allows.
   return { ...result, slides: fitSlides(result.slides), ...(review ? { review: { ...review, rewritten } } : {}), ...(format ? { format } : {}) };
 }

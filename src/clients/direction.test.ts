@@ -60,3 +60,11 @@ test("a direction is read safely and told to the writers; none means nothing cha
   assert.match(notes, /TOPICS NOT COVERED YET/);
   assert.match(directionNotes({ direction: { ...direction, mode: "mix" } }, "reel", [], true), /PROMO/);
 });
+
+test("Gulf text full of Egyptian words is sent back; real Gulf text and Egyptian posts pass", async () => {
+  const { dialectProblems } = await import("./direction.ts");
+  const egyptian = ["العميل بيدخل بايوك ويمشي من غير ما يراسلك؟", "كلام صح، بس ما بيقولش حاجة", "لسه معندكش رأي؟ مش مشكلة"];
+  assert.match(dialectProblems(egyptian, "gulf").join(" "), /Gulf/);
+  assert.deepEqual(dialectProblems(egyptian, "egyptian"), []);
+  assert.deepEqual(dialectProblems(["العميل يدخل البايو ويطلع بدون ما يراسلك؟", "كلام صح، بس ما يقول شي", "ما عندك رأي؟ مو مشكلة"], "gulf"), []);
+});

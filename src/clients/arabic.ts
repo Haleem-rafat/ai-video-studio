@@ -74,7 +74,7 @@ const LIST = z.object({ texts: z.array(z.string()) });
  * hashtags) in every text of `root`, in place. Egyptian colloquial stays.
  * Returns how many texts changed.
  */
-export async function proofread(root: unknown, log: (message: string) => void): Promise<number> {
+export async function proofread(root: unknown, log: (message: string) => void, dialect: "egyptian" | "gulf" = "egyptian"): Promise<number> {
   const refs = textsOf(root);
   const before = refs.map((ref) => ref.get());
   if (!before.some((text) => ARABIC.test(text))) return 0;
@@ -83,7 +83,7 @@ export async function proofread(root: unknown, log: (message: string) => void): 
     telemetry: { functionId: "proofread" },
     model: MODEL,
     output: Output.object({ schema: LIST }),
-    prompt: `You proofread Egyptian-Arabic Instagram marketing text. Egyptian colloquial words (إزاي، عايز، رسايل، ميعاد، أنهي) are CORRECT: keep them.
+    prompt: `${dialect === "gulf" ? "You proofread Gulf (Khaleeji) Arabic Instagram text. Gulf colloquial words (كيف، أبي، الحين، وايد، شلون، مو، حق) are CORRECT: keep them, and never turn Gulf words into Egyptian ones." : "You proofread Egyptian-Arabic Instagram marketing text. Egyptian colloquial words (إزاي، عايز، رسايل، ميعاد، أنهي) are CORRECT: keep them."}
 Fix only real mistakes: misspellings, wrong hamza (اصحاب → أصحاب), ة/ه, ى/ي, missing or extra letters, wrong or invented words, a sentence that does not make sense (make the smallest change that makes it clear), hashtags (correct spelling, words joined with _ , no #).
 Never translate, never change brand names, numbers, links or English words, never restyle. Return the SAME number of texts, in the same order; unchanged texts exactly as given.
 
@@ -106,7 +106,7 @@ ${JSON.stringify({ texts: before })}`,
  * them, numbers in Egyptian words, and vowel marks on words a voice misreads.
  * Marks that change any letter are dropped.
  */
-export async function prepareSpeech(scenes: Scene[], client: Pick<Client, "language" | "pronounce">, log: (message: string) => void): Promise<void> {
+export async function prepareSpeech(scenes: Scene[], client: Pick<Client, "language" | "pronounce">, log: (message: string) => void, dialect: "egyptian" | "gulf" = "egyptian"): Promise<void> {
   const plain = scenes.map((scene) => (client.language === "ar" ? spokenText(scene.narration, client.pronounce ?? {}) : scene.narration));
   let marked = plain;
   if (client.language === "ar") {
@@ -115,8 +115,8 @@ export async function prepareSpeech(scenes: Scene[], client: Pick<Client, "langu
       telemetry: { functionId: "speech" },
       model: MODEL,
       output: Output.object({ schema: LIST }),
-      prompt: `These Egyptian-Arabic lines will be read by a text-to-speech voice that misreads words without vowel marks (it read «آراء» as «قراءة», «ميعادين يتداخلوا» as «مع عديني الدخل», «تنسيق» as «تنصيق»).
-Add Arabic vowel marks (تشكيل) ONLY on the words a voice could misread, as an Egyptian speaker says them. Do not change, add or remove any letter, word or punctuation. Return the same number of lines in the same order.
+      prompt: `These ${dialect === "gulf" ? "Gulf" : "Egyptian"}-Arabic lines will be read by a text-to-speech voice that misreads words without vowel marks (it read «آراء» as «قراءة», «ميعادين يتداخلوا» as «مع عديني الدخل», «تنسيق» as «تنصيق»).
+Add Arabic vowel marks (تشكيل) ONLY on the words a voice could misread, as ${dialect === "gulf" ? "a Gulf (Khaleeji)" : "an Egyptian"} speaker says them. Do not change, add or remove any letter, word or punctuation. Return the same number of lines in the same order.
 
 ${JSON.stringify({ texts: plain })}`,
     });

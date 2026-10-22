@@ -65,7 +65,21 @@ export function nextDialect(client: Pick<Client, "direction" | "language">, hist
 }
 
 /** The writer's language line for Arabic in a dialect. */
-export const dialectLanguage = (dialect: Dialect | undefined) => (dialect ? DIALECT_WORDS[dialect] : DIALECT_WORDS.egyptian);
+export const dialectLanguage = (dialect: Dialect | undefined) =>
+  dialect === "gulf"
+    ? `${DIALECT_WORDS.gulf}. EVERY word in Gulf dialect, even where the idea, outline, knowledge or examples are written in Egyptian: rewrite them (إزاي → كيف، عايز → أبي/أبغى، دلوقتي → الحين، مش → مو/ما، ليه → ليش، فين → وين، كده → كذا، بتاع → حق، إيه → إيش/وش، معندكش → ما عندك، بيدخل → يدخل)`
+    : DIALECT_WORDS.egyptian;
+
+// Words only Egyptian Arabic uses; several in a Gulf text mean it wasn't rewritten.
+const EGYPTIAN = ["مش", "إزاي", "ازاي", "دلوقتي", "عايز", "عاوز", "عايزين", "بتاع", "بتاعك", "بتاعة", "كده", "فين", "ليه", "إيه", "ايه", "ده", "دي", "دول", "معندكش", "مفيش", "خالص", "أوي", "اوي", "بقى"];
+
+/** Egyptian words in a text that should be Gulf Arabic, as instructions to fix it. */
+export function dialectProblems(texts: string[], dialect: Dialect | undefined): string[] {
+  if (dialect !== "gulf") return [];
+  const found = new Set<string>();
+  for (const text of texts) for (const word of text.split(/[^\p{L}]+/u)) if (EGYPTIAN.includes(word) || /^(ما)?(بي|بت|بن)\p{L}{2,}ش$/u.test(word)) found.add(word);
+  return found.size >= 3 ? [`This must be in Gulf (Khaleeji) Arabic, but it uses Egyptian words: ${[...found].slice(0, 8).join("، ")}. Rewrite every text in Gulf dialect.`] : [];
+}
 
 /** Whether this piece may sell: never in value mode; in mix, one in five. */
 export function maySell(client: Pick<Client, "direction">, history: Pick<Made, "promo">[]): boolean {
