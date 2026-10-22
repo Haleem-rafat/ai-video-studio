@@ -65,7 +65,7 @@ function journey({ s, k, B, brand, arabic, m }: Ctx): Beat {
   return { html, js };
 }
 
-function pain({ s, k, B, brand, arabic, locale }: Ctx): Beat {
+function pain({ s, k, B, brand, m, arabic, locale }: Ctx): Beat {
   const items = s.visual.items.slice(0, 5);
   const times = itemTimes(s, 0.08, 0.7);
   // Senders in the brand's own colours, nothing from outside its palette.
@@ -75,7 +75,7 @@ function pain({ s, k, B, brand, arabic, locale }: Ctx): Beat {
     .map((item, i) => `<div class="msg" id="mg${k}_${i}"><i class="who" style="background:${hues[i % hues.length]}"></i><div class="bub"><span class="typing" id="ty${k}_${i}"><b></b><b></b><b></b></span><span class="txt" id="tx${k}_${i}">${bdi(item.label)}</span></div><time>${clock(i)}</time></div>`)
     .join("");
   const html = `<div class="stage flex"><div class="chat" id="ch${k}" style="width:${B.short ? 900 : 1080}px">
-    <div class="chathead"><i class="av">${brand.logo ? `<img src="${brand.logo}" />` : ""}</i><b>${arabic ? "الرسايل" : "Messages"}</b><span class="badge" id="bd${k}">0</span></div>
+    <div class="chathead"><i class="av">${brand.logo && !m.value ? `<img src="${brand.logo}" />` : ""}</i><b>${arabic ? "الرسايل" : "Messages"}</b><span class="badge" id="bd${k}">0</span></div>
     <div class="msgs">${msgs}</div></div></div>`;
   const js = `{
   const t = ${s.start}, D = ${r(s.seconds)}, T = ${JSON.stringify(times)};
@@ -307,13 +307,14 @@ function cta({ s, k, B, brand, m, arabic, next }: Ctx): Beat {
   const label = s.visual.headline || m.brief.cta.label || brand.cta?.label || (arabic ? "احجز دلوقتي" : "Book now");
   const link = (m.brief.cta.url || brand.cta?.url || brand.url).replace(/^https?:\/\//, "").replace(/\/$/, "");
   const where = m.brief.platforms.some((p) => /youtube|يوتيوب/i.test(p)) && !B.short ? (arabic ? "اللينك تحت الفيديو" : "Link below the video") : arabic ? "اللينك في البايو" : "Link in bio";
+  // Value content signs off with the question and the brand, never a link.
   const html = `<div class="ctaw">
     ${brand.logo ? `<img class="clogo" id="cl${k}" src="${brand.logo}" />` : ""}
     <div class="cname" id="cnm${k}">${esc(brand.name)}</div>
     <div class="cbtn" id="cb${k}">${bdi(label)}<i class="shine" id="sh${k}"></i></div>
-    <div class="arrow" id="ar${k}">${ICONS.arrow}</div>
+    ${m.value ? "" : `<div class="arrow" id="ar${k}">${ICONS.arrow}</div>
     <div class="curl" dir="ltr" id="cu${k}">${esc(link)}</div>
-    <div class="where" id="wh${k}">${esc(where)}</div>
+    <div class="where" id="wh${k}">${esc(where)}</div>`}
   </div>`;
   const until = next ?? "TOTAL";
   const js = `{
@@ -325,8 +326,12 @@ function cta({ s, k, B, brand, m, arabic, next }: Ctx): Beat {
     tl.fromTo('#sh${k}', { xPercent: -150 }, { xPercent: 250, duration: .8, ease: 'power2.inOut', immediateRender: false }, at);
     tl.to('#cb${k}', { scale: 1.05, duration: .35, yoyo: true, repeat: 1, ease: 'sine.inOut' }, at + .6);
   }
-  tl.fromTo(['#ar${k}', '#cu${k}', '#wh${k}'], { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: .4, stagger: .15, immediateRender: false }, t + D * .4);
-  tl.to('#ar${k}', { y: 22, duration: .45, yoyo: true, repeat: Math.max(1, Math.floor((END - t - D * .4) / .45)), ease: 'sine.inOut' }, t + D * .4 + .4);
+${
+    m.value
+      ? ""
+      : `  tl.fromTo(['#ar${k}', '#cu${k}', '#wh${k}'], { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: .4, stagger: .15, immediateRender: false }, t + D * .4);
+  tl.to('#ar${k}', { y: 22, duration: .45, yoyo: true, repeat: Math.max(1, Math.floor((END - t - D * .4) / .45)), ease: 'sine.inOut' }, t + D * .4 + .4);`
+  }
 }`;
   return { html, js };
 }
@@ -598,7 +603,7 @@ export function buildMarketing(project: Project): string {
 <div id="root" data-composition-id="main" data-start="0" data-duration="${total}" data-width="${B.W}" data-height="${B.H}">
  <div id="bg"><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i><div class="dots"></div></div>
  <div id="dim"></div>
- <div id="brandbar">${brand.logo ? `<img src="${brand.logo}" />` : ""}<span>${esc(brand.name)}</span></div>
+ ${m?.value ? "" : `<div id="brandbar">${brand.logo ? `<img src="${brand.logo}" />` : ""}<span>${esc(brand.name)}</span></div>`}
  ${blocks.join("\n")}
  ${captions.join("\n")}
  <div id="particles">${particles}</div>
@@ -619,7 +624,7 @@ tl.to('.b1', { x: ${B.W * 0.15}, y: ${B.H * 0.08}, duration: TOTAL / 2, yoyo: tr
 tl.to('.b2', { x: -${B.W * 0.12}, y: -${B.H * 0.1}, duration: TOTAL / 3, yoyo: true, repeat: 2, ease: 'sine.inOut' }, 0);
 tl.to('.b3', { x: ${B.W * 0.1}, scale: 1.3, duration: TOTAL / 2, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 0);
 tl.to('.dots', { backgroundPosition: '0px 340px', duration: TOTAL, ease: 'none' }, 0);
-tl.fromTo('#brandbar', { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: .5, immediateRender: false }, .2);
+${m?.value ? "" : "tl.fromTo('#brandbar', { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: .5, immediateRender: false }, .2);"}
 // Particles drift upward through the whole video, the near ones faster; grain crawls.
 document.querySelectorAll('#particles i').forEach((p, i) => {
   tl.to(p, { y: -H * (.25 + (i % 5) * .08), rotation: (i % 2 ? 1 : -1) * 180, duration: TOTAL, ease: 'none' }, 0);

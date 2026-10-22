@@ -148,6 +148,7 @@ export async function createReel(
       // Prompted mode's subtitles answer, when given, decides; else the brief.
       captions: subtitles !== undefined ? subtitles === "yes" : (style?.captions ?? Boolean(brief.captions)),
       ...(style && style.id !== "classic" ? { reelStyle: style.id } : {}),
+      ...(sell ? {} : { value: true }),
       // The art director stays clear of the styles and pictures this client already used.
       artAvoid: {
         styles: history.filter((made) => (made.kind === "reel" || made.kind === "video") && made.artStyle).map((made) => made.artStyle!),

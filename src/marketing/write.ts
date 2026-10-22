@@ -211,7 +211,7 @@ ${
     // A bold video never shows the website, whatever the writer chose; value content never shows the product's screens either.
     scenes: output.scenes
       .map((scene) => (creativity === "bold" && (scene.beat === "page" || scene.beat === "journey") ? { ...scene, beat: "kinetic" as const } : scene))
-      .map((scene) => (value && ["page", "booking", "traffic", "dashboard"].includes(scene.beat) ? { ...scene, beat: "kinetic" as const } : scene)).map((scene, index) => ({
+      .map((scene) => (value && ["page", "booking", "traffic", "dashboard", "sting"].includes(scene.beat) ? { ...scene, beat: "kinetic" as const } : scene)).map((scene, index) => ({
       id: `s${String(index + 1).padStart(3, "0")}`,
       narration: scene.narration.trim(),
       visual: {

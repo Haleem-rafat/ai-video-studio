@@ -238,7 +238,7 @@ function split({ s, k, B, arabic }: Ctx): Beat {
 }
 
 /** A lock screen collecting notifications. */
-function notify({ s, k, B, brand, arabic, locale }: Ctx): Beat {
+function notify({ s, k, B, brand, m, arabic, locale }: Ctx): Beat {
   const items = s.visual.items.slice(0, 4);
   const pw = B.short ? 600 : 470;
   const ph = B.short ? Math.min(B.stageH - 20, 1000) : B.stageH - 10;
@@ -254,8 +254,8 @@ function notify({ s, k, B, brand, arabic, locale }: Ctx): Beat {
       .map(
         (item, i) =>
           `<div class="note" id="nt${k}_${i}" style="top:${(B.short ? 330 : 250) + i * (B.short ? 150 : 128)}px">
-            <span class="napp">${brand.logo ? `<img src="${brand.logo}" />` : ICONS.bell}</span>
-            <div class="ntext"><div class="nrow"><b>${esc(brand.name)}</b><small>${arabic ? "الآن" : "now"}</small></div><div class="ntitle">${bdi(item.label)}</div>${item.value ? `<div class="ndetail">${bdi(item.value)}</div>` : ""}</div>
+            <span class="napp">${brand.logo && !m.value ? `<img src="${brand.logo}" />` : ICONS.bell}</span>
+            <div class="ntext"><div class="nrow"><b>${esc(m.value ? (arabic ? "رسالة جديدة" : "New message") : brand.name)}</b><small>${arabic ? "الآن" : "now"}</small></div><div class="ntitle">${bdi(item.label)}</div>${item.value ? `<div class="ndetail">${bdi(item.value)}</div>` : ""}</div>
           </div>`,
       )
       .join("")}

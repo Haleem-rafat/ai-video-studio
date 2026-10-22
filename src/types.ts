@@ -234,6 +234,8 @@ export type MarketingSetup = {
   art?: { style: string; cards: Photo[]; subjects?: string[] };
   /** The reel style it was written in (kinetic, tour…); unset for Classic. */
   reelStyle?: string;
+  /** Value content: teaches, never sells; no link, no brand corner, the brand only on the last scene. */
+  value?: boolean;
   /** Pictures and art styles of the client's earlier videos, for the art director to stay clear of. */
   artAvoid?: { styles: string[]; pictures: string[] };
   /** A style asked for by the producer (e.g. to make a new version look different); the art director follows it. */
