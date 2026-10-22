@@ -18,3 +18,12 @@ test("after 08:00 a client is due once: when today's file exists, it is not", ()
 test("clients with daily ideas off are never due", () => {
   assert.deepEqual(dueClients([client("a", false)], new Date(2026, 9, 20, 9, 0), () => false), []);
 });
+
+test("each idea of a day gets its own evening to go out, starting the next day", async () => {
+  const { isPostAt, suggestPostAt } = await import("./schedule.ts");
+  assert.equal(suggestPostAt("2026-10-22-1"), "2026-10-23T19:00");
+  assert.equal(suggestPostAt("2026-10-22-3"), "2026-10-25T19:00");
+  assert.equal(suggestPostAt("2026-10-31-2"), "2026-11-02T19:00");
+  assert.ok(isPostAt("2026-10-23T19:00"));
+  assert.ok(!isPostAt("2026-10-23 19:00") && !isPostAt(5));
+});

@@ -64,6 +64,10 @@ export type Idea = {
   step?: string;
   trend?: string;
   status: "new" | "making" | "made" | "skipped";
+  /** When it was written (ideas from before this was kept have only their day, in the id). */
+  createdAt?: string;
+  /** When its post should go out, local "YYYY-MM-DDTHH:mm"; suggested when written, changeable. */
+  postAt?: string;
   postId?: string;
   /** Posts made from it to compare (one per format or reel style); `postId` is the first. */
   variants?: string[];
@@ -103,6 +107,8 @@ export type Post = {
   clientId: string;
   ideaId?: string;
   kind: "carousel" | "single" | "reel";
+  /** When it should go out, local "YYYY-MM-DDTHH:mm" (from its idea; changeable). */
+  postAt?: string;
   slides?: Slide[];
   /** A reel: the marketing project that renders it. */
   projectId?: string;

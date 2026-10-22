@@ -15,6 +15,8 @@ import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/s
 import type { DesignId } from "../src/clients/designs.ts";
 import type { FormatId as PostFormatId } from "../src/clients/formats.ts";
 import type { ReelStyleId } from "../src/clients/reel-styles.ts";
+import type { Currency, Invoice, InvoiceItem, InvoiceState, InvoiceView, Payment, PaymentMethod } from "../src/clients/invoices.ts";
+export type { Currency, Invoice, InvoiceItem, InvoiceState, InvoiceView, Payment, PaymentMethod };
 
 export type { Knowledge, Promo, PromoOptions };
 export type { AnswerError, ChatPreview, ProfileView, Purpose, Value };
@@ -176,7 +178,25 @@ export const api = {
   deleteFailedPromos: () => call<{ deleted: string[] }>("DELETE", "/api/promos/failed"),
   makePromo: (url: string, options?: PromoOptions) => call<Job & { promoId: string }>("POST", "/api/promos", { url, ...options }),
   editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[]; design?: DesignId }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
+  post: (id: string, postId: string) => call<Post>("GET", `/api/clients/${id}/posts/${postId}`),
+  deletePost: (id: string, postId: string) => call<{ ok: true }>("DELETE", `/api/clients/${id}/posts/${postId}`),
+  setPostAt: (id: string, postId: string, postAt: string) => call<Post>("PATCH", `/api/clients/${id}/posts/${postId}`, { postAt }),
+  setIdeaPostAt: (id: string, ideaId: string, postAt: string) => call<Idea>("PATCH", `/api/clients/${id}/ideas/${ideaId}`, { postAt }),
+  /** One slide as the carousel editor's live preview (HTML, $0). */
+  slidePreview: async (id: string, postId: string, input: { slide: Slide; index: number; total: number; design?: DesignId }) => {
+    const response = await fetch(`/api/clients/${id}/posts/${postId}/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+    if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? `${response.status}`);
+    return response.text();
+  },
+  invoices: (id: string) => call<{ invoices: InvoiceView[]; summary: Record<string, { invoiced: number; paid: number; outstanding: number; overdue: number }> }>("GET", `/api/clients/${id}/invoices`),
+  createInvoice: (id: string, input: Partial<Invoice> = {}) => call<InvoiceView>("POST", `/api/clients/${id}/invoices`, input),
+  saveInvoice: (id: string, invoiceId: string, input: Partial<Invoice>) => call<InvoiceView>("PUT", `/api/clients/${id}/invoices/${invoiceId}`, input),
+  deleteInvoice: (id: string, invoiceId: string) => call<{ ok: true }>("DELETE", `/api/clients/${id}/invoices/${invoiceId}`),
+  addPayment: (id: string, invoiceId: string, payment: Omit<Payment, "id">) => call<InvoiceView>("POST", `/api/clients/${id}/invoices/${invoiceId}/payments`, payment),
+  deletePayment: (id: string, invoiceId: string, paymentId: string) => call<InvoiceView>("DELETE", `/api/clients/${id}/invoices/${invoiceId}/payments/${paymentId}`),
 };
+
+export const invoicePdfUrl = (id: string, invoiceId: string) => `/api/clients/${id}/invoices/${invoiceId}/pdf`;
 
 /** A picture of a marketing chat (a website screenshot or logo), before it has a project. */
 export const sessionUrl = (session: string, file: string) => `/marketing-files/${session}/${file}`;

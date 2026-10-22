@@ -72,6 +72,16 @@ function body(slide: Slide, ctx: SlideContext): string {
   }
 }
 
+/**
+ * A slide for the carousel editor's live preview: the same page Chrome
+ * renders, fitted the same way, telling its parent frame whether the text
+ * fits ("ok"), only fits smaller than usual ("tight") or still doesn't ("over").
+ */
+export function previewHtml(slide: Slide, ctx: SlideContext): string {
+  const script = `<script>document.fonts.ready.then(() => { (${fitScript.toString()})(); parent.postMessage({ slideFit: document.body.dataset.overflow ? "over" : document.body.dataset.tight ? "tight" : "ok" }, "*"); });</script>`;
+  return slideHtml(slide, ctx).replace("</body>", `${script}</body>`);
+}
+
 /** One slide as a whole HTML page at 1080×1350, in the client's colours and fonts. */
 export function slideHtml(slide: Slide, ctx: SlideContext): string {
   const { colors, fonts, googleFonts } = ctx.client.brand;
@@ -105,7 +115,7 @@ h2{font-size:60px;line-height:1.2}
 .num{flex:none;width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:${colors.cta};color:${colors.background};font-size:34px}
 .card{background:${colors.panel};border-radius:32px;padding:34px 38px;display:flex;flex-direction:column;gap:16px;font-size:40px;flex:1}
 .content>.card{flex:none}
-.card.muted p{color:${colors.muted};text-decoration:line-through;text-decoration-color:${colors.muted}88}
+.card.muted p{color:${colors.muted}}
 .card.hot{outline:4px solid ${colors.cta}}
 .tag{font-size:30px;color:${colors.accent}}
 .card.hot .tag{color:${colors.cta}}
@@ -141,16 +151,29 @@ ${design.css({ c: colors, arabic, name: ctx.client.name ?? ctx.client.brand.name
 </body></html>`;
 }
 
-/** Shrinks every [data-fit] text in steps until the content fits, never below its floor. Runs in the page. */
-function fitScript(): void {
+/**
+ * Shrinks every [data-fit] text in steps until the content fits, first down to
+ * its floor. The content box clips, so text still too long would be cut off:
+ * then the pictures get smaller and the text goes below its floor (never under
+ * 18px). A slide that still doesn't fit is marked `data-overflow` on <body>.
+ * Runs in the page.
+ */
+export function fitScript(): void {
   const box = document.querySelector(".content") as HTMLElement;
+  const over = () => box.scrollHeight > box.clientHeight + 1 || box.scrollWidth > box.clientWidth + 1;
   const texts = [...document.querySelectorAll<HTMLElement>("[data-fit]")].map((el) => ({ el, base: parseFloat(getComputedStyle(el).fontSize), floor: Number(el.dataset.fit) }));
-  for (let scale = 1; scale >= 0.3 && box.scrollHeight > box.clientHeight + 1; scale -= 0.05) {
-    for (const t of texts) t.el.style.fontSize = `${Math.max(t.floor, t.base * scale)}px`;
-  }
+  const shrink = (floor: (t: (typeof texts)[number]) => number) => {
+    for (let scale = 1; scale >= 0.2 && over(); scale -= 0.05) for (const t of texts) t.el.style.fontSize = `${Math.max(floor(t), t.base * scale)}px`;
+  };
+  shrink((t) => t.floor);
+  if (!over()) return;
+  document.body.dataset.tight = "1";
+  for (const art of document.querySelectorAll<HTMLElement>(".art")) art.style.width = art.style.height = "200px";
+  shrink((t) => Math.min(t.floor, 18));
+  if (over()) document.body.dataset.overflow = "1";
 }
 
-async function dataUrl(path: string): Promise<string | undefined> {
+export async function dataUrl(path: string): Promise<string | undefined> {
   if (!existsSync(path)) return undefined;
   const type = extname(path) === ".png" ? "image/png" : extname(path) === ".webp" ? "image/webp" : "image/jpeg";
   return `data:${type};base64,${(await readFile(path)).toString("base64")}`;
@@ -182,6 +205,7 @@ export async function renderSlides(dir: string, client: Client, clientFolder: st
         await document.fonts.ready;
       }, [client.brand.fonts.heading, client.brand.fonts.body]);
       await page.evaluate(fitScript);
+      if (await page.evaluate(() => document.body.dataset.overflow === "1")) log(`slide ${index + 1}: the text is too long for one slide even at its smallest; shorten it in the carousel editor`);
       const file = `slides/${String(index + 1).padStart(2, "0")}.png`;
       // The viewport is the slide; a `clip` here makes this Chrome capture a blank frame.
       await page.screenshot({ path: join(dir, file) as `${string}.png` });

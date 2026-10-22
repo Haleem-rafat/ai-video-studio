@@ -87,7 +87,7 @@ Features: ${client.brief.features.join(" | ")}
 Call to action: ${client.brief.cta.label} → ${client.brief.cta.url}
 Notes: ${client.brief.notes || client.avoid || "none"}
 
-WEBSITE TEXT
+WEBSITE TEXT (may include demo pages and sample people or customers: a person named only here is never the business's founder, team or customer; write "the team" or the brand's name instead)
 ${client.brand.text}`;
 }
 

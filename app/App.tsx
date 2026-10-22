@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, type Channel, type Client, type Job, type ProjectSummary, type Status } from "./api.ts";
 import { ChannelSettings } from "./components/ChannelSettings.tsx";
+import { CarouselEditor } from "./components/CarouselEditor.tsx";
 import { ClientView } from "./components/ClientView.tsx";
 import { JobPanel } from "./components/JobPanel.tsx";
 import { MarketingChat } from "./components/MarketingChat.tsx";
@@ -27,6 +28,8 @@ export function App() {
   const marketing = route.page === "marketing" ? (route.session ?? "new") : null;
   /** The Instagram client whose page is open, if any. */
   const openClient = route.page === "client" ? route.id : null;
+  /** The post open in the carousel editor, on its client's page. */
+  const openPost = route.page === "client" ? (route.post ?? null) : null;
   /** The website promos page: "all", or the open promo's id; null when another page is open. */
   const promos = route.page === "promos" ? (route.id ?? "all") : null;
   const [clients, setClients] = useState<Client[]>([]);
@@ -117,13 +120,15 @@ export function App() {
         />
         <SidebarInset className="h-svh min-w-0 overflow-hidden">
           <TopBar
-            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : openClient ? ["Marketing", clients.find((client) => client.id === openClient)?.name ?? "…"] : promos ? ["Marketing", "Website promo"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
+            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : openClient ? ["Marketing", clients.find((client) => client.id === openClient)?.name ?? "…", ...(openPost ? ["Carousel editor"] : [])] : promos ? ["Marketing", "Website promo"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
             theme={theme}
             onToggleTheme={toggle}
           />
           <main className="flex min-h-0 flex-1 flex-col">
             {promos ? (
               <PromosView id={promos === "all" ? null : promos} jobs={jobs} onOpen={showPromo} />
+            ) : openClient && openPost ? (
+              <CarouselEditor key={openPost} clientId={openClient} postId={openPost} jobs={jobs} onBack={() => showClient(openClient)} />
             ) : openClient ? (
               <ClientView key={openClient} id={openClient} jobs={jobs} onOpenProject={select} onOpenPromo={showPromo} onChanged={(client) => setClients((all) => all.map((entry) => (entry.id === client.id ? client : entry)))} />
             ) : marketing ? (

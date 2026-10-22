@@ -125,3 +125,39 @@ test("comparing designs draws the post's own first slides in every design, for f
   for (const design of ["classic", "neon"]) for (const n of [1, 2]) assert.ok(existsSync(join(store.postDir("design-test", post.id), "designs", `${design}-${n}.png`)));
   assert.ok(DESIGN_IDS.length >= 18);
 });
+
+test("edited slides keep their pictures wherever they moved; a changed prompt is drawn again", async () => {
+  const { keepArt } = await import("./make.ts");
+  const before = [
+    { layout: "cover", title: "a", art: { prompt: "a desk", file: "art/01.png" } },
+    { layout: "quote", text: "b", art: { prompt: "a door", file: "art/02.png" } },
+  ] as Parameters<typeof keepArt>[0];
+  const after = keepArt(before, [
+    { ...before[1] },
+    { ...before[0] },
+    { ...before[0] },
+    { layout: "quote", text: "c", art: { prompt: "a new window", file: "art/02.png" } },
+  ]);
+  assert.deepEqual(
+    after.map((slide) => slide.art),
+    [{ prompt: "a door", file: "art/02.png" }, { prompt: "a desk", file: "art/01.png" }, { prompt: "a desk", file: "art/01.png" }, { prompt: "a new window" }],
+  );
+});
+
+test("deleting a post removes its folder and frees its idea once none of its posts are left", async () => {
+  const { deletePost } = await import("./make.ts");
+  const made: Idea = { ...idea, id: "2026-10-22-1", format: "carousel", status: "made", postId: "2026-10-22-1-carousel-list", variants: ["2026-10-22-1-carousel-list", "2026-10-22-1-carousel-faq"] };
+  await store.saveIdeas("del", { date: "2026-10-22", trends: [], ideas: [made] });
+  for (const id of made.variants!) await store.savePost({ id, clientId: "del", ideaId: made.id, kind: "carousel", caption: "", hashtags: [], status: "done", createdAt: "x", updatedAt: "x" });
+  await deletePost("del", "2026-10-22-1-carousel-list");
+  let saved = (await store.loadIdeas("del", "2026-10-22"))!.ideas[0];
+  assert.equal(saved.status, "made");
+  assert.equal(saved.postId, "2026-10-22-1-carousel-faq");
+  await deletePost("del", "2026-10-22-1-carousel-faq");
+  saved = (await store.loadIdeas("del", "2026-10-22"))!.ideas[0];
+  assert.equal(saved.status, "new");
+  assert.equal(saved.postId, undefined);
+  assert.deepEqual(await store.listPosts("del"), []);
+  await store.savePost({ id: "busy", clientId: "del", kind: "carousel", caption: "", hashtags: [], status: "rendering", createdAt: "x", updatedAt: "x" });
+  await assert.rejects(deletePost("del", "busy"), /still being made/);
+});

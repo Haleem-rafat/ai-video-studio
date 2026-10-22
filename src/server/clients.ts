@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { makeIdeas } from "../clients/ideas.ts";
-import { claimIdea, compareVariant, ideaFromProject, makePost, recoverInterrupted, rerenderPost } from "../clients/make.ts";
+import { claimIdea, compareVariant, deletePost, ideaFromProject, makePost, recoverInterrupted, rerenderPost } from "../clients/make.ts";
 import { hostOf, loadLibrary } from "../clients/library.ts";
 import { draftKnowledge, foldAnswer, type Knowledge } from "../clients/knowledge.ts";
 import { drawPreviews, previewPath, previewsMade } from "../clients/previews.ts";
@@ -14,11 +15,14 @@ import { designPreviewPath, postDesignPath, PREVIEW_SLIDES, renderDesignPreviews
 import { ART_STYLE_IDS, ART_STYLES, type ArtStyleChoice, type PictureAmount } from "../clients/styles.ts";
 import { duplicateOf, flagRepeats, loadHistory } from "../clients/history.ts";
 import { clientFromMarketingProject, clientFromUrl } from "../clients/onboard.ts";
-import { startSchedule } from "../clients/schedule.ts";
-import { clientDir, listClients, listPosts, loadClient, loadIdeas, loadPost, localDate, postDir, saveClient, saveIdeas } from "../clients/store.ts";
+import { isPostAt, startSchedule } from "../clients/schedule.ts";
+import { dataUrl, previewHtml } from "../render/carousel.ts";
+import { clientDir, listClients, listPosts, loadClient, loadIdeas, loadPost, localDate, postDir, saveClient, saveIdeas, savePost } from "../clients/store.ts";
 import type { Client, Idea, Slide } from "../clients/types.ts";
 import { loadProject, projectDir } from "../project.ts";
 import { enqueue, recentJobs } from "./jobs.ts";
+import { editedSlideProblems } from "../clients/slides.ts";
+import { handleInvoices } from "./invoices.ts";
 import { handlePrompted } from "./prompted.ts";
 
 export type Ctx = {
@@ -96,6 +100,8 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
   let match: RegExpMatchArray | null;
   // Prompted mode: /api/clients/:id/profile…
   if (await handlePrompted(ctx)) return true;
+  // Invoices: /api/clients/:id/invoices…
+  if (await handleInvoices(ctx)) return true;
   const find = (id: string) =>
     loadClient(id).catch(() => {
       throw fail(404, `No client "${id}"`);
@@ -249,6 +255,24 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
   }
 
   // Marketing mode: a marketing video's message made into an Instagram post for the website's client (found by its address, or made from the video).
+  if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/ideas\/(\d{4}-\d{2}-\d{2}-\d+)$/)) && method === "PATCH") {
+    const [, clientId, ideaId] = match;
+    const raw = await body<{ postAt?: unknown }>(request);
+    if (!isPostAt(raw.postAt)) throw fail(400, "Send postAt as YYYY-MM-DDTHH:mm.");
+    const day = await loadIdeas(clientId, ideaId.slice(0, 10));
+    const idea = day?.ideas.find((entry) => entry.id === ideaId);
+    if (!day || !idea) throw fail(404, `No idea ${ideaId}`);
+    idea.postAt = raw.postAt;
+    await saveIdeas(clientId, day);
+    // Its posts go out then too.
+    for (const id of new Set([idea.postId, ...(idea.variants ?? [])].filter(Boolean) as string[])) {
+      const post = await loadPost(clientId, id).catch(() => null);
+      if (post) await savePost({ ...post, postAt: raw.postAt });
+    }
+    json(response, 200, idea);
+    return true;
+  }
+
   if ((match = path.match(/^\/api\/clients\/from-project\/([a-z0-9-]+)\/make$/)) && method === "POST") {
     const projectId = match[1];
     const project = await loadProject(projectId).catch(() => {
@@ -351,8 +375,28 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       json(response, 200, await loadPost(clientId, postId));
       return true;
     }
+    // When it goes out: saved as is, nothing is redrawn.
+    if (method === "PATCH") {
+      const raw = await body<{ postAt?: unknown }>(request);
+      if (!isPostAt(raw.postAt)) throw fail(400, "Send postAt as YYYY-MM-DDTHH:mm.");
+      const post = await loadPost(clientId, postId);
+      post.postAt = raw.postAt;
+      post.updatedAt = new Date().toISOString();
+      await savePost(post);
+      json(response, 200, post);
+      return true;
+    }
+    if (method === "DELETE") {
+      await deletePost(clientId, postId).catch((error: Error) => {
+        throw fail(/still being made/.test(error.message) ? 409 : 404, error.message);
+      });
+      json(response, 200, { ok: true });
+      return true;
+    }
     if (method === "PUT") {
       const raw = await body<{ slides?: Slide[]; caption?: string; hashtags?: string[]; design?: string }>(request);
+      const problems = raw.slides === undefined ? [] : editedSlideProblems(raw.slides);
+      if (problems.length) throw fail(400, problems.join(" "));
       const edits = { slides: raw.slides, caption: raw.caption, hashtags: raw.hashtags, ...(isDesign(raw.design) ? { design: raw.design } : {}) };
       json(response, 202, Object.assign(enqueue(`Re-render post: ${postId}`, async (log) => (await rerenderPost(clientId, postId, edits, log)).id, undefined, () => postDir(clientId, postId)), { link: clientPage(clientId) }));
       return true;
@@ -387,6 +431,23 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       json(response, 202, job);
       return true;
     }
+  }
+
+  // The carousel editor's live preview of one slide: HTML only, no Chrome, no AI, $0.
+  if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/posts\/([a-z0-9-]+)\/preview$/)) && method === "POST") {
+    const [, clientId, postId] = match;
+    const raw = await body<{ slide?: Slide; index?: number; total?: number; design?: string }>(request);
+    if (!raw.slide || typeof raw.slide !== "object" || typeof raw.slide.layout !== "string") throw fail(400, "Send the slide to preview.");
+    const client = await loadClient(clientId);
+    const post = await loadPost(clientId, postId);
+    const logo = client.brand.logo ? await dataUrl(join(clientDir(clientId), client.brand.logo)) : undefined;
+    const file = raw.slide.art?.file;
+    const art = file && /^art\/[\w.-]+$/.test(file) ? `/client-files/${clientId}/posts/${postId}/${file}` : undefined;
+    const design = isDesign(raw.design) ? raw.design : post.design;
+    const html = previewHtml(raw.slide, { client, index: Number(raw.index) || 0, total: Number(raw.total) || 1, logo, art, style: post.artStyle, design });
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    response.end(html);
+    return true;
   }
 
   if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/posts\/([a-z0-9-]+)\/zip$/)) && method === "GET") {

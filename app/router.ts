@@ -8,10 +8,11 @@ import { useCallback, useEffect, useState } from "react";
  *   /marketing            a new marketing video
  *   /marketing/:session   a marketing chat
  *   /marketing/clients/:id  a client's Instagram ideas and posts
+ *   /marketing/clients/:id/posts/:post  the carousel editor for one post
  *   /marketing/promos     website promos (a site scrolling on a laptop and a phone)
  *   /marketing/promos/:id one promo
  */
-export type Route = { page: "new" } | { page: "project"; id: string } | { page: "channel"; id: string } | { page: "marketing"; session: string | null } | { page: "client"; id: string } | { page: "promos"; id: string | null };
+export type Route = { page: "new" } | { page: "project"; id: string } | { page: "channel"; id: string } | { page: "marketing"; session: string | null } | { page: "client"; id: string; post?: string } | { page: "promos"; id: string | null };
 
 const ID = "([a-z0-9-]+)";
 
@@ -26,6 +27,7 @@ export function parseRoute(pathname: string, search: string): Route {
   if ((match = pathname.match(new RegExp(`^/projects/${ID}/?$`)))) return { page: "project", id: match[1] };
   if ((match = pathname.match(new RegExp(`^/channels/${ID}/?$`)))) return { page: "channel", id: match[1] };
   if ((match = pathname.match(new RegExp(`^/marketing/clients/${ID}/?$`)))) return { page: "client", id: match[1] };
+  if ((match = pathname.match(new RegExp(`^/marketing/clients/${ID}/posts/${ID}/?$`)))) return { page: "client", id: match[1], post: match[2] };
   if ((match = pathname.match(new RegExp(`^/marketing/promos/${ID}/?$`)))) return { page: "promos", id: match[1] };
   if (/^\/marketing\/promos\/?$/.test(pathname)) return { page: "promos", id: null };
   if ((match = pathname.match(new RegExp(`^/marketing/${ID}/?$`)))) return { page: "marketing", session: match[1] };
@@ -42,7 +44,7 @@ export function routePath(route: Route): string {
     case "marketing":
       return route.session ? `/marketing/${route.session}` : "/marketing";
     case "client":
-      return `/marketing/clients/${route.id}`;
+      return route.post ? `/marketing/clients/${route.id}/posts/${route.post}` : `/marketing/clients/${route.id}`;
     case "promos":
       return route.id ? `/marketing/promos/${route.id}` : "/marketing/promos";
     default:

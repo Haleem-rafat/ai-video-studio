@@ -29,7 +29,7 @@ export const LIMITS = {
 
 type LimitKey = keyof typeof LIMITS;
 
-const LAYOUTS = ["cover", "stat", "list", "myth-fact", "before-after", "steps", "quote", "chart", "cta", "checklist", "versus", "faq", "fix", "chat"] as const satisfies readonly SlideLayout[];
+export const LAYOUTS = ["cover", "stat", "list", "myth-fact", "before-after", "steps", "quote", "chart", "cta", "checklist", "versus", "faq", "fix", "chat"] as const satisfies readonly SlideLayout[];
 
 /**
  * What the writer returns per slide: one flat shape, every field present and
@@ -179,4 +179,18 @@ export function fitSlides(slides: Slide[]): Slide[] {
     }
     return slide;
   });
+}
+
+/** Problems with slides sent by the carousel editor; empty when they can be rendered. */
+export function editedSlideProblems(slides: unknown): string[] {
+  if (!Array.isArray(slides) || !slides.length) return ["Send at least one slide."];
+  if (slides.length > 20) return ["At most 20 slides."];
+  const problems: string[] = [];
+  slides.forEach((slide, i) => {
+    const layout = (slide as { layout?: unknown } | null)?.layout;
+    if (!(LAYOUTS as readonly unknown[]).includes(layout)) problems.push(`Slide ${i + 1} has no known layout.`);
+    const art = (slide as { art?: { prompt?: unknown; file?: unknown } }).art;
+    if (art && (typeof art.prompt !== "string" || !art.prompt.trim() || (art.file !== undefined && !/^art\/[\w.-]+$/.test(String(art.file))))) problems.push(`Slide ${i + 1}'s picture needs a description.`);
+  });
+  return problems;
 }

@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { suggestPostAt } from "./schedule.ts";
 
 import { extractJson } from "../llm.ts";
 import { duplicateOf, loadHistory, type Made } from "./history.ts";
@@ -45,9 +46,11 @@ export function parseTrends(reply: string): Trend[] {
 }
 
 /** Drafts as stored ideas, numbered after the `existing` ideas of that day. */
-export function numberIdeas(date: string, existing: number, drafts: IdeaDraft[]): Idea[] {
+export function numberIdeas(date: string, existing: number, drafts: IdeaDraft[], now = new Date().toISOString()): Idea[] {
   return drafts.map((draft, index) => ({
     id: `${date}-${existing + index + 1}`,
+    createdAt: now,
+    postAt: suggestPostAt(`${date}-${existing + index + 1}`),
     format: draft.format,
     goal: draft.goal,
     angle: draft.angle,

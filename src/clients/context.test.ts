@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { businessContext } from "./context.ts";
+import { businessContext, NAMES_RULE } from "./context.ts";
 import { emptyKnowledge, knowledgeText } from "./knowledge.ts";
 import type { Answers } from "./questionnaire.ts";
 import type { Client } from "./types.ts";
@@ -10,10 +10,12 @@ const knowledge = { ...emptyKnowledge(), howItWorks: ["The customer opens the bi
 const entry = (value: string | string[]) => ({ value, source: "app" as const, updatedAt: "2026-10-21T10:00:00.000Z" });
 const make = (answers: Answers, extra: Partial<Client> = {}) => ({ id: "risero", name: "Risero", language: "ar", knowledge, profile: { version: 1, answers, updatedAt: "" }, ...extra }) as unknown as Client;
 
-test("with no answers, writers get exactly the Knowledge they got before", () => {
+test("with no answers, writers get the Knowledge they got before, plus the rule about people's names", () => {
   const client = make({});
-  for (const purpose of ["ideas", "carousel", "reel", "review"] as const) assert.equal(businessContext(client, purpose), knowledgeText(knowledge));
-  assert.equal(businessContext({ ...client, profile: undefined } as Client, "ideas"), knowledgeText(knowledge));
+  const expected = `${knowledgeText(knowledge)}\n\n${NAMES_RULE}`;
+  for (const purpose of ["ideas", "carousel", "reel", "review"] as const) assert.equal(businessContext(client, purpose), expected);
+  assert.equal(businessContext({ ...client, profile: undefined } as Client, "ideas"), expected);
+  assert.ok(businessContext(make({ "overview.what": entry("x") }), "carousel").includes(NAMES_RULE));
 });
 
 test("the client's answers come first and win over the website and Knowledge", () => {

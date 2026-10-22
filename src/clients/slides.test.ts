@@ -84,3 +84,10 @@ test("the new layouts' texts are checked against their limits and cut to fit", (
   assert.ok((fitted[0] as { question: string }).question.length <= LIMITS.question);
   assert.ok((fitted[2] as { messages: { text: string }[] }).messages[0].text.length <= LIMITS.message);
 });
+
+test("edited slides need a known layout and a picture description; a picture's file stays inside its post", async () => {
+  const { editedSlideProblems } = await import("./slides.ts");
+  assert.deepEqual(editedSlideProblems([{ layout: "cover", title: "x", art: { prompt: "a desk", file: "art/01.png" } }]), []);
+  assert.equal(editedSlideProblems([]).length, 1);
+  assert.equal(editedSlideProblems([{ layout: "poster" }, { layout: "quote", text: "x", art: { prompt: " " } }, { layout: "quote", text: "x", art: { prompt: "y", file: "../../client.json" } }]).length, 3);
+});

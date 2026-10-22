@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir, writeFile } from "node:fs/promises";
+import { readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { build } from "../pipeline.ts";
@@ -13,6 +13,7 @@ import { drawSlideArt, writeCarousel } from "./carousel.ts";
 import { createReel } from "./reel.ts";
 import { captionText, cleanHashtags } from "./rules.ts";
 import { clientDir, listPosts, loadClient, loadIdeas, loadPost, postDir, saveIdeas, savePost } from "./store.ts";
+import { suggestPostAt } from "./schedule.ts";
 import { autoFormat, chooseDesign, loadHistory } from "./history.ts";
 import { pickRotation, type ArtStyleChoice, type PictureAmount } from "./styles.ts";
 import type { Idea, Post, Slide } from "./types.ts";
@@ -32,6 +33,8 @@ export function ideaFromProject(project: Project, format: Idea["format"], date: 
   const first = (project.marketing?.post?.caption ?? "").split("\n").map((line) => line.trim()).find(Boolean);
   return {
     id: `${date}-${next}`,
+    createdAt: new Date().toISOString(),
+    postAt: suggestPostAt(`${date}-${next}`),
     format,
     goal: "details",
     angle: "trend",
@@ -113,7 +116,7 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   // Rotate and Auto never repeat the look or structure of the last posts.
   const design = chooseDesign(options.design ?? client.design, history);
   const format = options.format === "auto" ? autoFormat(idea, history) : options.format;
-  const post: Post = { id: postIdFor(idea, options.variant), clientId, ideaId, kind: idea.format, caption: "", hashtags: [], artStyle, pictures, ...(design && idea.format !== "reel" ? { design } : {}), status: "writing", createdAt: now, updatedAt: now };
+  const post: Post = { id: postIdFor(idea, options.variant), clientId, ideaId, kind: idea.format, postAt: idea.postAt ?? suggestPostAt(idea.id), caption: "", hashtags: [], artStyle, pictures, ...(design && idea.format !== "reel" ? { design } : {}), status: "writing", createdAt: now, updatedAt: now };
   await savePost(post);
   try {
     if (idea.format === "reel") {
@@ -188,6 +191,37 @@ export async function compareVariant(clientId: string, ideaId: string, options: 
  * Saves edited slides or caption and renders the slides again; art is redrawn
  * only where its prompt changed. A new design only redraws the slides: no AI.
  */
+/**
+ * Edited slides keep the pictures they had wherever they moved (reordered or
+ * duplicated slides are not drawn again); a new or changed prompt is drawn.
+ */
+export function keepArt(before: Slide[], after: Slide[]): Slide[] {
+  return after.map((slide) => {
+    if (!slide.art) return slide;
+    const { prompt, file } = slide.art;
+    const drawn = before.find((old) => old.art?.file && old.art.prompt === prompt && (!file || old.art.file === file));
+    return { ...slide, art: drawn ? { prompt, file: drawn.art!.file } : { prompt } };
+  });
+}
+
+/** Deletes a finished or failed post; its idea can be made again once none of its posts are left. */
+export async function deletePost(clientId: string, postId: string): Promise<void> {
+  const post = await loadPost(clientId, postId);
+  if (post.status !== "done" && post.status !== "failed") throw new Error("This post is still being made; delete it when it's done.");
+  await rm(postDir(clientId, postId), { recursive: true, force: true });
+  if (!post.ideaId) return;
+  await setIdea(clientId, post.ideaId, (idea) => {
+    const left = (idea.variants ?? []).filter((id) => id !== postId);
+    if (idea.postId === postId) idea.postId = left[0];
+    if (idea.variants) idea.variants = left;
+    if (!idea.postId) {
+      idea.status = "new";
+      delete idea.postId;
+      delete idea.variants;
+    }
+  }).catch(() => undefined);
+}
+
 export async function rerenderPost(
   clientId: string,
   postId: string,
@@ -201,8 +235,7 @@ export async function rerenderPost(
   const dir = postDir(clientId, postId);
   if (edits.design && post.kind !== "reel") post.design = edits.design;
   if ((edits.slides || edits.design) && post.kind !== "reel" && post.slides) {
-    const before = post.slides;
-    const slides = (edits.slides ?? before).map((slide, i) => (slide.art && slide.art.prompt !== before[i]?.art?.prompt ? { ...slide, art: { prompt: slide.art.prompt } } : slide));
+    const slides = keepArt(post.slides, edits.slides ?? post.slides);
     post.slides = await drawSlideArt(dir, client, slides, log, post.artStyle);
     await renderSlides(dir, client, clientDir(clientId), post.slides, log, post.artStyle, post.design);
   }

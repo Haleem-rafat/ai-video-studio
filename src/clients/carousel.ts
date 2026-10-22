@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -130,7 +131,10 @@ export async function drawSlideArt(dir: string, client: Client, slides: Slide[],
     log(`art: slide ${index + 1} ...`);
     const result = await generateImage({ model: ART_MODEL, prompt: style + slide.art.prompt, aspectRatio: "1:1" });
     recordImage(ART_MODEL, result, "pictures");
-    const file = `art/${String(index + 1).padStart(2, "0")}.${result.image.mediaType === "image/png" ? "png" : "jpg"}`;
+    // Reordered slides may still use the file named after this place.
+    const ext = result.image.mediaType === "image/png" ? "png" : "jpg";
+    const name = `art/${String(index + 1).padStart(2, "0")}`;
+    const file = existsSync(join(dir, `${name}.${ext}`)) ? `${name}-${Date.now().toString(36)}.${ext}` : `${name}.${ext}`;
     await writeFile(join(dir, file), result.image.uint8Array);
     slide.art.file = file;
   }

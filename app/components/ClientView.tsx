@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, SparklesIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, PencilRulerIcon, Trash2Icon, MonitorSmartphoneIcon, SparklesIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo, type PostFormatId, type FormatInfo, type ReelStyleId, type ReelStyleInfo } from "../api.ts";
@@ -14,6 +14,9 @@ import { JobProgress } from "./JobProgress.tsx";
 import { KnowledgePanel } from "./KnowledgePanel.tsx";
 import { DesignPicker } from "./DesignPicker.tsx";
 import { CompareDesigns } from "./CompareDesigns.tsx";
+import { openCarouselEditor } from "./CarouselEditor.tsx";
+import { InvoicesPanel } from "./InvoicesPanel.tsx";
+import { PostAt, suggestPostAt, when } from "./PostAt.tsx";
 import { PromptedMode } from "./PromptedMode.tsx";
 import { VideoPlayer } from "./VideoPlayer.tsx";
 
@@ -164,6 +167,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
           <TabsTrigger value="library">Library {library?.items.length ? `(${library.items.length})` : ""}</TabsTrigger>
           <TabsTrigger value="knowledge">Knowledge {client.knowledge ? "" : "·"}</TabsTrigger>
           <TabsTrigger value="prompted">Prompted mode {client.profile && Object.keys(client.profile.answers).length ? `(${Object.keys(client.profile.answers).length})` : "·"}</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="profile">Profile</TabsTrigger>
         </TabsList>
 
@@ -196,6 +200,12 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                   act(api.compareIdea(client.id, idea.id, variants, { artStyle: options.artStyle, pictures: options.pictures, design: options.design }), `Making ${variants.length} versions to compare…`)
                 }
                 onSkip={() => act(api.skipIdea(client.id, idea.id), "Skipped")}
+                onPostAt={(postAt) =>
+                  api
+                    .setIdeaPostAt(client.id, idea.id, postAt)
+                    .then(() => (toast.success(`Posting ${when(postAt)}`), refresh()))
+                    .catch((error: Error) => toast.error(error.message))
+                }
               />
             ))}
           </div>
@@ -256,6 +266,10 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
               onChanged(next);
             }}
           />
+        </TabsContent>
+
+        <TabsContent value="invoices" className="pt-2">
+          <InvoicesPanel client={client} />
         </TabsContent>
 
         <TabsContent value="profile" className="pt-2">
@@ -356,6 +370,7 @@ function IdeaCard({
   onMake,
   onCompare,
   onSkip,
+  onPostAt,
 }: {
   idea: Idea;
   styles: ArtStyleInfo[];
@@ -366,6 +381,7 @@ function IdeaCard({
   onMake: (options: Partial<MakeOptions>, force?: boolean) => void;
   onCompare: (variants: string[], options: MakeOptions) => void;
   onSkip: () => void;
+  onPostAt: (postAt: string) => Promise<unknown>;
 }) {
   const [choosing, setChoosing] = useState(false);
   const [comparing, setComparing] = useState(false);
@@ -380,6 +396,11 @@ function IdeaCard({
         <Badge variant="outline">{GOAL_LABEL[idea.goal]}</Badge>
         <Badge variant="outline">{idea.angle}</Badge>
         {idea.status !== "new" && <Badge variant="secondary">{idea.status}</Badge>}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        <span title={idea.createdAt ? new Date(idea.createdAt).toLocaleString() : undefined}>Written {idea.createdAt ? when(idea.createdAt) : when(`${idea.id.slice(0, 10)}T12:00`, false)}</span>
+        <span>·</span>
+        <PostAt value={idea.postAt ?? suggestPostAt(idea.id)} suggested={!idea.postAt} onSave={onPostAt} />
       </div>
       {idea.repeats && idea.status === "new" && (
         <p className="flex items-start gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
@@ -561,7 +582,21 @@ function PostCard({ client, post, cost, designs, onOpenProject, onSaved }: { cli
         {post.review && <ReviewBadge review={post.review} />}
         {post.postFormat && <Badge variant="outline">{FORMAT_NAMES[post.postFormat]}</Badge>}
         {post.kind !== "reel" && <Badge variant="outline">{designs.find((design) => design.id === (post.design ?? "classic"))?.label.en ?? "Classic"}</Badge>}
-        <span className="ms-auto text-xs text-muted-foreground">{new Date(post.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        <span title={new Date(post.createdAt).toLocaleString()}>Made {when(post.createdAt)}</span>
+        {post.updatedAt !== post.createdAt && <span title={new Date(post.updatedAt).toLocaleString()}>· edited {when(post.updatedAt)}</span>}
+        <span>·</span>
+        <PostAt
+          value={post.postAt ?? (post.ideaId ? suggestPostAt(post.ideaId) : post.createdAt.slice(0, 16))}
+          suggested={!post.postAt}
+          onSave={(postAt) =>
+            api
+              .setPostAt(client.id, post.id, postAt)
+              .then(() => (toast.success(`Posting ${when(postAt)}`), onSaved()))
+              .catch((error: Error) => toast.error(error.message))
+          }
+        />
       </div>
       {post.error && <p className="text-xs text-destructive">{post.error}</p>}
 
@@ -597,6 +632,11 @@ function PostCard({ client, post, cost, designs, onOpenProject, onSaved }: { cli
         <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(text).then(() => toast.success("Caption copied"))}>
           <CopyIcon /> Copy caption
         </Button>
+        {post.kind !== "reel" && post.status === "done" && (
+          <Button size="sm" variant="outline" onClick={() => openCarouselEditor(client.id, post.id)}>
+            <PencilRulerIcon /> Edit
+          </Button>
+        )}
         {post.kind !== "reel" && post.status === "done" && designs.length > 0 && <CompareDesigns client={client} post={post} designs={designs} onChosen={onSaved} />}
         {post.kind !== "reel" && post.status === "done" && (
           <Button size="sm" variant="outline" asChild>
@@ -604,6 +644,24 @@ function PostCard({ client, post, cost, designs, onOpenProject, onSaved }: { cli
               <DownloadIcon /> Download zip
             </a>
           </Button>
+        )}
+        {(post.status === "done" || post.status === "failed") && (
+          <Confirm
+            trigger={
+              <Button size="sm" variant="ghost" className="text-destructive">
+                <Trash2Icon /> Delete
+              </Button>
+            }
+            title="Delete this post?"
+            description={post.kind === "reel" ? "The post and its caption go; the reel's video stays in Videos. Its idea can be made again." : "Its slides, pictures and caption are deleted for good. Its idea can be made again."}
+            action="Delete post"
+            onConfirm={() =>
+              api
+                .deletePost(client.id, post.id)
+                .then(() => (toast.success("Post deleted"), onSaved()))
+                .catch((error: Error) => toast.error(error.message))
+            }
+          />
         )}
         {caption !== post.caption && (
           <Button
