@@ -1,3 +1,4 @@
+import type { ContentDirection, Dialect } from "./direction.ts";
 import type { MarketingBrief, SiteBrand } from "../types.ts";
 import type { Knowledge } from "./knowledge.ts";
 import type { BusinessProfile } from "./questionnaire.ts";
@@ -36,6 +37,8 @@ export type Client = {
   pictures?: PictureAmount;
   /** Default carousel design, or "rotate"; unset means Classic. */
   design?: DesignChoice;
+  /** What the content is for (promo, value or a mix), the owner's brief, topics and dialects; unset means promo. */
+  direction?: ContentDirection;
   createdAt: string;
   updatedAt: string;
 };
@@ -57,6 +60,8 @@ export type Idea = {
   goal: IdeaGoal;
   angle: IdeaAngle;
   hook: string;
+  /** The one thing it teaches or says, in a few words; no two pieces share one. */
+  topic?: string;
   outline: string[];
   why: string;
   /** Which customer type it speaks to, and which "how it works" step it shows. */
@@ -109,6 +114,10 @@ export type Post = {
   kind: "carousel" | "single" | "reel";
   /** When it should go out, local "YYYY-MM-DDTHH:mm" (from its idea; changeable). */
   postAt?: string;
+  /** Its idea's topic, the dialect it was written in, and whether it sells (false: value content). */
+  topic?: string;
+  dialect?: Dialect;
+  promo?: boolean;
   slides?: Slide[];
   /** A reel: the marketing project that renders it. */
   projectId?: string;

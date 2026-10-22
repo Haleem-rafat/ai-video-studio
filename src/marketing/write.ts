@@ -111,8 +111,22 @@ const DIRECTION: Record<Creativity, string> = {
   bold: `You are an award-winning motion designer with full creative freedom. Never show the website or re-create its screens (no page, journey, traffic, booking or dashboard beats). At least 70% of the scenes are pure motion graphics (kinetic, chaos, path, stat, split, notify, orbit, sting); the rest only pain, turn, recap and the cta. Open on a sting or a kinetic hook. Surprise the viewer: unexpected word plays, contrasts, a rhythm that builds. Copy can be punchier and more playful than the script, but every claim stays true to the brief.`,
 };
 
-export async function writeMarketing(input: { brand: SiteBrand; brief: MarketingBrief; script: string; language: "en" | "ar"; format: FormatId; creativity?: Creativity }, log: (message: string) => void = console.log): Promise<MarketingDraft> {
-  const { brand, brief, script, language, format } = input;
+export async function writeMarketing(
+  input: {
+    brand: SiteBrand;
+    brief: MarketingBrief;
+    script: string;
+    language: "en" | "ar";
+    format: FormatId;
+    creativity?: Creativity;
+    /** Value content: teaches one thing, never sells; the brand only signs the last scene. */
+    value?: boolean;
+    /** The Arabic to write in, e.g. "Gulf (Khaleeji) colloquial Arabic"; Egyptian when unset. */
+    arabic?: string;
+  },
+  log: (message: string) => void = console.log,
+): Promise<MarketingDraft> {
+  const { brand, brief, script, language, format, value } = input;
   const creativity = input.creativity ?? "faithful";
   // Approved voice-over sets the length: every line is spoken, however long that takes.
   const approved = creativity === "faithful" ? voiceOver(script) : [];
@@ -126,7 +140,7 @@ export async function writeMarketing(input: { brand: SiteBrand; brief: Marketing
 
 CREATIVE DIRECTION (${creativity}): ${DIRECTION[creativity]}
 
-Language: ${arabic ? "Egyptian colloquial Arabic, natural and calm, like explaining the idea to a business owner, not reading an ad. Brand and platform names in Latin script (Risero, Instagram)." : "Simple, natural English, calm, like explaining the idea to a business owner, not reading an ad."}
+Language: ${arabic ? `${input.arabic ?? "Egyptian colloquial Arabic"}, natural and calm, like explaining the idea to a business owner, not reading an ad. Brand and platform names in Latin script (Risero, Instagram).` : "Simple, natural English, calm, like explaining the idea to a business owner, not reading an ad."}
 Format: ${format === "short" ? "vertical 9:16" : "horizontal 16:9"} for ${brief.platforms.join(", ")}.
 Length: about ${seconds} seconds = about ${budget} spoken words in total, in ${scenes} scenes.${approved.length ? ` The script's voice-over is ${approvedWords} words of approved copy: EVERY sentence of it is spoken, word for word, in order — split long voice-over across several scenes rather than cutting it.` : ""}
 
@@ -146,23 +160,32 @@ THE BRIEF (from the chat with the client — it wins over the script where they 
 Business: ${brief.business}
 Audience: ${brief.audience}
 Problems: ${brief.problems.join(" | ")}
-Result to sell: ${brief.result}
-Features to show: ${brief.features.join(" | ")}
+${
+    value
+      ? "THIS IS VALUE CONTENT, NOT AN AD: teach the viewer ONE practical thing they can do today, even if they never buy. Never name the brand or show or describe the product or its features in any scene but the last; no pitch, no \"and that's how we solve it\". The product's features are listed only so you can avoid them."
+      : `Result to sell: ${brief.result}`
+  }
+Features${value ? " (do NOT show or describe)" : " to show"}: ${brief.features.join(" | ")}
 Proof: ${brief.proof || "none — do not mention testimonials, client counts or results"}
 Dashboard numbers: ${brief.data === "real" ? "real ones the client gave (use only those in the notes)" : "examples: keep them plausible and round; the video labels them as examples"}
-Call to action: "${brief.cta.label}" → ${brief.cta.url}
+${value ? "Closing: a tip to remember, or a question that makes people comment or save; no booking, no link, no offer" : `Call to action: "${brief.cta.label}" → ${brief.cta.url}`}
 Tone: ${brief.tone}
 Notes: ${brief.notes || "none"}
 
 Rules:
-- Sell the result, not a feature list. Each scene does one job.
+- ${value ? "One idea, one takeaway, taught clearly with an example the audience recognises. Each scene does one job." : "Sell the result, not a feature list. Each scene does one job."}
 - The first scene hooks in the first 2 seconds: a question or a moment the audience recognises.
 - Only features from the brief. Never invent numbers, prices, testimonials or guarantees.
 - Write every number, time and percentage in digits ("15 دقيقة", "3 posts", "48%").
 - Never say or title that numbers are examples, demo or "تجريبية": the video labels example numbers on screen by itself.
 - On-screen words are short phrases from the narration (e.g. ${arabic ? "«صفحة مخصصة»، «حجوزات منظمة»، «افهم جمهورك»" : "\"Your own page\", \"Bookings sorted\", \"Know your audience\""}), never whole sentences.
-- The last scene is the cta: its headline is the button text, its narration says where the link is${format === "short" ? " (in the bio or below the post)" : " (below the video)"}.
-- Use a beat only if the brand really does it (no booking beat without bookings, no dashboard without analytics).`;
+${
+    value
+      ? `- The last scene is the cta beat used as the sign-off: its headline is the closing question or "save this" line (not a button to buy or book), its narration asks the viewer to comment or save; the brand's name may appear there only.
+- Never use the page, booking, traffic or dashboard beats: they show the product.`
+      : `- The last scene is the cta: its headline is the button text, its narration says where the link is${format === "short" ? " (in the bio or below the post)" : " (below the video)"}.
+- Use a beat only if the brand really does it (no booking beat without bookings, no dashboard without analytics).`
+  }`;
 
   const write = (extra = "") => generateText({ telemetry: { functionId: "script" }, model: WRITER_MODEL, output: Output.object({ schema: DRAFT }), prompt: prompt + extra });
   let { output } = await write();
@@ -185,8 +208,10 @@ Rules:
     title: output.title.trim(),
     caption: output.caption.trim(),
     hashtags: output.hashtags.map((tag) => tag.replace(/^#/, "").replace(/\s+/g, "")),
-    // A bold video never shows the website, whatever the writer chose.
-    scenes: output.scenes.map((scene) => (creativity === "bold" && (scene.beat === "page" || scene.beat === "journey") ? { ...scene, beat: "kinetic" as const } : scene)).map((scene, index) => ({
+    // A bold video never shows the website, whatever the writer chose; value content never shows the product's screens either.
+    scenes: output.scenes
+      .map((scene) => (creativity === "bold" && (scene.beat === "page" || scene.beat === "journey") ? { ...scene, beat: "kinetic" as const } : scene))
+      .map((scene) => (value && ["page", "booking", "traffic", "dashboard"].includes(scene.beat) ? { ...scene, beat: "kinetic" as const } : scene)).map((scene, index) => ({
       id: `s${String(index + 1).padStart(3, "0")}`,
       narration: scene.narration.trim(),
       visual: {

@@ -1,11 +1,12 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { suggestPostAt } from "./schedule.ts";
 
 import { extractJson } from "../llm.ts";
 import { duplicateOf, loadHistory, type Made } from "./history.ts";
 import { businessContext } from "./context.ts";
 import { ideaProblems } from "./rules.ts";
+import { directionNotes, modeOf, pitchProblems, topicTwin } from "./direction.ts";
+import { suggestPostAt } from "./schedule.ts";
 import { loadClient, loadIdeas, localDate, recentIdeas, saveIdeas } from "./store.ts";
 import { IDEA_ANGLES, IDEA_FORMATS, IDEA_GOALS, type Client, type Idea, type IdeaDay, type Trend } from "./types.ts";
 
@@ -21,6 +22,7 @@ const IDEA = z.object({
   goal: z.enum(IDEA_GOALS).describe("awareness: reach new people who don't know the brand. details: explain one feature or how it works. offer: sell, ending on the call to action"),
   angle: z.enum(IDEA_ANGLES),
   hook: z.string().describe("The first line the viewer reads or hears, in the client's language, under 120 characters"),
+  topic: z.string().describe("The ONE thing it teaches or says, in a few plain words (e.g. «answering 'how much?' without losing the client»); no two ideas share a topic"),
   outline: z.array(z.string()).describe("3-7 beats: the slides of a carousel or the scenes of a reel, one short line each"),
   why: z.string().describe("One sentence: why this reaches the niche and can travel (saves, shares, comments)"),
   persona: z.string().describe("Which customer type from the client knowledge it speaks to (its name), or the audience in a few words"),
@@ -55,6 +57,7 @@ export function numberIdeas(date: string, existing: number, drafts: IdeaDraft[],
     goal: draft.goal,
     angle: draft.angle,
     hook: draft.hook.trim(),
+    ...(draft.topic?.trim() ? { topic: draft.topic.trim() } : {}),
     outline: draft.outline.map((line) => line.trim()).filter(Boolean),
     why: draft.why.trim(),
     ...(draft.persona.trim() ? { persona: draft.persona.trim() } : {}),
@@ -86,12 +89,20 @@ Answer ONLY with JSON: {"trends":[{"title":"...","summary":"one sentence","url":
 
 /** 5 ideas that follow the rules; one retry with what broke them. */
 /** The rules a batch breaks, plus every idea that repeats something already made. */
-function batchProblems(ideas: IdeaDraft[], pastHooks: string[], made: Made[]): string[] {
+function batchProblems(ideas: IdeaDraft[], pastHooks: string[], made: Made[], client?: Pick<Client, "direction" | "name" | "pronounce" | "brief">, planned: { topic?: string; title: string }[] = []): string[] {
   const repeats = ideas.flatMap((idea, index) => {
     const twin = duplicateOf([idea.hook, ...idea.outline].join(" "), made);
     return twin ? [`Idea ${index + 1} ("${idea.hook}") repeats what was already made in "${twin.made.title}"; give it a different message, not just new words.`] : [];
   });
-  return [...ideaProblems(ideas, pastHooks), ...repeats];
+  // The same topic in other words is still the same post.
+  const topics = ideas.flatMap((idea, index) => {
+    const earlier = ideas.slice(0, index).map((other) => ({ title: other.topic }));
+    const twin = topicTwin(idea.topic, [...made, ...planned, ...earlier]);
+    return twin ? [`Idea ${index + 1}'s topic («${idea.topic}») was already covered («${twin}»); pick a different topic, not another angle on it.`] : [];
+  });
+  const mode = client ? modeOf(client) : "promo";
+  const selling = mode === "value" ? ideas.flatMap((idea, index) => (idea.goal === "offer" || pitchProblems([idea.hook, ...idea.outline, ""], client!).length ? [`Idea ${index + 1} sells the product; this client wants value content: teach one practical thing, no product.`] : [])) : mode === "mix" && ideas.filter((idea) => idea.goal === "offer").length > 1 ? ["At most 1 idea may sell (goal \"offer\"); the rest teach one practical thing."] : [];
+  return [...ideaProblems(ideas, pastHooks, mode), ...repeats, ...topics, ...selling];
 }
 
 /** The formats of the last carousels, so new ideas lean to other angles; empty when there are none. */
@@ -100,7 +111,7 @@ export function recentFormats(made: Made[]): string {
   return formats.length ? `RECENT CAROUSEL FORMATS, newest first (pick other angles than the last ones): ${formats.join(", ")}\n\n` : "";
 }
 
-export async function writeIdeas(client: Client, trends: Trend[], pastHooks: string[], log: (message: string) => void, made: Made[] = []): Promise<IdeaDraft[]> {
+export async function writeIdeas(client: Client, trends: Trend[], pastHooks: string[], log: (message: string) => void, made: Made[] = [], planned: { topic?: string; title: string }[] = []): Promise<IdeaDraft[]> {
   const arabic = client.language === "ar";
   const prompt = `You are the Instagram content strategist of ${client.name} (${client.url}). Suggest today's 5 post ideas: niche, reach and shareable, never generic.
 
@@ -116,7 +127,10 @@ Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}
 Tone: ${client.brief.tone}
 Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, client counts or guarantees.
 
-${businessContext(client, "ideas") ? `${businessContext(client, "ideas")}\n\n` : ""}THIS WEEK'S TRENDS (ride one where it fits; cite its url in "trend")
+${businessContext(client, "ideas") ? `${businessContext(client, "ideas")}\n\n` : ""}${directionNotes(client, "ideas", made) ? `${directionNotes(client, "ideas", made)}\n\n` : ""}TOPICS ALREADY MADE OR PLANNED (each new idea needs a topic none of these cover)
+${[...made.map((m) => m.topic ?? m.title), ...planned.map((p) => p.topic ?? p.title)].slice(0, 60).map((t) => `- ${t}`).join("\n") || "none"}
+
+THIS WEEK'S TRENDS (ride one where it fits; cite its url in "trend")
 ${trends.length ? trends.map((t) => `- ${t.title}: ${t.summary} (${t.url})`).join("\n") : "none found today: use evergreen angles"}
 
 ALREADY MADE AND PAID FOR (never repeat these messages, angles or examples; each new idea must say something these don't)
@@ -126,21 +140,21 @@ ${recentFormats(made)}HOOKS ALREADY USED IN THE LAST ${HISTORY_DAYS} DAYS (do no
 ${pastHooks.length ? pastHooks.map((h) => `- ${h}`).join("\n") : "none"}
 
 RULES
-- Exactly 5 ideas: at least 1 reel and at least 2 carousels; the goals awareness, details and offer each at least once; every idea a different angle.
+- Exactly 5 ideas: at least 1 reel and at least 2 carousels; ${modeOf(client) === "promo" ? "the goals awareness, details and offer each at least once" : modeOf(client) === "value" ? "goals awareness or details only (never offer): every idea teaches one practical thing" : "at most 1 idea with the goal offer; the others teach one practical thing"}; every idea a different angle and a different topic.
 - An "announcement" idea only when the client's answers or knowledge give a real current offer, launch or event; a "behind" idea only shows real moments of the business.
 - Language of hook and outline: ${arabic ? "Egyptian colloquial Arabic, natural, like talking to a business owner. Brand and platform names in Latin script" : "simple, natural English"}.
-- Each idea speaks to ONE customer type, in their words, about their real situation, and (except pure awareness) shows ONE real step of how the product works for them. No generic marketing ideas.
+- Each idea speaks to ONE customer type, in their words, about their real situation${modeOf(client) === "promo" ? ", and (except pure awareness) shows ONE real step of how the product works for them" : ", with ONE practical takeaway they can use today; leave \"step\" empty unless the idea sells"}. No generic marketing ideas.
 - Hooks stop the scroll: a pain the audience recognises, a surprising number, a bold claim or a direct question. Under 120 characters.
 - Carousels are infographic: each outline line is one slide (cover first, call to action last). Reels: each line is a scene; the hook is said in the first 2 seconds.`;
 
   const write = (extra = "") => generateText({ telemetry: { functionId: "ideas" }, model: WRITER_MODEL, output: Output.object({ schema: IDEAS }), prompt: prompt + extra });
   log(`ideas: writing 5 ideas for ${client.name} ...`);
   let { output } = await write();
-  const problems = batchProblems(output.ideas, pastHooks, made);
+  const problems = batchProblems(output.ideas, pastHooks, made, client, planned);
   if (problems.length) {
     log(`ideas: fixing ${problems.length} problem(s) ...`);
     ({ output } = await write(`\n\nYOUR FIRST ANSWER BROKE THESE RULES:\n${problems.map((p) => `- ${p}`).join("\n")}\nWrite the 5 ideas again so none are broken.`));
-    const still = batchProblems(output.ideas, pastHooks, made);
+    const still = batchProblems(output.ideas, pastHooks, made, client, planned);
     if (still.length) log(`ideas: still ${still.join(" ")}`);
   }
   return output.ideas.slice(0, 5);
@@ -151,8 +165,11 @@ export async function makeIdeas(clientId: string, log: (message: string) => void
   const client = await loadClient(clientId);
   const day = (await loadIdeas(clientId, date)) ?? { date, trends: [], ideas: [] };
   const trends = await findTrends(client, log);
-  const pastHooks = (await recentIdeas(clientId, date, HISTORY_DAYS)).map((idea) => idea.hook);
-  const drafts = await writeIdeas(client, trends, pastHooks, log, await loadHistory(clientId));
+  const recent = await recentIdeas(clientId, date, HISTORY_DAYS);
+  const pastHooks = recent.map((idea) => idea.hook);
+  // Ideas not made yet are planned topics: a new idea must not take one of them either.
+  const planned = [...recent, ...(day.ideas ?? [])].filter((idea) => idea.status === "new").map((idea) => ({ topic: idea.topic, title: idea.hook }));
+  const drafts = await writeIdeas(client, trends, pastHooks, log, await loadHistory(clientId), planned);
   day.trends = [...day.trends, ...trends.filter((t) => !day.trends.some((old) => old.url === t.url))];
   day.ideas = [...day.ideas, ...numberIdeas(date, day.ideas.length, drafts)];
   await saveIdeas(clientId, day);

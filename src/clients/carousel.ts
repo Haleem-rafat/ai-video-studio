@@ -6,10 +6,12 @@ import { generateImage, generateText, Output } from "ai";
 import { z } from "zod";
 
 import { recordImage } from "../usage.ts";
-import { proofread } from "./arabic.ts";
+import { proofread, textsOf } from "./arabic.ts";
 import { FLAT_SLIDE, fitSlides, slideProblems, toSlide } from "./slides.ts";
 import { styleOf, withPictures, type PictureAmount } from "./styles.ts";
 import { businessContext } from "./context.ts";
+import { dialectLanguage, directionNotes, pitchProblems, type Dialect } from "./direction.ts";
+import type { Made } from "./history.ts";
 import { formatForIdea, formatOf, formatProblems, type FormatId } from "./formats.ts";
 import { pictureRepeats } from "./history.ts";
 import { needsRewrite, reviewScript, rewriteNotes, scriptOf } from "./review.ts";
@@ -34,9 +36,9 @@ export function resolveFormat(idea: Pick<Idea, "format" | "angle">, choice: Form
 export function carouselPrompt(
   client: Client,
   idea: Idea,
-  options: { pictures?: PictureAmount; pastTitles?: string[]; format?: FormatId | "auto"; recentOrders?: string[][]; recentPictures?: string[] } = {},
+  options: { pictures?: PictureAmount; pastTitles?: string[]; format?: FormatId | "auto"; recentOrders?: string[][]; recentPictures?: string[]; sell?: boolean; dialect?: Dialect; history?: Made[] } = {},
 ): string {
-  const { pictures = "light", pastTitles = [], recentOrders = [], recentPictures = [] } = options;
+  const { pictures = "light", pastTitles = [], recentOrders = [], recentPictures = [], sell = true, dialect, history = [] } = options;
   const kind = idea.format === "single" ? "single" : "carousel";
   const arabic = client.language === "ar";
   const format = formatOf(resolveFormat(idea, options.format));
@@ -50,14 +52,14 @@ THE CLIENT
 Offer: ${client.brand.summary}
 Audience: ${client.brief.audience}
 Problems: ${client.brief.problems.join(" | ")}
-Features: ${client.brief.features.join(" | ")}
-Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}
+${sell ? `Features: ${client.brief.features.join(" | ")}` : `Features (listed only so you avoid them: never show or describe them): ${client.brief.features.join(" | ")}`}
+${sell ? `Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}` : `Closing slide: the cta layout as a sign-off, not a sale: title = a question people answer in the comments or a "save this" line; button = a short save/share prompt (e.g. ${arabic ? "«احفظه لبعدين»" : "\"Save it for later\""}); url = ${client.instagramHandle ? `@${client.instagramHandle}` : client.name}. No booking, no offer, no link to buy.`}
 Tone: ${client.brief.tone}
 Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, client counts or guarantees.
 
-${businessContext(client, "carousel") ? `${businessContext(client, "carousel")}\n\n` : ""}${format ? `POST FORMAT: ${format.label.en}\n${format.structure}\nBuild it mostly from these layouts: ${format.layouts.join(", ")}.${format.caption ? `\nCaption: ${format.caption}` : ""}\n\n` : ""}${recentOrders.length ? `RECENT SLIDE ORDERS (already posted; use a different order and mix of layouts, so this post doesn't look like the last ones):\n${recentOrders.slice(0, 5).map((order) => `- ${order.join(" → ")}`).join("\n")}\n\n` : ""}${recentPictures.length ? `PICTURES ALREADY USED in this client's posts and reels (never reuse these subjects or close variants; invent new scenes, people, places and metaphors):\n${recentPictures.slice(0, 40).map((picture) => `- ${picture}`).join("\n")}\n\n` : ""}${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
+${businessContext(client, "carousel") ? `${businessContext(client, "carousel")}\n\n` : ""}${directionNotes(client, "carousel", history, sell) ? `${directionNotes(client, "carousel", history, sell)}\n\n` : ""}${format ? `POST FORMAT: ${format.label.en}\n${format.structure}\nBuild it mostly from these layouts: ${format.layouts.join(", ")}.${format.caption ? `\nCaption: ${format.caption}` : ""}\n\n` : ""}${recentOrders.length ? `RECENT SLIDE ORDERS (already posted; use a different order and mix of layouts, so this post doesn't look like the last ones):\n${recentOrders.slice(0, 5).map((order) => `- ${order.join(" → ")}`).join("\n")}\n\n` : ""}${recentPictures.length ? `PICTURES ALREADY USED in this client's posts and reels (never reuse these subjects or close variants; invent new scenes, people, places and metaphors):\n${recentPictures.slice(0, 40).map((picture) => `- ${picture}`).join("\n")}\n\n` : ""}${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
 - ${kind === "single" ? "Exactly 1 slide: a cover whose title is the hook, sharpened, and a subtitle with the one takeaway." : "5-8 slides. Slide 1 is the cover (the hook as a title that makes people swipe). The last slide is the cta. Between them, one idea per slide, using the layouts that fit the content: stat, list, checklist, myth-fact, fix, before-after, versus, steps, faq, chat, quote, chart."}
-- Write like someone who knows this product: show how it really works for the customer (a real step, a real screen, a real moment), in the customer's own words, about their own situation. No generic marketing lines.
+- ${sell ? "Write like someone who knows this product: show how it really works for the customer (a real step, a real screen, a real moment), in the customer's own words, about their own situation. No generic marketing lines." : `Teach like an expert friend: ONE practical takeaway${idea.topic ? ` (${idea.topic})` : ""} they can use today, with examples from their own situation, in their own words. The brand's name appears only on the last slide; never describe the product. No generic lines.`}
 - Very short text: a title under 70 characters, list items under 70, a stat value like "3x" or "15".
 - Numbers not given in the client's facts are examples: put "${arabic ? "مثال" : "example"}" in the note or the chart unit.
 - Art: ${
@@ -65,7 +67,7 @@ ${businessContext(client, "carousel") ? `${businessContext(client, "carousel")}\
       ? "no pictures: leave art empty on every slide; the design and the words carry the post."
       : `${pictures === "rich" ? "an English picture prompt for EVERY slide" : "an English picture prompt for the cover and at most 2 other slides"}: the subject only, never text, never logos; the art style is added later. Every picture is a fresh, specific visual idea for its slide: mix people in real moments, places, objects and visual metaphors, and never reach for a phone, a calendar or chat bubbles unless the slide is about exactly that.`
   }
-- Language: ${arabic ? "Egyptian colloquial Arabic, natural, correctly spelled (hamza, ة/ه, ى/ي), also in hashtags; brand and platform names in Latin script" : "simple, natural English"}.`;}
+- Language: ${arabic ? `${dialectLanguage(dialect)}, natural, correctly spelled (hamza, ة/ه, ى/ي), also in hashtags; brand and platform names in Latin script` : "simple, natural English"}.`;}
 
 /** The slides and caption of a carousel (5-8 slides) or a single image (1 cover), checked and fitted to the limits. */
 export async function writeCarousel(
@@ -77,13 +79,18 @@ export async function writeCarousel(
   choice?: FormatId | "auto",
   recentOrders: string[][] = [],
   recentPictures: string[] = [],
+  { sell = true, dialect, history = [] }: { sell?: boolean; dialect?: Dialect; history?: Made[] } = {},
 ): Promise<{ slides: Slide[]; caption: string; hashtags: string[]; review?: ScriptReview; format?: FormatId }> {
   const kind = idea.format === "single" ? "single" : "carousel";
   const format = resolveFormat(idea, choice);
-  const prompt = carouselPrompt(client, idea, { pictures, pastTitles, format, recentOrders, recentPictures });
+  const prompt = carouselPrompt(client, idea, { pictures, pastTitles, format, recentOrders, recentPictures, sell, dialect, history });
+  // Value content signs off with a save prompt instead of the booking link.
+  const arabic = client.language === "ar";
+  const signOff = { label: arabic ? "احفظه لبعدين" : "Save it for later", url: client.instagramHandle ? `@${client.instagramHandle}` : client.name };
+  const closing = sell ? client.brief.cta : signOff;
 
   const write = (extra = "") => generateText({ telemetry: { functionId: "carousel" }, model: WRITER_MODEL, output: Output.object({ schema: CAROUSEL }), prompt: prompt + extra });
-  const toSlides = (output: z.infer<typeof CAROUSEL>) => output.slides.map((flat) => toSlide(flat, client.brief.cta)).filter((slide): slide is Slide => slide !== null);
+  const toSlides = (output: z.infer<typeof CAROUSEL>) => output.slides.map((flat) => toSlide(flat, closing)).filter((slide): slide is Slide => slide !== null);
 
   /** One draft: written, its layout problems fixed once, opened on a cover and closed on the call to action. */
   const draft = async (extra = "") => {
@@ -91,7 +98,10 @@ export async function writeCarousel(
     let slides = toSlides(output);
     // A picture already used is sent back before anything is drawn, like a layout problem.
     const repeats = pictureRepeats(slides.map((slide) => slide.art?.prompt).filter((prompt): prompt is string => Boolean(prompt)), recentPictures);
-    const problems = [...slideProblems(slides, kind), ...formatProblems(slides, format), ...repeats.map((prompt) => `The picture "${prompt}" repeats one this client already used: give that slide a new picture idea.`)];
+    // The last slide may carry the brand's name: it is left last, so the check skips it.
+    const texts = slides.map((slide) => textsOf(slide).map((ref) => ref.get()).join(" "));
+    const pitch = sell ? [] : pitchProblems([...texts.slice(0, -1), output.caption, texts.at(-1) ?? ""], client);
+    const problems = [...slideProblems(slides, kind), ...formatProblems(slides, format), ...repeats.map((prompt) => `The picture "${prompt}" repeats one this client already used: give that slide a new picture idea.`), ...pitch];
     if (problems.length) {
       log(`carousel: fixing ${problems.length} problem(s) ...`);
       ({ output } = await write(`${extra}\n\nYOUR ANSWER HAD THESE PROBLEMS:\n${problems.map((p) => `- ${p}`).join("\n")}\nWrite the slides again without them.`));
@@ -99,7 +109,7 @@ export async function writeCarousel(
     }
     if (kind === "single") slides = slides.filter((slide) => slide.layout === "cover").slice(0, 1);
     if (slides[0]?.layout !== "cover") slides = [{ layout: "cover", title: idea.hook }, ...slides.filter((slide) => slide.layout !== "cover")];
-    if (kind === "carousel" && slides.at(-1)?.layout !== "cta") slides.push({ layout: "cta", title: client.brief.cta.label, button: client.brief.cta.label, url: client.brief.cta.url });
+    if (kind === "carousel" && slides.at(-1)?.layout !== "cta") slides.push({ layout: "cta", title: closing.label, button: closing.label, url: closing.url });
     slides = withPictures(slides, pictures, (slide) => `An illustration of: ${"title" in slide ? slide.title : "text" in slide ? slide.text : "myth" in slide ? slide.fact : idea.hook}`);
     return { slides: fitSlides(slides), caption: output.caption.trim(), hashtags: output.hashtags };
   };
@@ -107,12 +117,12 @@ export async function writeCarousel(
   log(`carousel: writing "${idea.hook}" ...`);
   let result = await draft();
   // Checked before any picture is paid for; a weak script is written once more with the reviewer's notes.
-  let review = await reviewScript(client, { kind, idea, script: `${scriptOf(result)}\nCAPTION: ${result.caption}` }, log);
+  let review = await reviewScript(client, { kind, idea, script: `${scriptOf(result)}\nCAPTION: ${result.caption}`, sell }, log);
   let rewritten = false;
   if (review && needsRewrite(review)) {
     log("carousel: rewriting with the reviewer's notes ...");
-    result = await draft(rewriteNotes(review));
-    review = (await reviewScript(client, { kind, idea, script: `${scriptOf(result)}\nCAPTION: ${result.caption}` }, log)) ?? review;
+    result = await draft(rewriteNotes(review, sell));
+    review = (await reviewScript(client, { kind, idea, script: `${scriptOf(result)}\nCAPTION: ${result.caption}`, sell }, log)) ?? review;
     rewritten = true;
   }
   await proofread(result, log);

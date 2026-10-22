@@ -14,12 +14,13 @@ export function normalizeHook(text: string): string {
 }
 
 /** What a day's batch of ideas breaks of the rules, as sentences the writer can fix. Empty when it's fine. */
-export function ideaProblems(ideas: Pick<Idea, "format" | "goal" | "angle" | "hook">[], pastHooks: string[]): string[] {
+export function ideaProblems(ideas: Pick<Idea, "format" | "goal" | "angle" | "hook">[], pastHooks: string[], mode: "promo" | "value" | "mix" = "promo"): string[] {
   const problems: string[] = [];
   if (ideas.length !== 5) problems.push(`Write exactly 5 ideas (you wrote ${ideas.length}).`);
   if (!ideas.some((i) => i.format === "reel")) problems.push("At least 1 idea must be a reel.");
   if (ideas.filter((i) => i.format === "carousel").length < 2) problems.push("At least 2 ideas must be carousels.");
-  for (const goal of IDEA_GOALS) if (!ideas.some((i) => i.goal === goal)) problems.push(`At least 1 idea must have the goal "${goal}".`);
+  // Value content never needs an offer; promo needs every goal.
+  for (const goal of IDEA_GOALS) if ((mode === "promo" || goal !== "offer") && !ideas.some((i) => i.goal === goal)) problems.push(`At least 1 idea must have the goal "${goal}".`);
 
   const angles = new Map<string, number>();
   for (const idea of ideas) angles.set(idea.angle, (angles.get(idea.angle) ?? 0) + 1);

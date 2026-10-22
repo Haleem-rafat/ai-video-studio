@@ -22,6 +22,7 @@ import type { Client, Idea, Slide } from "../clients/types.ts";
 import { loadProject, projectDir } from "../project.ts";
 import { enqueue, recentJobs } from "./jobs.ts";
 import { editedSlideProblems } from "../clients/slides.ts";
+import { readDirection } from "../clients/direction.ts";
 import { handleInvoices } from "./invoices.ts";
 import { handlePrompted } from "./prompted.ts";
 
@@ -186,13 +187,18 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       return true;
     }
     if (method === "PUT") {
-      const edits = await body<Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce" | "knowledge" | "design">>>(request);
+      const edits = await body<Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce" | "knowledge" | "design">> & { direction?: unknown }>(request);
       if (edits.knowledge && typeof edits.knowledge === "object" && Array.isArray(edits.knowledge.howItWorks)) client.knowledge = { ...edits.knowledge, updatedAt: new Date().toISOString() } as Knowledge;
       if (edits.pronounce && typeof edits.pronounce === "object")
         client.pronounce = Object.fromEntries(Object.entries(edits.pronounce).filter(([word, said]) => typeof said === "string" && word.trim() && said.trim()).map(([word, said]) => [word.trim(), String(said).trim()]));
       if (isStyle(edits.artStyle)) client.artStyle = edits.artStyle;
       if (isAmount(edits.pictures)) client.pictures = edits.pictures;
       if (isDesignChoice(edits.design)) client.design = edits.design;
+      if (edits.direction !== undefined) {
+        const direction = readDirection(edits.direction);
+        if (!direction) throw fail(400, "A content direction needs a mode: promo, value or mix.");
+        client.direction = direction;
+      }
       if (typeof edits.name === "string" && edits.name.trim()) client.name = edits.name.trim();
       if (typeof edits.instagramHandle === "string") client.instagramHandle = edits.instagramHandle.trim().replace(/^@/, "") || undefined;
       if (edits.language === "ar" || edits.language === "en") client.language = edits.language;

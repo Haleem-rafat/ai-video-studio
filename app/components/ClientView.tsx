@@ -16,6 +16,7 @@ import { DesignPicker } from "./DesignPicker.tsx";
 import { CompareDesigns } from "./CompareDesigns.tsx";
 import { openCarouselEditor } from "./CarouselEditor.tsx";
 import { InvoicesPanel } from "./InvoicesPanel.tsx";
+import { ContentDirection } from "./ContentDirection.tsx";
 import { PostAt, suggestPostAt, when } from "./PostAt.tsx";
 import { PromptedMode } from "./PromptedMode.tsx";
 import { VideoPlayer } from "./VideoPlayer.tsx";
@@ -174,6 +175,14 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
         <TabsContent value="ideas" className="grid gap-4 pt-2">
           <div className="flex flex-wrap items-center gap-2">
             <Input type="date" value={date} max={today()} onChange={(event) => setDate(event.target.value || today())} className="w-44" />
+            <ContentDirection
+              key={client.direction?.updatedAt ?? "none"}
+              client={client}
+              onSaved={(next) => {
+                setClient(next);
+                onChanged(next);
+              }}
+            />
             {day?.trends.length ? <span className="text-xs text-muted-foreground">{day.trends.length} trends from this week's search</span> : null}
             {library?.ideasByDate[date] ? <Badge variant="outline" className="font-mono">ideas {formatCost(library.ideasByDate[date])}</Badge> : null}
           </div>
@@ -413,6 +422,11 @@ function IdeaCard({
       <p className="font-medium" dir="auto">
         {idea.hook}
       </p>
+      {idea.topic && (
+        <p className="text-xs text-muted-foreground" dir="auto">
+          Topic: {idea.topic}
+        </p>
+      )}
       <ol className="list-decimal ps-5 text-sm text-muted-foreground" dir="auto">
         {idea.outline.map((line, i) => (
           <li key={i}>{line}</li>
@@ -581,6 +595,8 @@ function PostCard({ client, post, cost, designs, onOpenProject, onSaved }: { cli
         )}
         {post.review && <ReviewBadge review={post.review} />}
         {post.postFormat && <Badge variant="outline">{FORMAT_NAMES[post.postFormat]}</Badge>}
+        {post.promo === false && <Badge variant="secondary">Value</Badge>}
+        {post.dialect === "gulf" && <Badge variant="outline">Gulf</Badge>}
         {post.kind !== "reel" && <Badge variant="outline">{designs.find((design) => design.id === (post.design ?? "classic"))?.label.en ?? "Classic"}</Badge>}
       </div>
       <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">

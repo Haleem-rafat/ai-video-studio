@@ -15,6 +15,8 @@ import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/s
 import type { DesignId } from "../src/clients/designs.ts";
 import type { FormatId as PostFormatId } from "../src/clients/formats.ts";
 import type { ReelStyleId } from "../src/clients/reel-styles.ts";
+import type { ContentDirection, Dialect, DirectionMode } from "../src/clients/direction.ts";
+export type { ContentDirection, Dialect, DirectionMode };
 import type { Currency, Invoice, InvoiceItem, InvoiceState, InvoiceView, Payment, PaymentMethod } from "../src/clients/invoices.ts";
 export type { Currency, Invoice, InvoiceItem, InvoiceState, InvoiceView, Payment, PaymentMethod };
 
@@ -120,7 +122,7 @@ export const api = {
   clients: () => call<Client[]>("GET", "/api/clients"),
   client: (id: string) => call<Client>("GET", `/api/clients/${id}`),
   newClient: (input: { fromProject?: string; url?: string }) => call<Job>("POST", "/api/clients", input),
-  editClient: (id: string, edits: Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce" | "knowledge" | "design">>) => call<Client>("PUT", `/api/clients/${id}`, edits),
+  editClient: (id: string, edits: Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce" | "knowledge" | "design">> & { direction?: { mode: DirectionMode; brief: string; topics: string[]; dialects: Dialect[] } }) => call<Client>("PUT", `/api/clients/${id}`, edits),
   ideas: (id: string, date?: string) => call<IdeaDay>("GET", `/api/clients/${id}/ideas${date ? `?date=${date}` : ""}`),
   moreIdeas: (id: string) => call<Job>("POST", `/api/clients/${id}/ideas`),
   formats: () => call<FormatInfo[]>("GET", "/api/clients/formats"),

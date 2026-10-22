@@ -28,6 +28,10 @@ export type Made = {
   reelStyle?: string;
   /** The pictures it used: a carousel's picture prompts, a reel's planned subjects. */
   pictures?: string[];
+  /** What it was about (its idea's topic), its dialect, and whether it sold the product. */
+  topic?: string;
+  dialect?: string;
+  promo?: boolean;
   createdAt: string;
 };
 
@@ -42,7 +46,7 @@ const STOP = new Set([
 ]);
 
 /** The meaningful words of a text: normalized, 3+ letters, no stop words. */
-function words(text: string): Set<string> {
+export function words(text: string): Set<string> {
   return new Set(normalizeHook(text).split(" ").filter((word) => word.length >= 3 && !STOP.has(word)));
 }
 
@@ -127,6 +131,9 @@ function slideLines(slide: Slide): string[] {
   return textsOf(slide).map((ref) => ref.get());
 }
 
+/** A post's topic and dialect; posts from before content directions were all promos. */
+const about = (post: Pick<Post, "topic" | "dialect" | "promo">) => ({ ...(post.topic ? { topic: post.topic } : {}), ...(post.dialect ? { dialect: post.dialect } : {}), promo: post.promo ?? true });
+
 /** A made carousel or image as history: its texts, and the format, design and slide order it used. */
 export function madeFromPost(post: Post): Made {
   const lines = (post.slides ?? []).flatMap(slideLines);
@@ -140,6 +147,7 @@ export function madeFromPost(post: Post): Made {
     design: post.design ?? "classic",
     layouts: (post.slides ?? []).map((slide) => slide.layout),
     pictures: (post.slides ?? []).map((slide) => slide.art?.prompt).filter((prompt): prompt is string => Boolean(prompt)),
+    ...about(post),
     createdAt: post.createdAt,
   };
 }
@@ -228,7 +236,7 @@ export async function loadHistory(clientId: string): Promise<Made[]> {
   const reels = new Set(posts.map((post) => post.projectId).filter(Boolean));
   const made = [
     ...posts.filter((post) => post.kind !== "reel" && post.status === "done").map(madeFromPost),
-    ...projects.filter((project) => reels.has(project.id)).map((project) => madeFromProject(project, "reel")),
+    ...projects.filter((project) => reels.has(project.id)).map((project) => ({ ...madeFromProject(project, "reel"), ...about(posts.find((post) => post.projectId === project.id)!) })),
     ...projects.filter((project) => !reels.has(project.id) && host && project.marketing && hostOf(project.marketing.brand.url) === host).map((project) => madeFromProject(project, "video")),
   ];
   return made.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

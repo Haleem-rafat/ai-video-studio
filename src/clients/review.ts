@@ -35,7 +35,7 @@ const REVIEW = z.object({
 });
 
 /** Scores a script against the client's knowledge; null when the check itself fails (the post goes on). */
-export async function reviewScript(client: Client, input: { kind: "carousel" | "single" | "reel"; idea: Idea; script: string }, log: (message: string) => void): Promise<Omit<ScriptReview, "rewritten"> | null> {
+export async function reviewScript(client: Client, input: { kind: "carousel" | "single" | "reel"; idea: Idea; script: string; sell?: boolean }, log: (message: string) => void): Promise<Omit<ScriptReview, "rewritten"> | null> {
   try {
     log("review: checking the script against the client knowledge ...");
     const { output } = await generateText({
@@ -45,7 +45,7 @@ export async function reviewScript(client: Client, input: { kind: "carousel" | "
       prompt: `You are the client's demanding marketing lead. Review this Instagram ${input.kind} script for ${client.name} before money is spent producing it. Score 1-5 honestly; 4 means good enough to publish.
 
 THE IDEA: ${input.idea.hook} (goal ${input.idea.goal}${input.idea.persona ? `, for ${input.idea.persona}` : ""})
-
+${input.sell === false ? `\nTHIS IS VALUE CONTENT, NOT AN AD: it must teach one practical thing and never pitch the product. Score "understand" as: would a viewer get the one takeaway and know how to apply it today? Score "truthful" low if it names the brand before the last frame, walks through the product's features, or invents facts. Never ask it to explain the product.\n` : ""}
 ${businessContext(client, "review") || `WHAT THE CLIENT SELLS\n${client.brand.summary}\nFeatures: ${client.brief.features.join(" | ")}\nAudience: ${client.brief.audience}`}
 
 THE SCRIPT
@@ -60,6 +60,7 @@ ${input.script}`,
 }
 
 /** The reviewer's notes as instructions for one rewrite. */
-export function rewriteNotes(review: Omit<ScriptReview, "rewritten">): string {
+export function rewriteNotes(review: Omit<ScriptReview, "rewritten">, sell = true): string {
+  if (!sell) return `\n\nA REVIEWER SCORED YOUR FIRST DRAFT: takeaway clear ${review.understand}/5, feels personal ${review.feel}/5, true and not an ad ${review.truthful}/5. Fix all of this:\n${review.notes.map((note) => `- ${note}`).join("\n")}\nWrite it again so the viewer gets one practical takeaway, feels it is about them, and nothing pitches the product.`;
   return `\n\nA REVIEWER SCORED YOUR FIRST DRAFT: understand ${review.understand}/5, feels personal ${review.feel}/5, true ${review.truthful}/5. Fix all of this:\n${review.notes.map((note) => `- ${note}`).join("\n")}\nWrite it again so a customer understands how the product works for them, feels it is about them, and every claim is in the client knowledge.`;
 }

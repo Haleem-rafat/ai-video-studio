@@ -14,6 +14,7 @@ import { createReel } from "./reel.ts";
 import { captionText, cleanHashtags } from "./rules.ts";
 import { clientDir, listPosts, loadClient, loadIdeas, loadPost, postDir, saveIdeas, savePost } from "./store.ts";
 import { suggestPostAt } from "./schedule.ts";
+import { maySell, modeOf, nextDialect } from "./direction.ts";
 import { autoFormat, chooseDesign, loadHistory } from "./history.ts";
 import { pickRotation, type ArtStyleChoice, type PictureAmount } from "./styles.ts";
 import type { Idea, Post, Slide } from "./types.ts";
@@ -116,11 +117,15 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   // Rotate and Auto never repeat the look or structure of the last posts.
   const design = chooseDesign(options.design ?? client.design, history);
   const format = options.format === "auto" ? autoFormat(idea, history) : options.format;
-  const post: Post = { id: postIdFor(idea, options.variant), clientId, ideaId, kind: idea.format, postAt: idea.postAt ?? suggestPostAt(idea.id), caption: "", hashtags: [], artStyle, pictures, ...(design && idea.format !== "reel" ? { design } : {}), status: "writing", createdAt: now, updatedAt: now };
+  // The content direction decides whether this piece sells; Arabic dialects take turns.
+  const mode = modeOf(client);
+  const sell = mode === "promo" || (mode === "mix" && idea.goal === "offer" && maySell(client, history));
+  const dialect = nextDialect(client, history);
+  const post: Post = { id: postIdFor(idea, options.variant), clientId, ideaId, kind: idea.format, postAt: idea.postAt ?? suggestPostAt(idea.id), ...(idea.topic ? { topic: idea.topic } : {}), ...(dialect ? { dialect } : {}), promo: sell, caption: "", hashtags: [], artStyle, pictures, ...(design && idea.format !== "reel" ? { design } : {}), status: "writing", createdAt: now, updatedAt: now };
   await savePost(post);
   try {
     if (idea.format === "reel") {
-      const reel = await createReel(client, idea, log, history, options.reelStyle);
+      const reel = await createReel(client, idea, log, history, options.reelStyle, { sell, dialect });
       post.projectId = reel.projectId;
       if (reel.reelStyle && reel.reelStyle !== "classic") post.reelStyle = reel.reelStyle;
       if (reel.review) post.review = reel.review;
@@ -135,7 +140,7 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
       const recentOrders = history.filter((made) => made.kind === "carousel" && made.layouts?.length).map((made) => made.layouts!);
       // Pictures of the client's carousels and reels alike: no picture is used twice.
       const recentPictures = history.flatMap((made) => made.pictures ?? []);
-      const written = await writeCarousel(client, idea, log, pictures, pastTitles, format, recentOrders, recentPictures);
+      const written = await writeCarousel(client, idea, log, pictures, pastTitles, format, recentOrders, recentPictures, { sell, dialect, history });
       if (written.format) post.postFormat = written.format;
       post.caption = written.caption;
       if (written.review) post.review = written.review;
