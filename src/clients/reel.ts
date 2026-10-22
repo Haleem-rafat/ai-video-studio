@@ -7,6 +7,7 @@ import { writeMarketing } from "../marketing/write.ts";
 import { newProjectId, projectDir, saveProject } from "../project.ts";
 import type { MarketingBrief, Project } from "../types.ts";
 import { prepareSpeech, proofread } from "./arabic.ts";
+import { keepSpellings } from "./speech.ts";
 import { nextCreativity, nextVoice, reelProblems, type Made } from "./history.ts";
 import { businessContext } from "./context.ts";
 import { dialectLanguage, dialectProblems, directionNotes, pitchProblems, samePitch, type Dialect } from "./direction.ts";
@@ -127,7 +128,7 @@ export async function createReel(
   const text = { scenes: draft.scenes, caption: draft.caption, hashtags: draft.hashtags };
   await proofread(text, log, dialect);
   draft = { ...draft, caption: text.caption, hashtags: text.hashtags };
-  await prepareSpeech(draft.scenes, client, log, dialect);
+  await keepSpellings(client.id, await prepareSpeech(draft.scenes, client, log, dialect));
   const now = new Date().toISOString();
   const project: Project = {
     id: newProjectId(MARKETING_OWNER, "short", `${client.name} reel ${idea.goal}`),
@@ -149,6 +150,7 @@ export async function createReel(
       captions: subtitles !== undefined ? subtitles === "yes" : (style?.captions ?? Boolean(brief.captions)),
       ...(style && style.id !== "classic" ? { reelStyle: style.id } : {}),
       ...(sell ? {} : { value: true }),
+      ...(dialect ? { dialect } : {}),
       // The art director stays clear of the styles and pictures this client already used.
       artAvoid: {
         styles: history.filter((made) => (made.kind === "reel" || made.kind === "video") && made.artStyle).map((made) => made.artStyle!),

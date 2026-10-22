@@ -33,10 +33,27 @@ export function egyptianNumbers(text: string): string {
   });
 }
 
-/** Swaps whole words for how they are said, ignoring case: { Risero: "رايزرو" }. */
+/**
+ * English words Arabic speakers use, as they say them. A voice reading Latin
+ * letters inside Arabic switches language mid-sentence and stumbles, so every
+ * one is spoken from Arabic letters. A client's own list wins over these.
+ */
+export const COMMON_WORDS: Record<string, string> = {
+  Instagram: "إنستجرام", WhatsApp: "واتساب", Facebook: "فيسبوك", TikTok: "تيك توك", YouTube: "يوتيوب", Snapchat: "سناب شات", LinkedIn: "لينكد إن", Telegram: "تيليجرام",
+  Google: "جوجل", "Google Form": "جوجل فورم", "Google Forms": "جوجل فورمز", "Google Calendar": "جوجل كاليندر", Gmail: "جيميل", Calendly: "كاليندلي", Zoom: "زووم", Canva: "كانفا", Notion: "نوشن",
+  DM: "دي إم", DMs: "دي إمز", bio: "بايو", link: "لينك", links: "لينكات", reel: "ريل", reels: "ريلز", story: "ستوري", stories: "ستوريز", post: "بوست", posts: "بوستات", feed: "فيد", highlight: "هايلايت", highlights: "هايلايتس",
+  online: "أونلاين", offline: "أوفلاين", OK: "أوكيه", AI: "إيه آي", PDF: "بي دي إف", app: "أبلكيشن", CTA: "سي تي إيه", SEO: "إس إي أو", follow: "فولو", followers: "فولوورز", like: "لايك", likes: "لايكات", comment: "كومنت", comments: "كومنتات", save: "سيف", share: "شير",
+};
+
+/** The words written in Latin letters in a text (a voice should not read them as they are). */
+export function latinWords(text: string): string[] {
+  return text.match(/[A-Za-z][A-Za-z0-9'’.+-]*[A-Za-z0-9]|[A-Za-z]/g) ?? [];
+}
+
+/** Swaps whole words for how they are said, ignoring case: { Risero: "رايزرو" }. Longer names go first ("Google Form" before "Google"). */
 export function pronounce(text: string, map: Record<string, string>): string {
   let out = text;
-  for (const [word, said] of Object.entries(map)) {
+  for (const [word, said] of Object.entries(map).sort(([a], [b]) => b.length - a.length)) {
     if (!word.trim() || !said.trim()) continue;
     const escaped = word.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}.])`, "giu"), said.trim());

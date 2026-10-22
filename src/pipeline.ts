@@ -29,6 +29,7 @@ import { loadSession, saveSession, sessionDir } from "./marketing/session.ts";
 import { writeMarketing } from "./marketing/write.ts";
 import { directArt, drawArt } from "./marketing/art.ts";
 import { reportProgress } from "./progress.ts";
+import { prepareProjectSpeech } from "./clients/speech.ts";
 import { appendUsage, readUsage, recordLocal } from "./usage.ts";
 import type { FormatId, Project, StyleId, VersusLook } from "./types.ts";
 
@@ -229,6 +230,8 @@ export async function prepareMedia(id: string, options: { images?: boolean } = {
   const channel = channelOf(project);
   const dir = projectDir(id);
 
+  // Arabic narration is spoken from its prepared text (English words in Arabic letters, numbers in words, vowel marks), never raw.
+  await prepareProjectSpeech(project, log);
   const voiced = await voiceProject(dir, project.scenes, channel);
   log(`voice: ${voiced} scene(s) spoken by ${channel.narrator ? "Gemini" : "ElevenLabs"}, ${project.scenes.length - voiced} unchanged`);
   await saveProject(project);

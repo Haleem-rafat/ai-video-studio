@@ -25,3 +25,21 @@ test("textsOf reaches every text in slides and scenes, but not urls, art or ids"
   const scene = { id: "s001", narration: "n", imagePrompt: "", visual: { type: "marketing", beat: "kinetic", headline: "h", words: ["w"], items: [{ label: "l", value: "message" }] } };
   assert.deepEqual(textsOf(scene).map((t) => t.get()), ["n", "h", "w", "l"]);
 });
+
+test("spellings worked out for the voice are kept only when they are Arabic letters for a word that was asked", async () => {
+  const { usableSpellings } = await import("./arabic.ts");
+  assert.deepEqual(
+    usableSpellings([{ latin: "Calendly", arabic: "كاليندلي" }, { latin: "Notion", arabic: "Notion" }, { latin: "Other", arabic: "أذر" }, { latin: "Zapier", arabic: " زابير " }], ["Calendly", "Notion", "zapier"]),
+    { Calendly: "كاليندلي", Zapier: "زابير" },
+  );
+});
+
+test("only scenes whose narration changed get new spoken text", async () => {
+  const { prepareSpeech } = await import("./arabic.ts");
+  const scenes = [
+    { id: "s1", narration: "kept", speech: { for: "kept", text: "KEPT" }, visual: { type: "title", headline: "" }, imagePrompt: "" },
+    { id: "s2", narration: "edited", speech: { for: "old", text: "OLD" }, visual: { type: "title", headline: "" }, imagePrompt: "" },
+  ] as never[] as { narration: string; speech?: { for: string; text: string } }[];
+  await prepareSpeech(scenes as never, { language: "en" }, () => {}, "egyptian", { onlyStale: true });
+  assert.deepEqual(scenes.map((scene) => scene.speech), [{ for: "kept", text: "KEPT" }, { for: "edited", text: "edited" }]);
+});

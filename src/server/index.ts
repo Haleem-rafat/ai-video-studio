@@ -267,6 +267,8 @@ function applyEdits(project: Project, edits: Partial<Project>): Project {
         ...(edit.look && LOOKS.includes(edit.look) ? { look: edit.look } : {}),
         image: old?.image,
         audio: old?.audio,
+        // The voice's prepared text stays; it's ignored (and written again before voicing) once the narration changes.
+        ...(old?.speech ? { speech: old.speech } : {}),
       };
     });
   }

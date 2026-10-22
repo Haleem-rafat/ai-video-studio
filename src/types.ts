@@ -236,6 +236,8 @@ export type MarketingSetup = {
   reelStyle?: string;
   /** Value content: teaches, never sells; no link, no brand corner, the brand only on the last scene. */
   value?: boolean;
+  /** The Arabic dialect it's written and voiced in; unset means Egyptian. */
+  dialect?: "egyptian" | "gulf";
   /** Pictures and art styles of the client's earlier videos, for the art director to stay clear of. */
   artAvoid?: { styles: string[]; pictures: string[] };
   /** A style asked for by the producer (e.g. to make a new version look different); the art director follows it. */

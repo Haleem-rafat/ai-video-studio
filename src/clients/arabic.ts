@@ -1,7 +1,7 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
 
-import { sameLetters, spokenText } from "../media/spoken.ts";
+import { COMMON_WORDS, latinWords, pronounce, sameLetters, spokenText } from "../media/spoken.ts";
 import type { Scene } from "../types.ts";
 import type { Client } from "./types.ts";
 
@@ -101,28 +101,64 @@ ${JSON.stringify({ texts: before })}`,
   return changed;
 }
 
+const SPELLINGS = z.object({ words: z.array(z.object({ latin: z.string(), arabic: z.string() })) });
+
+/** Learned spellings a voice can read: Arabic letters (and spaces), nothing else. */
+export function usableSpellings(words: { latin: string; arabic: string }[], asked: string[]): Record<string, string> {
+  const wanted = new Set(asked.map((word) => word.toLowerCase()));
+  return Object.fromEntries(words.filter((w) => wanted.has(w.latin.trim().toLowerCase()) && /^[\u0600-\u06FF\s]+$/.test(w.arabic.trim()) && w.arabic.trim()).map((w) => [w.latin.trim(), w.arabic.trim()]));
+}
+
 /**
- * Writes what the voice reads for each scene: brand names as the client says
- * them, numbers in Egyptian words, and vowel marks on words a voice misreads.
- * Marks that change any letter are dropped.
+ * Writes what the voice reads for each scene: every English word in Arabic
+ * letters (the client's list, then common words, then ones worked out here),
+ * numbers in words, and vowel marks on words a voice misreads. Marks that
+ * change any letter are dropped. With `onlyStale`, scenes whose spoken text
+ * still matches their narration are left as they are. Returns the spellings
+ * it worked out, so they can be kept and corrected.
  */
-export async function prepareSpeech(scenes: Scene[], client: Pick<Client, "language" | "pronounce">, log: (message: string) => void, dialect: "egyptian" | "gulf" = "egyptian"): Promise<void> {
-  const plain = scenes.map((scene) => (client.language === "ar" ? spokenText(scene.narration, client.pronounce ?? {}) : scene.narration));
-  let marked = plain;
-  if (client.language === "ar") {
-    log("speech: marking words a voice could misread ...");
+export async function prepareSpeech(
+  scenes: Scene[],
+  client: Pick<Client, "language" | "pronounce">,
+  log: (message: string) => void,
+  dialect: "egyptian" | "gulf" = "egyptian",
+  { onlyStale = false }: { onlyStale?: boolean } = {},
+): Promise<Record<string, string>> {
+  const todo = scenes.filter((scene) => !onlyStale || !(scene.speech && scene.speech.for === scene.narration));
+  if (!todo.length) return {};
+  if (client.language !== "ar") {
+    for (const scene of todo) scene.speech = { for: scene.narration, text: scene.narration };
+    return {};
+  }
+  const known = { ...COMMON_WORDS, ...(client.pronounce ?? {}) };
+  const unknown = [...new Set(todo.flatMap((scene) => latinWords(pronounce(scene.narration, known))))];
+  let learned: Record<string, string> = {};
+  if (unknown.length) {
+    log(`speech: spelling ${unknown.length} English word(s) in Arabic letters (${unknown.slice(0, 6).join(", ")}) ...`);
     const { output } = await generateText({
-      telemetry: { functionId: "speech" },
+      telemetry: { functionId: "speech-words" },
       model: MODEL,
-      output: Output.object({ schema: LIST }),
-      prompt: `These ${dialect === "gulf" ? "Gulf" : "Egyptian"}-Arabic lines will be read by a text-to-speech voice that misreads words without vowel marks (it read «آراء» as «قراءة», «ميعادين يتداخلوا» as «مع عديني الدخل», «تنسيق» as «تنصيق»).
+      output: Output.object({ schema: SPELLINGS }),
+      prompt: `A text-to-speech voice reads ${dialect === "gulf" ? "Gulf" : "Egyptian"} Arabic and stumbles on words in Latin letters. For each word below, write how ${dialect === "gulf" ? "a Gulf" : "an Egyptian"} speaker says it, in Arabic letters only (e.g. Instagram → إنستجرام, Calendly → كاليندلي, DM → دي إم). Brand names keep their sound. Answer every word.
+
+${JSON.stringify(unknown)}`,
+    });
+    learned = usableSpellings(output.words, unknown);
+  }
+  const plain = todo.map((scene) => spokenText(scene.narration, { ...known, ...learned }));
+  log("speech: marking words a voice could misread ...");
+  const { output } = await generateText({
+    telemetry: { functionId: "speech" },
+    model: MODEL,
+    output: Output.object({ schema: LIST }),
+    prompt: `These ${dialect === "gulf" ? "Gulf" : "Egyptian"}-Arabic lines will be read by a text-to-speech voice that misreads words without vowel marks (it read «آراء» as «قراءة», «ميعادين يتداخلوا» as «مع عديني الدخل», «تنسيق» as «تنصيق»).
 Add Arabic vowel marks (تشكيل) ONLY on the words a voice could misread, as ${dialect === "gulf" ? "a Gulf (Khaleeji)" : "an Egyptian"} speaker says them. Do not change, add or remove any letter, word or punctuation. Return the same number of lines in the same order.
 
 ${JSON.stringify({ texts: plain })}`,
-    });
-    marked = acceptMarks(plain, output.texts);
-  }
-  scenes.forEach((scene, i) => {
+  });
+  const marked = acceptMarks(plain, output.texts);
+  todo.forEach((scene, i) => {
     scene.speech = { for: scene.narration, text: marked[i] };
   });
+  return learned;
 }

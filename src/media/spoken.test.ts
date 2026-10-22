@@ -40,3 +40,11 @@ test("the voice reads the spoken text only while the narration is unchanged", ()
   assert.equal(spokenOf({ ...scene, narration: "صفحة Risero الجديدة" }), "صفحة Risero الجديدة");
   assert.equal(spokenOf({ narration: "x" }), "x");
 });
+
+test("English words in Arabic narration are found, and longer names are said before their parts", async () => {
+  const { COMMON_WORDS, latinWords, pronounce } = await import("./spoken.ts");
+  assert.deepEqual(latinWords("ابعت DM على Instagram أو Google Form، والـ AI.."), ["DM", "Instagram", "Google", "Form", "AI"]);
+  assert.equal(pronounce("املا الـ Google Form من Google", COMMON_WORDS), "املا الـ جوجل فورم من جوجل");
+  assert.equal(pronounce("شوف الـ bio واللينك في الـ Bio", COMMON_WORDS), "شوف الـ بايو واللينك في الـ بايو");
+  assert.equal(pronounce("Risero على instagram", { ...COMMON_WORDS, Risero: "رايزرو" }), "رايزرو على إنستجرام");
+});
