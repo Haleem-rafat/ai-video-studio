@@ -124,6 +124,7 @@ ${pastHooks.length ? pastHooks.map((h) => `- ${h}`).join("\n") : "none"}
 
 RULES
 - Exactly 5 ideas: at least 1 reel and at least 2 carousels; the goals awareness, details and offer each at least once; every idea a different angle.
+- An "announcement" idea only when the client's answers or knowledge give a real current offer, launch or event; a "behind" idea only shows real moments of the business.
 - Language of hook and outline: ${arabic ? "Egyptian colloquial Arabic, natural, like talking to a business owner. Brand and platform names in Latin script" : "simple, natural English"}.
 - Each idea speaks to ONE customer type, in their words, about their real situation, and (except pure awareness) shows ONE real step of how the product works for them. No generic marketing ideas.
 - Hooks stop the scroll: a pain the audience recognises, a surprising number, a bold claim or a direct question. Under 120 characters.

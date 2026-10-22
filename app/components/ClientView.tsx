@@ -47,6 +47,10 @@ const FORMAT_NAMES: Record<PostFormatId, string> = {
   stats: "Stats",
   faq: "People also ask",
   comment: "Comment to get",
+  announcement: "Announcement",
+  spotlight: "Spotlight",
+  quote: "Quote series",
+  milestone: "Behind the scenes",
 };
 const FORMAT_LABEL: Record<LibraryItem["kind"], string> = { carousel: "Carousel", single: "Single image", reel: "Reel", video: "Marketing video", promo: "Website promo" };
 
@@ -319,7 +323,10 @@ function FormatChips({ formats, value, onChange }: { formats: FormatInfo[]; valu
 
 function PictureToggle({ value, onChange }: { value: PictureAmount; onChange: (amount: PictureAmount) => void }) {
   return (
-    <div className="flex gap-1.5">
+    <div className="flex flex-wrap gap-1.5">
+      <Button size="sm" type="button" variant={value === "none" ? "default" : "outline"} title="Designed text and layout only: no AI pictures, nothing to draw" onClick={() => onChange("none")}>
+        No pictures
+      </Button>
       <Button size="sm" type="button" variant={value === "light" ? "default" : "outline"} onClick={() => onChange("light")}>
         Light · cover + 2 pictures
       </Button>
@@ -398,9 +405,14 @@ function IdeaCard({
           )}
           <span className="pt-1 text-xs font-medium">Design (how the slides look)</span>
           <DesignPicker {...design} size="sm" value={options.design} onChange={(id) => setOptions({ ...options, design: id })} />
-          <span className="pt-1 text-xs font-medium">Art style {options.design === "classic" ? "" : "(the pictures)"}</span>
-          <StyleGrid size="sm" styles={styles} value={options.artStyle} onChange={(artStyle) => setOptions({ ...options, artStyle })} />
-          {idea.format === "carousel" && <PictureToggle value={options.pictures} onChange={(pictures) => setOptions({ ...options, pictures })} />}
+          <span className="pt-1 text-xs font-medium">Pictures</span>
+          <PictureToggle value={options.pictures} onChange={(pictures) => setOptions({ ...options, pictures })} />
+          {options.pictures !== "none" && (
+            <>
+              <span className="pt-1 text-xs font-medium">Art style {options.design === "classic" ? "" : "(the pictures)"}</span>
+              <StyleGrid size="sm" styles={styles} value={options.artStyle} onChange={(artStyle) => setOptions({ ...options, artStyle })} />
+            </>
+          )}
           <div className="flex gap-2">
             <Button
               size="sm"

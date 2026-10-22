@@ -47,3 +47,8 @@ test("the writer is shown the pictures already used and never handed a stock sub
   assert.match(text, /a smartphone showing a calendar/);
   assert.doesNotMatch(carouselPrompt(client, idea, {}), /a phone with a calendar/, "no example subject for the writer to copy");
 });
+
+test("with No pictures the writer plans no pictures at all", () => {
+  assert.match(carouselPrompt(client, idea, { pictures: "none" }), /no pictures/i);
+  assert.doesNotMatch(carouselPrompt(client, idea, { pictures: "none" }), /picture prompt for the cover/);
+});

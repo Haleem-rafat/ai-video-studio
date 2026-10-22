@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { FORMAT_IDS, FORMATS, formatForIdea, formatProblems } from "./formats.ts";
 import { IDEA_ANGLES, type Slide } from "./types.ts";
 
-test("twelve post formats, each with names in both languages, a structure for the writer and the layouts it uses", () => {
-  assert.equal(FORMAT_IDS.length, 12);
+test("sixteen post formats, each with names in both languages, a structure for the writer and the layouts it uses", () => {
+  assert.equal(FORMAT_IDS.length, 16);
   for (const id of FORMAT_IDS) {
     const format = FORMATS[id];
     assert.equal(format.id, id);
@@ -22,6 +22,8 @@ test("Auto follows the idea's angle; an angle with no format of its own leaves t
   assert.equal(formatForIdea({ angle: "how-to" }), "steps");
   assert.equal(formatForIdea({ angle: "question" }), "faq");
   assert.equal(formatForIdea({ angle: "trend" }), undefined);
+  assert.equal(formatForIdea({ angle: "announcement" }), "announcement");
+  assert.equal(formatForIdea({ angle: "behind" }), "milestone");
   for (const angle of IDEA_ANGLES) formatForIdea({ angle });
 });
 
@@ -47,4 +49,9 @@ test("the ideas writer is told the last carousels' formats, newest first", async
   ];
   assert.match(recentFormats(made), /list, faq/);
   assert.equal(recentFormats([]), "");
+});
+
+test("announcements and milestones only use what the client really has: no invented offers, dates or results", () => {
+  assert.match(FORMATS.announcement.structure, /never invent/i);
+  assert.match(FORMATS.milestone.structure, /only real/i);
 });

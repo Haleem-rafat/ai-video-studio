@@ -3,7 +3,8 @@ import type { Slide } from "./types.ts";
 
 export const ART_STYLE_IDS = ["flat", "clay", "cartoon", "isometric", "anime", "doodle", "papercut", "riso", "glass", "line", "collage", "photo"] as const;
 export type ArtStyleId = (typeof ART_STYLE_IDS)[number];
-export type PictureAmount = "light" | "rich";
+/** How many AI pictures a post gets: none (designed text only), light (the cover and up to 2 more) or rich (every slide). */
+export type PictureAmount = "none" | "light" | "rich";
 
 type Colors = SiteBrand["colors"];
 
@@ -148,6 +149,11 @@ export function styleOf(id?: string): ArtStyle {
  * slides the writer left without a prompt get one from their own text.
  */
 export function withPictures(slides: Slide[], amount: PictureAmount, fallbackPrompt: (slide: Slide) => string): Slide[] {
+  if (amount === "none")
+    return slides.map((slide) => {
+      const { art: _dropped, ...rest } = slide;
+      return rest as Slide;
+    });
   if (amount === "rich") return slides.map((slide) => (slide.art ? slide : { ...slide, art: { prompt: fallbackPrompt(slide) } }));
   let pictures = 0;
   return slides.map((slide) => {

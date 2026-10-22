@@ -41,3 +41,12 @@ test("rich gives every slide a picture, filling missing prompts from the slide",
   assert.equal(out[1].art?.prompt, "p1");
   assert.equal(out[3].art?.prompt, "about s3");
 });
+
+test("No pictures: every slide's picture is dropped, so nothing is drawn or paid for", async () => {
+  const { withPictures } = await import("./styles.ts");
+  const slides = [
+    { layout: "cover" as const, title: "t", art: { prompt: "a lighthouse" } },
+    { layout: "list" as const, title: "l", items: ["a", "b"], art: { prompt: "a map" } },
+  ];
+  assert.ok(withPictures(slides, "none", () => "x").every((slide) => !("art" in slide)));
+});

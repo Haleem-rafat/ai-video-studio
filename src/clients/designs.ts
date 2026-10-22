@@ -7,7 +7,7 @@ import type { SiteBrand } from "../types.ts";
  * the slide looks; the art style (styles.ts) then only sets the pictures.
  */
 
-export const DESIGN_IDS = ["classic", "bold", "neon", "magazine", "minimal", "glass", "brutal", "notes", "tweet", "chat", "sticky", "swiss"] as const;
+export const DESIGN_IDS = ["classic", "bold", "neon", "magazine", "minimal", "glass", "brutal", "notes", "tweet", "chat", "sticky", "swiss", "checker", "pastel", "retro", "gradient", "film", "scrapbook"] as const;
 export type DesignId = (typeof DESIGN_IDS)[number];
 /** A design, or "rotate": one the client's recent posts haven't used. */
 export type DesignChoice = DesignId | "rotate";
@@ -305,6 +305,145 @@ ${BOXES}{background:none;border-radius:0;border-top:3px solid #111;padding:20px 
 .bar-value{color:#111}
 .button{border-radius:0;background:#111;color:#fff}
 .art{border-radius:0}`,
+  },
+
+  checker: {
+    id: "checker",
+    label: { en: "Checkerboard", ar: "شطرنج" },
+    description: { en: "A bold checked frame in the brand colours", ar: "إطار مربعات جريء بألوان البراند" },
+    css: ({ c }) => `/* design:checker */
+html{background:${c.background}}
+body{border:58px solid transparent;padding:52px 60px;background:linear-gradient(${c.background},${c.background}) padding-box,repeating-conic-gradient(${c.accent} 0 25%,${c.cta} 0 50%) border-box 0 0/116px 116px;border-radius:0}
+${BOXES}{border-radius:24px}
+.card.hot{outline:4px solid ${c.cta}}
+.art{border-radius:24px;border:8px solid ${c.cta}}`,
+  },
+
+  pastel: {
+    id: "pastel",
+    label: { en: "Pastel", ar: "باستيل" },
+    description: { en: "Soft pastel paper, rounded frames, friendly type", ar: "ورق باستيل ناعم وإطارات مدوّرة وخط ودود" },
+    css: ({ c }) => {
+      const ink = "#2d2a3e";
+      return `/* design:pastel */
+body{background:radial-gradient(circle at 85% 12%,color-mix(in srgb,${c.cta} 30%,#fff) 0 18%,transparent 19%),radial-gradient(circle at 10% 90%,color-mix(in srgb,${c.accent} 30%,#fff) 0 16%,transparent 17%),color-mix(in srgb,${c.accent} 14%,#fffaf6);color:${ink}}
+h1,h2{color:${ink}}
+.sub,footer{color:#6b6680}
+${BOXES}{background:#fff;color:${ink};border-radius:40px;box-shadow:0 14px 34px #2d2a3e18}
+.card.hot{outline:4px solid color-mix(in srgb,${c.cta} 55%,#fff)}
+.card.muted p{color:#8a85a0}
+.num{background:color-mix(in srgb,${c.cta} 35%,#fff);color:${ink}}
+.tag,.card.hot .tag{color:color-mix(in srgb,${c.cta} 80%,#000)}
+.stat{color:color-mix(in srgb,${c.cta} 85%,#000)}
+.bar-track{background:#fff}
+.button{background:color-mix(in srgb,${c.cta} 45%,#fff);color:${ink}}
+.art{border-radius:50%;border:14px solid #fff;box-shadow:0 18px 40px #2d2a3e22}
+.bubble.them{background:#fff;color:${ink}}`;
+    },
+  },
+
+  retro: {
+    id: "retro",
+    label: { en: "Retro", ar: "ريترو" },
+    description: { en: "Cream paper, a sunburst and chunky retro shadows", ar: "ورق كريمي وشمس وظلال ريترو تخينة" },
+    css: ({ c }) => {
+      const ink = "#2b1d14";
+      return `/* design:retro */
+body{background:repeating-conic-gradient(from 0deg at 50% 118%,${c.cta}22 0 6deg,transparent 6deg 12deg),#f6ecd9;color:${ink}}
+h1,h2{color:${ink}}
+h1{text-shadow:6px 6px 0 ${c.cta},12px 12px 0 ${c.accent}88}
+.sub,footer{color:#6d5747}
+${BOXES}{background:#fffaf0;color:${ink};border:4px solid ${ink};border-radius:30px;box-shadow:8px 8px 0 ${c.accent}}
+.card.hot{outline:none;box-shadow:8px 8px 0 ${c.cta}}
+.card.muted p{color:#8a7462}
+.num{background:${c.cta};color:#fffaf0;border:3px solid ${ink}}
+.tag,.card.hot .tag{color:${ink};background:${c.accent}55;border-radius:999px;padding:2px 16px;align-self:flex-start}
+.stat{color:${c.cta};text-shadow:8px 8px 0 ${ink}}
+.bar-track{background:#fffaf0;border:3px solid ${ink}}
+.bar-value{color:${ink}}
+.button{background:${c.cta};color:#fffaf0;border:4px solid ${ink};box-shadow:8px 8px 0 ${ink}}
+.art{border:6px solid ${ink};border-radius:30px;box-shadow:12px 12px 0 ${c.accent}}`;
+    },
+  },
+
+  gradient: {
+    id: "gradient",
+    label: { en: "Gradient", ar: "تدرّج" },
+    description: { en: "A rich brand-colour gradient with centred type", ar: "تدرّج غني بألوان البراند وخط في النص" },
+    css: ({ c }) => `/* design:gradient */
+body{background:linear-gradient(150deg,${c.accent} 0%,${c.cta} 55%,${c.background} 120%);color:#fff}
+.content{text-align:center;align-items:center}
+h1,h2{color:#fff;text-shadow:0 6px 30px #0003}
+h1{font-size:96px}
+.sub,footer{color:#ffffffd9}
+${BOXES}{background:#ffffff26;color:#fff;border:1.5px solid #ffffff55;border-radius:32px;text-align:start;width:100%}
+.card.hot{outline:none;background:#ffffff38}
+.card.muted p{color:#ffffffbb}
+.num{background:#fff;color:${c.cta}}
+.tag,.card.hot .tag{color:#fff}
+.stat{color:#fff;text-shadow:0 10px 40px #0004}
+.bar-track{background:#ffffff33}
+.bar-fill{background:#fff}
+.bar-value{color:#fff}
+.mark{color:#ffffffaa}
+.button{background:#fff;color:${c.cta}}
+.art{border-radius:40px;border:3px solid #ffffff88}
+.bubble.them{background:#ffffff33;color:#fff}
+.bubble.us{background:#fff;color:${c.cta}}`,
+  },
+
+  film: {
+    id: "film",
+    label: { en: "Film", ar: "فيلم" },
+    description: { en: "Analog film strip with sprocket holes and grain", ar: "شريط فيلم قديم بفتحات وحبيبات" },
+    css: ({ c, index }) => {
+      const holes = "repeating-linear-gradient(to bottom,transparent 0 22px,#f3eee4 22px 46px,transparent 46px 70px)";
+      return `/* design:film */
+body{background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.14'/></svg>"),#121110;color:#f3eee4;padding:72px 120px}
+body::before,body::after{content:"";position:absolute;top:0;bottom:0;width:70px;background:${holes} 24px 0/22px 100% no-repeat,#050505}
+body::before{left:0}
+body::after{right:0}
+h1,h2{color:#f3eee4}
+.sub{color:#bdb5a6}
+footer{color:${c.cta};font-family:'Courier New',monospace;letter-spacing:4px}
+footer span:last-child::before{content:"▶ ${index + 1}A  ";}
+${BOXES}{background:#1d1b19;color:#f3eee4;border-radius:4px;border:1px solid #3a3530}
+.card.hot{outline:2px solid ${c.cta}}
+.card.muted p{color:#958c7d}
+.num{background:${c.cta};color:#121110;border-radius:4px}
+.stat{color:#f3eee4}
+.bar-track{background:#2a2724;border-radius:2px}
+.bar-fill{border-radius:2px}
+.button{border-radius:4px}
+.art{border:14px solid #f3eee4;border-bottom-width:40px;border-radius:2px;filter:sepia(.25) contrast(1.05)}`;
+    },
+  },
+
+  scrapbook: {
+    id: "scrapbook",
+    label: { en: "Scrapbook", ar: "سكراب بوك" },
+    description: { en: "Kraft paper, taped polaroids and stamps", ar: "ورق كرافت وصور بولارويد بلزق وأختام" },
+    css: ({ c }) => {
+      const ink = "#3b2f25";
+      return `/* design:scrapbook */
+body{background:radial-gradient(#00000012 1px,transparent 1px) 0 0/14px 14px,#d9c4a0;color:${ink}}
+h1,h2{color:${ink}}
+h1{background:#fffdf7;padding:30px 36px;transform:rotate(1deg);box-shadow:0 12px 24px #0003;align-self:flex-start;position:relative}
+h1::before{content:"";position:absolute;top:-18px;left:40px;width:130px;height:36px;background:${c.accent}77;transform:rotate(-6deg)}
+.sub,footer{color:#6b5a48}
+${BOXES}{background:#fffdf7;color:${ink};border-radius:2px;box-shadow:0 10px 20px #0002;position:relative}
+.list li:nth-child(odd),.step:nth-child(odd){transform:rotate(-.8deg)}
+.list li:nth-child(even),.step:nth-child(even){transform:rotate(.7deg)}
+.card.hot{outline:none;border:3px dashed ${c.cta}}
+.card.muted p{color:#8b7a66}
+.num{background:none;border:3px dashed ${c.cta};color:${c.cta};border-radius:50%}
+.tag,.card.hot .tag{color:${c.cta};border:3px solid ${c.cta};border-radius:50%;padding:6px 14px;align-self:flex-start;transform:rotate(-8deg)}
+.stat{color:${c.cta}}
+.bar-track{background:#fffdf7}
+.button{background:${c.cta};color:#fffdf7;border-radius:4px;transform:rotate(-1.5deg)}
+.art{border:16px solid #fffdf7;border-bottom-width:56px;border-radius:2px;transform:rotate(-3deg);box-shadow:0 18px 30px #0004}
+.bubble.them{background:#fffdf7;color:${ink}}`;
+    },
   },
 };
 

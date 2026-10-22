@@ -62,7 +62,7 @@ const isStyle = (id: unknown): id is ArtStyleChoice => id === "rotate" || (typeo
 const isDesign = (id: unknown): id is DesignId => typeof id === "string" && (DESIGN_IDS as readonly string[]).includes(id);
 const isDesignChoice = (id: unknown): id is DesignChoice => id === "rotate" || isDesign(id);
 const isFormat = (id: unknown): id is FormatId | "auto" => id === "auto" || (typeof id === "string" && (FORMAT_IDS as readonly string[]).includes(id));
-const isAmount = (amount: unknown): amount is PictureAmount => amount === "light" || amount === "rich";
+const isAmount = (amount: unknown): amount is PictureAmount => amount === "none" || amount === "light" || amount === "rich";
 
 /** Handles /api/clients…, /client-files/… and /client-styles/…; false when the path is not one of them. */
 export async function handleClients(ctx: Ctx): Promise<boolean> {

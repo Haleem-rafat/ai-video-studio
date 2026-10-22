@@ -59,7 +59,11 @@ ${businessContext(client, "carousel") ? `${businessContext(client, "carousel")}\
 - Write like someone who knows this product: show how it really works for the customer (a real step, a real screen, a real moment), in the customer's own words, about their own situation. No generic marketing lines.
 - Very short text: a title under 70 characters, list items under 70, a stat value like "3x" or "15".
 - Numbers not given in the client's facts are examples: put "${arabic ? "مثال" : "example"}" in the note or the chart unit.
-- Art: ${pictures === "rich" ? "an English picture prompt for EVERY slide" : "an English picture prompt for the cover and at most 2 other slides"}: the subject only, never text, never logos; the art style is added later. Every picture is a fresh, specific visual idea for its slide: mix people in real moments, places, objects and visual metaphors, and never reach for a phone, a calendar or chat bubbles unless the slide is about exactly that.
+- Art: ${
+    pictures === "none"
+      ? "no pictures: leave art empty on every slide; the design and the words carry the post."
+      : `${pictures === "rich" ? "an English picture prompt for EVERY slide" : "an English picture prompt for the cover and at most 2 other slides"}: the subject only, never text, never logos; the art style is added later. Every picture is a fresh, specific visual idea for its slide: mix people in real moments, places, objects and visual metaphors, and never reach for a phone, a calendar or chat bubbles unless the slide is about exactly that.`
+  }
 - Language: ${arabic ? "Egyptian colloquial Arabic, natural, correctly spelled (hamza, ة/ه, ى/ي), also in hashtags; brand and platform names in Latin script" : "simple, natural English"}.`;}
 
 /** The slides and caption of a carousel (5-8 slides) or a single image (1 cover), checked and fitted to the limits. */

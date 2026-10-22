@@ -41,7 +41,7 @@ export type Client = {
 
 export const IDEA_FORMATS = ["carousel", "single", "reel"] as const;
 export const IDEA_GOALS = ["awareness", "details", "offer"] as const;
-export const IDEA_ANGLES = ["myth", "mistakes", "list", "before-after", "trend", "how-to", "story", "stat", "question"] as const;
+export const IDEA_ANGLES = ["myth", "mistakes", "list", "before-after", "trend", "how-to", "story", "stat", "question", "announcement", "spotlight", "quote", "behind"] as const;
 
 export type IdeaFormat = (typeof IDEA_FORMATS)[number];
 export type IdeaGoal = (typeof IDEA_GOALS)[number];

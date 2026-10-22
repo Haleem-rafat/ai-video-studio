@@ -13,8 +13,9 @@ const brand = {
 const ctx = (extra: Partial<SlideContext> = {}): SlideContext => ({ client: { language: "ar", instagramHandle: "risero", brand } as never, index: 0, total: 5, ...extra });
 const cover: Slide = { layout: "cover", title: "٥ أخطاء <بتضيّع> عليك عملاء", subtitle: "اعرفها قبل ما تنشر" };
 
-test("twelve designs, Classic first, each with a name, a description and its own CSS marker", () => {
-  assert.equal(DESIGN_IDS.length, 12);
+test("eighteen designs, Classic first, each with a name, a description and its own CSS marker", () => {
+  assert.equal(DESIGN_IDS.length, 18);
+  for (const id of ["checker", "pastel", "retro", "gradient", "film", "scrapbook"]) assert.ok((DESIGN_IDS as readonly string[]).includes(id), id);
   assert.equal(DESIGN_IDS[0], "classic");
   for (const id of DESIGN_IDS) {
     const design = DESIGNS[id];

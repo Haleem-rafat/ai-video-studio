@@ -8,7 +8,7 @@ import type { Idea, Slide, SlideLayout } from "./types.ts";
  * teardowns, "people also ask", comment-to-get).
  */
 
-export const FORMAT_IDS = ["list", "checklist", "mistakes", "myth", "before-after", "steps", "versus", "teardown", "story", "stats", "faq", "comment"] as const;
+export const FORMAT_IDS = ["list", "checklist", "mistakes", "myth", "before-after", "steps", "versus", "teardown", "story", "stats", "faq", "comment", "announcement", "spotlight", "quote", "milestone"] as const;
 export type FormatId = (typeof FORMAT_IDS)[number];
 
 type Text = { en: string; ar: string };
@@ -118,6 +118,40 @@ export const FORMATS: Record<FormatId, PostFormat> = {
     key: "cta",
     caption: "Repeat the keyword in the caption: 'Comment «KEYWORD» and we'll send you …' (only what the client can send).",
   },
+  announcement: {
+    id: "announcement",
+    label: { en: "Announcement", ar: "إعلان" },
+    description: { en: "An offer, launch or event, with the details", ar: "عرض أو إطلاق أو إيفنت، بالتفاصيل" },
+    structure:
+      "An announcement of something real and timely (an offer, a launch, an event, a new service): the cover states the news boldly (what, and when if there is a date). Then what it is, who it is for, the details (dates, how to join or claim), and urgency only if it is real. Close on the call to action. Only announce what the client's answers or knowledge confirm, such as the current campaign; never invent offers, discounts, dates or prices.",
+    layouts: ["cover", "list", "steps", "stat", "cta"],
+    key: "cta",
+  },
+  spotlight: {
+    id: "spotlight",
+    label: { en: "Spotlight", ar: "سبوت لايت" },
+    description: { en: "One product, service or feature, end to end", ar: "منتج أو خدمة أو ميزة واحدة من أولها لآخرها" },
+    structure: "A spotlight on one product, service or feature: the cover names it with the outcome it gives. Then what it does for the customer, how it works (steps), an example or proof from the knowledge, and who it is for. Close on the call to action.",
+    layouts: ["cover", "steps", "list", "quote", "cta"],
+    key: "steps",
+  },
+  quote: {
+    id: "quote",
+    label: { en: "Quote series", ar: "سلسلة اقتباسات" },
+    description: { en: "Quotable lines the owner stands for", ar: "جمل تتشارك بيؤمن بيها صاحب البيزنس" },
+    structure: "Thought leadership: 3-5 short, quotable lines the owner would really say about the audience's problem, one per quote slide, by the owner or the brand, each sharp enough to screenshot. A list slide can unpack the most important one. Close on the call to action.",
+    layouts: ["cover", "quote", "list", "cta"],
+    key: "quote",
+    caption: "Ask which line the reader agrees with most.",
+  },
+  milestone: {
+    id: "milestone",
+    label: { en: "Behind the scenes", ar: "من ورا الكواليس" },
+    description: { en: "A real milestone or how the work gets made", ar: "إنجاز حقيقي أو الشغل بيتعمل إزاي" },
+    structure: "Behind the scenes: one real moment of the business (a milestone reached, a launch, how a page or service gets made), told honestly and personally. Use only real milestones and numbers from the client's answers or knowledge; when there are none, show the real process behind the product step by step. Close on the call to action.",
+    layouts: ["cover", "steps", "chat", "quote", "stat", "cta"],
+    key: "cta",
+  },
 };
 
 export function formatOf(id: string | undefined): PostFormat | undefined {
@@ -126,7 +160,20 @@ export function formatOf(id: string | undefined): PostFormat | undefined {
 
 /** "Auto": the format the idea's angle points to; none for angles any format fits (a trend). */
 export function formatForIdea(idea: Pick<Idea, "angle">): FormatId | undefined {
-  const byAngle: Partial<Record<Idea["angle"], FormatId>> = { myth: "myth", mistakes: "mistakes", list: "list", "before-after": "before-after", "how-to": "steps", story: "story", stat: "stats", question: "faq" };
+  const byAngle: Partial<Record<Idea["angle"], FormatId>> = {
+    myth: "myth",
+    mistakes: "mistakes",
+    list: "list",
+    "before-after": "before-after",
+    "how-to": "steps",
+    story: "story",
+    stat: "stats",
+    question: "faq",
+    announcement: "announcement",
+    spotlight: "spotlight",
+    quote: "quote",
+    behind: "milestone",
+  };
   return byAngle[idea.angle];
 }
 
