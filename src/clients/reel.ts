@@ -114,6 +114,11 @@ export async function createReel(client: Client, idea: Idea, log: (message: stri
       narrator: { voice, style: MARKETING_STYLE[client.language] },
       // Prompted mode's subtitles answer, when given, decides; else the brief.
       captions: subtitles === undefined ? Boolean(brief.captions) : subtitles === "yes",
+      // The art director stays clear of the styles and pictures this client already used.
+      artAvoid: {
+        styles: history.filter((made) => (made.kind === "reel" || made.kind === "video") && made.artStyle).map((made) => made.artStyle!),
+        pictures: history.flatMap((made) => made.pictures ?? []),
+      },
       post: { caption: draft.caption, hashtags: draft.hashtags },
     },
     scenes: draft.scenes,

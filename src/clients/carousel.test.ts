@@ -40,3 +40,10 @@ test("the writer sees the slide orders of the last carousels and is told not to 
   assert.match(text, /different order/i);
   assert.doesNotMatch(carouselPrompt(client, idea, {}), /RECENT SLIDE ORDERS/);
 });
+
+test("the writer is shown the pictures already used and never handed a stock subject to copy", () => {
+  const text = carouselPrompt(client, idea, { recentPictures: ["a smartphone showing a calendar", "a coach at her desk at night"] });
+  assert.match(text, /PICTURES ALREADY USED/);
+  assert.match(text, /a smartphone showing a calendar/);
+  assert.doesNotMatch(carouselPrompt(client, idea, {}), /a phone with a calendar/, "no example subject for the writer to copy");
+});

@@ -174,7 +174,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                 key={idea.id}
                 idea={idea}
                 styles={styles}
-                defaults={{ artStyle: client.artStyle ?? "flat", pictures: client.pictures ?? "light", design: client.design ?? "classic", format: "auto" }}
+                defaults={{ artStyle: client.artStyle ?? "rotate", pictures: client.pictures ?? "light", design: client.design ?? "classic", format: "auto" }}
                 design={designProps}
                 formats={formats}
                 onMake={(options) => {
@@ -613,7 +613,7 @@ function ProfileForm({ client, styles, design, onPreviews, onSaved }: { client: 
         niche: draft.niche,
         avoid: draft.avoid,
         dailyIdeas: draft.dailyIdeas,
-        artStyle: draft.artStyle ?? "flat",
+        artStyle: draft.artStyle ?? "rotate",
         pronounce: Object.fromEntries(names.split("\n").map((line) => line.split("=").map((part) => part.trim())).filter((pair) => pair.length === 2 && pair[0] && pair[1])),
         pictures: draft.pictures ?? "light",
         design: draft.design ?? "classic",
@@ -674,7 +674,7 @@ function ProfileForm({ client, styles, design, onPreviews, onSaved }: { client: 
         <DesignPicker {...design} value={draft.design ?? "classic"} onChange={(id) => setDraft({ ...draft, design: id })} />
       </Field>
       <Field label="Default art style for posts" detail={styles.some((style) => !style.preview) ? <button type="button" className="underline" onClick={onPreviews}>Draw style previews (~$0.30)</button> : undefined}>
-        <StyleGrid styles={styles} value={draft.artStyle ?? "flat"} onChange={(artStyle) => setDraft({ ...draft, artStyle })} />
+        <StyleGrid styles={styles} value={draft.artStyle ?? "rotate"} onChange={(artStyle) => setDraft({ ...draft, artStyle })} />
       </Field>
       <Field label="Default pictures per carousel">
         <PictureToggle value={draft.pictures ?? "light"} onChange={(pictures) => setDraft({ ...draft, pictures })} />

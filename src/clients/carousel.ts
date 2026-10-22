@@ -10,6 +10,7 @@ import { FLAT_SLIDE, fitSlides, slideProblems, toSlide } from "./slides.ts";
 import { styleOf, withPictures, type PictureAmount } from "./styles.ts";
 import { businessContext } from "./context.ts";
 import { formatForIdea, formatOf, formatProblems, type FormatId } from "./formats.ts";
+import { pictureRepeats } from "./history.ts";
 import { needsRewrite, reviewScript, rewriteNotes, scriptOf } from "./review.ts";
 import type { Client, Idea, ScriptReview, Slide } from "./types.ts";
 
@@ -29,8 +30,12 @@ export function resolveFormat(idea: Pick<Idea, "format" | "angle">, choice: Form
 }
 
 /** What the carousel writer is asked: the idea, the client, its business context, the format and the rules. */
-export function carouselPrompt(client: Client, idea: Idea, options: { pictures?: PictureAmount; pastTitles?: string[]; format?: FormatId | "auto"; recentOrders?: string[][] } = {}): string {
-  const { pictures = "light", pastTitles = [], recentOrders = [] } = options;
+export function carouselPrompt(
+  client: Client,
+  idea: Idea,
+  options: { pictures?: PictureAmount; pastTitles?: string[]; format?: FormatId | "auto"; recentOrders?: string[][]; recentPictures?: string[] } = {},
+): string {
+  const { pictures = "light", pastTitles = [], recentOrders = [], recentPictures = [] } = options;
   const kind = idea.format === "single" ? "single" : "carousel";
   const arabic = client.language === "ar";
   const format = formatOf(resolveFormat(idea, options.format));
@@ -49,12 +54,12 @@ Call to action: "${client.brief.cta.label}" → ${client.brief.cta.url}
 Tone: ${client.brief.tone}
 Never: ${client.avoid || "nothing extra"}; never invent prices, testimonials, client counts or guarantees.
 
-${businessContext(client, "carousel") ? `${businessContext(client, "carousel")}\n\n` : ""}${format ? `POST FORMAT: ${format.label.en}\n${format.structure}\nBuild it mostly from these layouts: ${format.layouts.join(", ")}.${format.caption ? `\nCaption: ${format.caption}` : ""}\n\n` : ""}${recentOrders.length ? `RECENT SLIDE ORDERS (already posted; use a different order and mix of layouts, so this post doesn't look like the last ones):\n${recentOrders.slice(0, 5).map((order) => `- ${order.join(" → ")}`).join("\n")}\n\n` : ""}${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
+${businessContext(client, "carousel") ? `${businessContext(client, "carousel")}\n\n` : ""}${format ? `POST FORMAT: ${format.label.en}\n${format.structure}\nBuild it mostly from these layouts: ${format.layouts.join(", ")}.${format.caption ? `\nCaption: ${format.caption}` : ""}\n\n` : ""}${recentOrders.length ? `RECENT SLIDE ORDERS (already posted; use a different order and mix of layouts, so this post doesn't look like the last ones):\n${recentOrders.slice(0, 5).map((order) => `- ${order.join(" → ")}`).join("\n")}\n\n` : ""}${recentPictures.length ? `PICTURES ALREADY USED in this client's posts and reels (never reuse these subjects or close variants; invent new scenes, people, places and metaphors):\n${recentPictures.slice(0, 40).map((picture) => `- ${picture}`).join("\n")}\n\n` : ""}${pastTitles.length ? `SLIDE TITLES ALREADY POSTED (already paid for; never reuse them or their examples):\n${pastTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}\n\n` : ""}RULES
 - ${kind === "single" ? "Exactly 1 slide: a cover whose title is the hook, sharpened, and a subtitle with the one takeaway." : "5-8 slides. Slide 1 is the cover (the hook as a title that makes people swipe). The last slide is the cta. Between them, one idea per slide, using the layouts that fit the content: stat, list, checklist, myth-fact, fix, before-after, versus, steps, faq, chat, quote, chart."}
 - Write like someone who knows this product: show how it really works for the customer (a real step, a real screen, a real moment), in the customer's own words, about their own situation. No generic marketing lines.
 - Very short text: a title under 70 characters, list items under 70, a stat value like "3x" or "15".
 - Numbers not given in the client's facts are examples: put "${arabic ? "مثال" : "example"}" in the note or the chart unit.
-- Art: ${pictures === "rich" ? "an English picture prompt for EVERY slide" : "an English picture prompt for the cover and at most 2 other slides"}: the subject only (a phone with a calendar, a tangle of chat bubbles), never text, never logos; the art style is added later.
+- Art: ${pictures === "rich" ? "an English picture prompt for EVERY slide" : "an English picture prompt for the cover and at most 2 other slides"}: the subject only, never text, never logos; the art style is added later. Every picture is a fresh, specific visual idea for its slide: mix people in real moments, places, objects and visual metaphors, and never reach for a phone, a calendar or chat bubbles unless the slide is about exactly that.
 - Language: ${arabic ? "Egyptian colloquial Arabic, natural, correctly spelled (hamza, ة/ه, ى/ي), also in hashtags; brand and platform names in Latin script" : "simple, natural English"}.`;}
 
 /** The slides and caption of a carousel (5-8 slides) or a single image (1 cover), checked and fitted to the limits. */
@@ -66,10 +71,11 @@ export async function writeCarousel(
   pastTitles: string[] = [],
   choice?: FormatId | "auto",
   recentOrders: string[][] = [],
+  recentPictures: string[] = [],
 ): Promise<{ slides: Slide[]; caption: string; hashtags: string[]; review?: ScriptReview; format?: FormatId }> {
   const kind = idea.format === "single" ? "single" : "carousel";
   const format = resolveFormat(idea, choice);
-  const prompt = carouselPrompt(client, idea, { pictures, pastTitles, format, recentOrders });
+  const prompt = carouselPrompt(client, idea, { pictures, pastTitles, format, recentOrders, recentPictures });
 
   const write = (extra = "") => generateText({ telemetry: { functionId: "carousel" }, model: WRITER_MODEL, output: Output.object({ schema: CAROUSEL }), prompt: prompt + extra });
   const toSlides = (output: z.infer<typeof CAROUSEL>) => output.slides.map((flat) => toSlide(flat, client.brief.cta)).filter((slide): slide is Slide => slide !== null);
@@ -78,7 +84,9 @@ export async function writeCarousel(
   const draft = async (extra = "") => {
     let { output } = await write(extra);
     let slides = toSlides(output);
-    const problems = [...slideProblems(slides, kind), ...formatProblems(slides, format)];
+    // A picture already used is sent back before anything is drawn, like a layout problem.
+    const repeats = pictureRepeats(slides.map((slide) => slide.art?.prompt).filter((prompt): prompt is string => Boolean(prompt)), recentPictures);
+    const problems = [...slideProblems(slides, kind), ...formatProblems(slides, format), ...repeats.map((prompt) => `The picture "${prompt}" repeats one this client already used: give that slide a new picture idea.`)];
     if (problems.length) {
       log(`carousel: fixing ${problems.length} problem(s) ...`);
       ({ output } = await write(`${extra}\n\nYOUR ANSWER HAD THESE PROBLEMS:\n${problems.map((p) => `- ${p}`).join("\n")}\nWrite the slides again without them.`));

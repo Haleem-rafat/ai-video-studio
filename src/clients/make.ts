@@ -72,7 +72,8 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   if (!idea) throw new Error(`No idea ${ideaId}`);
   const now = new Date().toISOString();
   const history = await loadHistory(clientId);
-  const choice = options.artStyle ?? client.artStyle ?? "flat";
+  // A client that never chose an art style gets a different one each post.
+  const choice = options.artStyle ?? client.artStyle ?? "rotate";
   const artStyle = choice === "rotate" ? pickRotation(history.filter((made) => made.kind === "carousel" || made.kind === "single")) : choice;
   const pictures = options.pictures ?? client.pictures ?? "light";
   // Rotate and Auto never repeat the look or structure of the last posts.
@@ -94,7 +95,9 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
     } else {
       const pastTitles = history.filter((made) => made.kind === "carousel" || made.kind === "single").flatMap((made) => [made.title, ...made.lines.slice(0, 6)]);
       const recentOrders = history.filter((made) => made.kind === "carousel" && made.layouts?.length).map((made) => made.layouts!);
-      const written = await writeCarousel(client, idea, log, pictures, pastTitles, format, recentOrders);
+      // Pictures of the client's carousels and reels alike: no picture is used twice.
+      const recentPictures = history.flatMap((made) => made.pictures ?? []);
+      const written = await writeCarousel(client, idea, log, pictures, pastTitles, format, recentOrders, recentPictures);
       if (written.format) post.postFormat = written.format;
       post.caption = written.caption;
       if (written.review) post.review = written.review;

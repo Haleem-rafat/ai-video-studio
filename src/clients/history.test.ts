@@ -128,3 +128,30 @@ test("a design choice resolves to a design: Rotate looks at carousels and images
   assert.equal(chooseDesign("glass", []), "glass");
   assert.equal(chooseDesign("rotate", [{ kind: "reel", design: "classic" }, { kind: "carousel", design: "classic" }]), "bold");
 });
+
+test("history remembers the pictures used: a carousel's picture prompts, a reel's planned subjects and art style", async () => {
+  const { madeFromPost, madeFromProject } = await import("./history.ts");
+  const post = madeFromPost({
+    id: "p", clientId: "c", kind: "carousel", caption: "c", hashtags: [], status: "done", createdAt: "", updatedAt: "",
+    slides: [{ layout: "cover", title: "t", art: { prompt: "a coach answering messages late at night" } }, { layout: "cta", title: "b", button: "b", url: "u" }],
+  });
+  assert.deepEqual(post.pictures, ["a coach answering messages late at night"]);
+  const reel = madeFromProject(
+    {
+      id: "r", title: "Reel", createdAt: "", scenes: [{ narration: "x", visual: { type: "marketing", beat: "kinetic", backdrop: { query: "a crowded waiting room. soft 3D clay. Colour palette: …", source: "ai" } } }],
+      marketing: { narrator: { voice: "Orus" }, art: { style: "soft 3D clay", cards: [{ query: "a workshop. soft 3D clay. Colour palette: …", source: "ai" }] } },
+    } as never,
+    "reel",
+  );
+  assert.equal(reel.artStyle, "soft 3D clay");
+  assert.deepEqual(reel.pictures, ["a crowded waiting room", "a workshop"]);
+  const planned = madeFromProject({ id: "r2", title: "", createdAt: "", scenes: [], marketing: { narrator: {}, art: { style: "ink", cards: [], subjects: ["a lighthouse at dawn"] } } } as never, "reel");
+  assert.deepEqual(planned.pictures, ["a lighthouse at dawn"], "saved subjects are used as they are");
+});
+
+test("a picture too close to one already used is caught; a fresh one passes", async () => {
+  const { pictureRepeats } = await import("./history.ts");
+  const used = ["a coach answering messages late at night at her desk", "a smartphone showing a calendar with chat bubbles"];
+  assert.deepEqual(pictureRepeats(["a smartphone showing a calendar with chat bubbles around it", "a lighthouse guiding small boats at dusk"], used), ["a smartphone showing a calendar with chat bubbles around it"]);
+  assert.deepEqual(pictureRepeats(["a baker handing a cake box to a smiling customer"], used), []);
+});

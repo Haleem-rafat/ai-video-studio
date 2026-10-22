@@ -24,6 +24,8 @@ export type Made = {
   format?: string;
   design?: string;
   layouts?: string[];
+  /** The pictures it used: a carousel's picture prompts, a reel's planned subjects. */
+  pictures?: string[];
   createdAt: string;
 };
 
@@ -135,8 +137,17 @@ export function madeFromPost(post: Post): Made {
     ...(post.postFormat ? { format: post.postFormat } : {}),
     design: post.design ?? "classic",
     layouts: (post.slides ?? []).map((slide) => slide.layout),
+    pictures: (post.slides ?? []).map((slide) => slide.art?.prompt).filter((prompt): prompt is string => Boolean(prompt)),
     createdAt: post.createdAt,
   };
+}
+
+/** A picture this close to one already used is a repeat (share of words, like `duplicateOf`). */
+export const PICTURE_REPEAT_AT = 0.45;
+
+/** The new picture prompts that repeat a picture already used. */
+export function pictureRepeats(prompts: string[], used: string[]): string[] {
+  return prompts.filter((prompt) => used.some((old) => similarity(prompt, old) >= PICTURE_REPEAT_AT));
 }
 
 /** "Rotate" for designs: one the recent posts haven't used, else the one used longest ago (history newest first). */
@@ -166,7 +177,17 @@ export function autoFormat(idea: Pick<Idea, "angle">, history: { kind: string; f
   return candidates.find((id) => !recent.includes(id)) ?? [...candidates].sort((a, b) => recent.indexOf(b) - recent.indexOf(a))[0];
 }
 
-function fromProject(project: Project, kind: "reel" | "video"): Made {
+/** A reel's or video's planned picture subjects: saved as they were planned, or read back from the drawn queries. */
+function subjectsOf(project: Project): string[] {
+  const art = project.marketing?.art;
+  if (!art) return [];
+  if (art.subjects?.length) return art.subjects;
+  const plain = (query: string) => (art.style && query.includes(`. ${art.style}`) ? query.slice(0, query.indexOf(`. ${art.style}`)) : query).trim();
+  const backdrops = project.scenes.map((scene) => (scene.visual as { backdrop?: { query?: string } }).backdrop?.query).filter((query): query is string => Boolean(query));
+  return [...backdrops, ...art.cards.map((card) => card.query ?? "").filter(Boolean)].map(plain);
+}
+
+export function madeFromProject(project: Project, kind: "reel" | "video"): Made {
   return {
     id: project.id,
     kind,
@@ -175,6 +196,8 @@ function fromProject(project: Project, kind: "reel" | "video"): Made {
     beats: project.scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? scene.visual.type),
     voice: project.marketing?.narrator.voice,
     creativity: project.marketing?.creativity,
+    ...(project.marketing?.art?.style ? { artStyle: project.marketing.art.style } : {}),
+    pictures: subjectsOf(project),
     createdAt: project.createdAt,
   };
 }
@@ -187,8 +210,8 @@ export async function loadHistory(clientId: string): Promise<Made[]> {
   const reels = new Set(posts.map((post) => post.projectId).filter(Boolean));
   const made = [
     ...posts.filter((post) => post.kind !== "reel" && post.status === "done").map(madeFromPost),
-    ...projects.filter((project) => reels.has(project.id)).map((project) => fromProject(project, "reel")),
-    ...projects.filter((project) => !reels.has(project.id) && host && project.marketing && hostOf(project.marketing.brand.url) === host).map((project) => fromProject(project, "video")),
+    ...projects.filter((project) => reels.has(project.id)).map((project) => madeFromProject(project, "reel")),
+    ...projects.filter((project) => !reels.has(project.id) && host && project.marketing && hostOf(project.marketing.brand.url) === host).map((project) => madeFromProject(project, "video")),
   ];
   return made.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

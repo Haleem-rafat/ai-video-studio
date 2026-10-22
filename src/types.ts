@@ -230,7 +230,10 @@ export type MarketingSetup = {
    * one art style for the whole video, and the pictures shown as social posts
    * and link previews. Each scene's backdrop and floating object live on its visual.
    */
-  art?: { style: string; cards: Photo[] };
+  /** The video's own pictures: one art style, the post pictures, and the plain subjects planned (for not repeating them later). */
+  art?: { style: string; cards: Photo[]; subjects?: string[] };
+  /** Pictures and art styles of the client's earlier videos, for the art director to stay clear of. */
+  artAvoid?: { styles: string[]; pictures: string[] };
   /** A style asked for by the producer (e.g. to make a new version look different); the art director follows it. */
   artDirection?: string;
 };

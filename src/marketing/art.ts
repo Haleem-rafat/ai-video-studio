@@ -10,6 +10,7 @@ import { inBatches } from "../media/voice.ts";
 import { reportProgress } from "../progress.ts";
 import { recordImage } from "../usage.ts";
 import type { Photo, Project, Scene } from "../types.ts";
+import { PICTURE_REPEAT_AT, pictureRepeats, similarity } from "../clients/history.ts";
 
 const ART_MODEL = "anthropic/claude-sonnet-5.5";
 const IMAGE_MODEL = "bfl/flux-3-image";
@@ -34,15 +35,12 @@ const PLAN = z.object({
  * pictures that stand in for social posts. Nothing is taken from the
  * website, so no frame repeats its screenshots or its owner's photo.
  */
-export async function directArt(project: Project, log: (message: string) => void = console.log): Promise<void> {
+/** What the art director is asked; a client's earlier styles and pictures are added when the video knows them. */
+export function artPlanPrompt(project: Project): string {
   const m = project.marketing!;
   const c = m.brand.colors;
-  log("art: planning the pictures ...");
-  const { output } = await generateText({
-    telemetry: { functionId: "art" },
-    model: ART_MODEL,
-    output: Output.object({ schema: PLAN }),
-    prompt: `You are the art director of a ${project.format === "short" ? "vertical 9:16" : "horizontal 16:9"} marketing video for ${m.brand.name}: ${m.brand.summary}
+  const avoid = m.artAvoid;
+  return `You are the art director of a ${project.format === "short" ? "vertical 9:16" : "horizontal 16:9"} marketing video for ${m.brand.name}: ${m.brand.summary}
 Audience: ${m.brief.audience}
 Brand colours: background ${c.background}, accent ${c.accent}, call to action ${c.cta}, text ${c.text}.
 
@@ -55,8 +53,33 @@ Rules:
 - Give a floating object only to the scenes whose beat is turn, kinetic or stat (they are words alone); leave it empty everywhere else.
 
 The scenes (beat: narration):
-${project.scenes.map((scene, i) => `${i + 1}. ${scene.visual.type === "marketing" ? scene.visual.beat : ""}: ${scene.narration}`).join("\n")}`,
-  });
+${project.scenes.map((scene, i) => `${i + 1}. ${scene.visual.type === "marketing" ? scene.visual.beat : ""}: ${scene.narration}`).join("\n")}${
+    avoid?.styles.length ? `\n\nART STYLES ALREADY USED in this client's earlier videos (pick a clearly different style):\n${avoid.styles.slice(0, 8).map((style) => `- ${style}`).join("\n")}` : ""
+  }${avoid?.pictures.length ? `\n\nPICTURES ALREADY USED in this client's posts and videos (never reuse these subjects or close variants):\n${avoid.pictures.slice(0, 60).map((picture) => `- ${picture}`).join("\n")}` : ""}`;
+}
+
+/** What a planned set of pictures repeats from the client's earlier ones, as notes for one more plan. */
+export function artRepeats(plan: { style: string; subjects: string[] }, avoid: { styles: string[]; pictures: string[] }): string[] {
+  const style = avoid.styles.find((old) => similarity(plan.style, old) >= PICTURE_REPEAT_AT);
+  return [
+    ...(style ? [`The art style "${plan.style}" is too close to one already used ("${style}"): choose a clearly different style.`] : []),
+    ...pictureRepeats(plan.subjects, avoid.pictures).map((subject) => `The picture "${subject}" repeats one already used: invent a new one.`),
+  ];
+}
+
+export async function directArt(project: Project, log: (message: string) => void = console.log): Promise<void> {
+  const m = project.marketing!;
+  const c = m.brand.colors;
+  log("art: planning the pictures ...");
+  const plan = (extra = "") => generateText({ telemetry: { functionId: "art" }, model: ART_MODEL, output: Output.object({ schema: PLAN }), prompt: artPlanPrompt(project) + extra });
+  let { output } = await plan();
+  const subjects = (planned: typeof output) => [...planned.scenes.map((scene) => scene.backdrop), ...planned.cards];
+  // A client's video planned too close to its earlier ones is planned once more.
+  const repeats = m.artAvoid ? artRepeats({ style: output.style, subjects: subjects(output) }, m.artAvoid) : [];
+  if (repeats.length) {
+    log(`art: ${repeats.length} picture(s) or the style repeat earlier videos; planning again ...`);
+    ({ output } = await plan(`\n\nYOUR FIRST PLAN REPEATED EARLIER VIDEOS:\n${repeats.map((note) => `- ${note}`).join("\n")}\nPlan again without them.`));
+  }
 
   const look = (prompt: string) => `${prompt}. ${output.style}. Colour palette: deep ${c.background}, ${c.accent} and ${c.cta} highlights. No text, no letters, no logos, no user interface`;
   project.scenes.forEach((scene, i) => {
@@ -66,7 +89,7 @@ ${project.scenes.map((scene, i) => `${i + 1}. ${scene.visual.type === "marketing
     if (plan.object.trim()) scene.visual.object = { query: `${plan.object}. ${output.style}, accents in ${c.accent} and ${c.cta}. A single object centred on a plain white background, no text`, source: "ai" };
     else delete scene.visual.object;
   });
-  m.art = { style: output.style, cards: output.cards.map((card) => ({ query: look(card), source: "ai" as const })) };
+  m.art = { style: output.style, cards: output.cards.map((card) => ({ query: look(card), source: "ai" as const })), subjects: subjects(output) };
   log(`art: ${output.style} · ${output.scenes.length} backdrops, ${output.scenes.filter((plan) => plan.object.trim()).length} objects, ${output.cards.length} post pictures`);
 }
 
