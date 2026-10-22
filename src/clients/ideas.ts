@@ -89,7 +89,7 @@ Answer ONLY with JSON: {"trends":[{"title":"...","summary":"one sentence","url":
 
 /** 5 ideas that follow the rules; one retry with what broke them. */
 /** The rules a batch breaks, plus every idea that repeats something already made. */
-function batchProblems(ideas: IdeaDraft[], pastHooks: string[], made: Made[], client?: Pick<Client, "direction" | "name" | "pronounce" | "brief">, planned: { topic?: string; title: string }[] = []): string[] {
+export function batchProblems(ideas: IdeaDraft[], pastHooks: string[], made: Made[], client?: Pick<Client, "direction" | "name" | "pronounce" | "brief">, planned: { topic?: string; title: string }[] = []): string[] {
   const repeats = ideas.flatMap((idea, index) => {
     const twin = duplicateOf([idea.hook, ...idea.outline].join(" "), made);
     return twin ? [`Idea ${index + 1} ("${idea.hook}") repeats what was already made in "${twin.made.title}"; give it a different message, not just new words.`] : [];
@@ -101,7 +101,8 @@ function batchProblems(ideas: IdeaDraft[], pastHooks: string[], made: Made[], cl
     return twin ? [`Idea ${index + 1}'s topic («${idea.topic}») was already covered («${twin}»); pick a different topic, not another angle on it.`] : [];
   });
   const mode = client ? modeOf(client) : "promo";
-  const selling = mode === "value" ? ideas.flatMap((idea, index) => (idea.goal === "offer" || pitchProblems([idea.hook, ...idea.outline, ""], client!).length ? [`Idea ${index + 1} sells the product; this client wants value content: teach one practical thing, no product.`] : [])) : mode === "mix" && ideas.filter((idea) => idea.goal === "offer").length > 1 ? ["At most 1 idea may sell (goal \"offer\"); the rest teach one practical thing."] : [];
+  // An idea's last line is its sign-off, where the brand may appear.
+  const selling = mode === "value" ? ideas.flatMap((idea, index) => (idea.goal === "offer" || pitchProblems([idea.hook, ...idea.outline], client!).length ? [`Idea ${index + 1} sells the product; this client wants value content: teach one practical thing, no product.`] : [])) : mode === "mix" && ideas.filter((idea) => idea.goal === "offer").length > 1 ? ["At most 1 idea may sell (goal \"offer\"); the rest teach one practical thing."] : [];
   return [...ideaProblems(ideas, pastHooks, mode), ...repeats, ...topics, ...selling];
 }
 

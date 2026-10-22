@@ -20,3 +20,12 @@ test("numberIdeas continues the day's numbering and starts every idea as new", (
   assert.equal(ideas[0].status, "new");
   assert.equal("trend" in ideas[0], false);
 });
+
+test("value ideas may name the brand on their last line only", async () => {
+  const { batchProblems } = await import("./ideas.ts");
+  const client = { name: "Risero", brief: { features: ["حجز مواعيد ذاتي متزامن مع التقويم"] }, direction: { mode: "value", brief: "", topics: [], dialects: ["egyptian"], updatedAt: "" } } as never;
+  const idea = (outline: string[]): IdeaDraft => ({ format: "reel", goal: "details", angle: "how-to", hook: "السعر كام؟ رد عليه كده", topic: `t${outline.length}`, outline, why: "", persona: "", step: "", trend: "" });
+  const sells = (outline: string[]) => batchProblems([idea(outline)], [], [], client).some((p) => /sells the product/.test(p));
+  assert.equal(sells(["اسأله عن هدفه الأول", "آخر فريم: سؤال للكومنتات + لوجو Risero"]), false);
+  assert.equal(sells(["Risero بيحل ده", "آخر فريم: سؤال للكومنتات"]), true);
+});
