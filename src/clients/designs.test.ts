@@ -47,3 +47,23 @@ test("every design keeps text escaped, right to left in Arabic, and the client's
     assert.doesNotMatch(html, /content:\s*"[^"]*ri"sero/, `${id}: a quote in the handle must not break the CSS`);
   }
 });
+
+test("the new layouts draw in every design, escaped, with their labels in the slide's language", () => {
+  const slides: Slide[] = [
+    { layout: "checklist", title: "قبل <ما> تنشر", items: ["اللينك شغال", "الأسعار واضحة"] },
+    { layout: "versus", title: "الرسايل ولا صفحة حجز؟", left: { label: "الرسايل", points: ["بطيء"] }, right: { label: "صفحة حجز", points: ["فوري"] } },
+    { layout: "faq", question: "غالي؟", answer: "أول مكالمة مجانية" },
+    { layout: "fix", problem: "لينك بايو فيه ٦ لينكات", fix: "صفحة واحدة" },
+    { layout: "chat", messages: [{ from: "them", text: "متاح بكرة؟" }, { from: "us", text: "احجز من اللينك" }] },
+  ];
+  for (const id of DESIGN_IDS)
+    for (const slide of slides) {
+      const html = slideHtml(slide, ctx({ design: id }));
+      assert.doesNotMatch(html, /<ما>/, `${id} ${slide.layout}`);
+    }
+  assert.match(slideHtml(slides[1], ctx()), /class="vs"/);
+  assert.match(slideHtml(slides[2], ctx()), /سؤال/);
+  assert.match(slideHtml(slides[3], ctx()), /المشكلة/);
+  assert.match(slideHtml(slides[4], ctx()), /bubble them[\s\S]*bubble us/);
+  assert.match(slideHtml(slides[2], ctx({ client: { language: "en", brand } as never })), /Question/);
+});

@@ -8,7 +8,7 @@ import type { Client } from "./types.ts";
 const MODEL = "anthropic/claude-sonnet-5.5";
 
 /** Keys that hold ids, links, pictures or settings rather than words people read. */
-const NOT_TEXT = new Set(["id", "layout", "art", "url", "type", "beat", "imagePrompt", "image", "audio", "speech", "file", "prompt", "look", "imageSeed"]);
+const NOT_TEXT = new Set(["from", "id", "layout", "art", "url", "type", "beat", "imagePrompt", "image", "audio", "speech", "file", "prompt", "look", "imageSeed"]);
 const ARABIC = /[ء-ي]/;
 
 export type TextRef = { get: () => string; set: (text: string) => void };

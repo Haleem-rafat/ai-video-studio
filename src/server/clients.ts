@@ -7,7 +7,8 @@ import { claimIdea, makePost, recoverInterrupted, rerenderPost } from "../client
 import { loadLibrary } from "../clients/library.ts";
 import { draftKnowledge, foldAnswer, type Knowledge } from "../clients/knowledge.ts";
 import { drawPreviews, previewPath, previewsMade } from "../clients/previews.ts";
-import { DESIGN_IDS, DESIGNS, type DesignId } from "../clients/designs.ts";
+import { DESIGN_IDS, DESIGNS, type DesignChoice, type DesignId } from "../clients/designs.ts";
+import { FORMAT_IDS, FORMATS, type FormatId } from "../clients/formats.ts";
 import { designPreviewPath, PREVIEW_SLIDES, renderDesignPreviews } from "../clients/design-previews.ts";
 import { ART_STYLE_IDS, ART_STYLES, type ArtStyleChoice, type PictureAmount } from "../clients/styles.ts";
 import { duplicateOf, loadHistory } from "../clients/history.ts";
@@ -59,6 +60,8 @@ export function startClientSchedule(): void {
 
 const isStyle = (id: unknown): id is ArtStyleChoice => id === "rotate" || (typeof id === "string" && (ART_STYLE_IDS as readonly string[]).includes(id));
 const isDesign = (id: unknown): id is DesignId => typeof id === "string" && (DESIGN_IDS as readonly string[]).includes(id);
+const isDesignChoice = (id: unknown): id is DesignChoice => id === "rotate" || isDesign(id);
+const isFormat = (id: unknown): id is FormatId | "auto" => id === "auto" || (typeof id === "string" && (FORMAT_IDS as readonly string[]).includes(id));
 const isAmount = (amount: unknown): amount is PictureAmount => amount === "light" || amount === "rich";
 
 /** Handles /api/clients…, /client-files/… and /client-styles/…; false when the path is not one of them. */
@@ -97,6 +100,11 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       200,
       DESIGN_IDS.map((id) => ({ id, label: DESIGNS[id].label, description: DESIGNS[id].description, previews: clientId && /^[a-z0-9-]+$/.test(clientId) ? PREVIEW_SLIDES.filter((slide) => existsSync(designPreviewPath(clientId, id, slide))) : [] })),
     );
+    return true;
+  }
+
+  if (path === "/api/clients/formats" && method === "GET") {
+    json(response, 200, FORMAT_IDS.map((id) => ({ id, label: FORMATS[id].label, description: FORMATS[id].description })));
     return true;
   }
 
@@ -147,7 +155,7 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
         client.pronounce = Object.fromEntries(Object.entries(edits.pronounce).filter(([word, said]) => typeof said === "string" && word.trim() && said.trim()).map(([word, said]) => [word.trim(), String(said).trim()]));
       if (isStyle(edits.artStyle)) client.artStyle = edits.artStyle;
       if (isAmount(edits.pictures)) client.pictures = edits.pictures;
-      if (isDesign(edits.design)) client.design = edits.design;
+      if (isDesignChoice(edits.design)) client.design = edits.design;
       if (typeof edits.name === "string" && edits.name.trim()) client.name = edits.name.trim();
       if (typeof edits.instagramHandle === "string") client.instagramHandle = edits.instagramHandle.trim().replace(/^@/, "") || undefined;
       if (edits.language === "ar" || edits.language === "en") client.language = edits.language;
@@ -188,7 +196,8 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       json(response, 200, day);
       return true;
     }
-    const options = await body<{ artStyle?: string; pictures?: string; design?: string; force?: boolean }>(request).catch(() => ({}) as { artStyle?: string; pictures?: string; design?: string; force?: boolean });
+    type MakeBody = { artStyle?: string; pictures?: string; design?: string; format?: string; force?: boolean };
+    const options = await body<MakeBody>(request).catch(() => ({}) as MakeBody);
     // Nothing is spent on an idea that repeats something already made, unless asked to.
     if (!options.force) {
       const idea = (await loadIdeas(clientId, date))?.ideas.find((i) => i.id === ideaId);
@@ -202,7 +211,12 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
     const job = enqueue(
       `Make ${idea.format}: ${client.name}: ${idea.hook.slice(0, 40)}`,
       async (log) => {
-        const post = await makePost(clientId, ideaId, log, { ...(isStyle(options.artStyle) ? { artStyle: options.artStyle } : {}), ...(isAmount(options.pictures) ? { pictures: options.pictures } : {}), ...(isDesign(options.design) ? { design: options.design } : {}) });
+        const post = await makePost(clientId, ideaId, log, {
+          ...(isStyle(options.artStyle) ? { artStyle: options.artStyle } : {}),
+          ...(isAmount(options.pictures) ? { pictures: options.pictures } : {}),
+          ...(isDesignChoice(options.design) ? { design: options.design } : {}),
+          ...(isFormat(options.format) ? { format: options.format } : {}),
+        });
         return post.projectId ?? post.id;
       },
       undefined,

@@ -12,7 +12,7 @@ import type { Client, Slide } from "./types.ts";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 /** Sample slides a design is previewed with, in the client's language (no AI, no cost). */
-export function sampleSlides(language: "en" | "ar", url: string): Record<"cover" | "list" | "mythfact" | "stat" | "cta", Slide> {
+export function sampleSlides(language: "en" | "ar", url: string): Record<"cover" | "list" | "mythfact" | "stat" | "cta" | "checklist" | "versus" | "faq" | "fix" | "chat", Slide> {
   const ar = language === "ar";
   return {
     cover: { layout: "cover", title: ar ? "٥ أخطاء بتضيّع عليك عملاء كل يوم" : "5 mistakes that cost you clients every day", subtitle: ar ? "اعرفها قبل ما تنشر البوست الجاي" : "Fix them before your next post" },
@@ -24,6 +24,21 @@ export function sampleSlides(language: "en" | "ar", url: string): Record<"cover"
     mythfact: { layout: "myth-fact", myth: ar ? "العميل هيحجز من الرسايل" : "Clients will book in your DMs", fact: ar ? "نص العملاء بيختفوا قبل ما ترد" : "Half of them leave before you reply" },
     stat: { layout: "stat", value: "3x", label: ar ? "حجوزات أكتر من نفس البوستات" : "more bookings from the same posts", note: ar ? "مثال" : "example" },
     cta: { layout: "cta", title: ar ? "احجز مكالمة مجانية ١٥ دقيقة" : "Book a free 15-minute call", button: ar ? "احجز دلوقتي" : "Book now", url },
+    checklist: { layout: "checklist", title: ar ? "قبل ما تنشر لينك البايو" : "Before you post your bio link", items: ar ? ["اللينك بيفتح على الموبايل", "الحجز في خطوتين بس", "فيه آراء عملاء حقيقية"] : ["It opens fast on a phone", "Booking takes two taps", "Real client reviews are on it"] },
+    versus: {
+      layout: "versus",
+      title: ar ? "الحجز في الرسايل ولا صفحة حجز؟" : "Booking in DMs or a booking page?",
+      left: { label: ar ? "الرسايل" : "DMs", points: ar ? ["ترد بنفسك", "العميل يستنى"] : ["You reply by hand", "Clients wait"] },
+      right: { label: ar ? "صفحة حجز" : "Booking page", points: ar ? ["يحجز لوحده", "٢٤ ساعة"] : ["They book alone", "Open 24/7"] },
+    },
+    faq: { layout: "faq", question: ar ? "هو أنا محتاج أعرف برمجة؟" : "Do I need to know how to code?", answer: ar ? "لأ. إحنا بنبني الصفحة وانت بتبعت اللينك بس." : "No. We build the page; you just share the link." },
+    fix: { layout: "fix", problem: ar ? "لينك البايو فيه ٦ لينكات والعميل تايه" : "Six links in your bio and clients get lost", fix: ar ? "صفحة واحدة: مين انت، خدماتك، واحجز" : "One page: who you are, what you do, book" },
+    chat: {
+      layout: "chat",
+      messages: ar
+        ? [{ from: "them", text: "السلام عليكم، فيه ميعاد بكرة؟" }, { from: "us", text: "أهلاً! المواعيد الفاضية كلها في اللينك ده" }, { from: "them", text: "تمام حجزت، شكراً 🙏" }]
+        : [{ from: "them", text: "Hi! Any slot tomorrow?" }, { from: "us", text: "Hi! All free slots are on this link" }, { from: "them", text: "Booked, thanks 🙏" }],
+    },
   };
 }
 

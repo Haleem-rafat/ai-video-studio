@@ -91,6 +91,12 @@ function batchProblems(ideas: IdeaDraft[], pastHooks: string[], made: Made[]): s
   return [...ideaProblems(ideas, pastHooks), ...repeats];
 }
 
+/** The formats of the last carousels, so new ideas lean to other angles; empty when there are none. */
+export function recentFormats(made: Made[]): string {
+  const formats = made.filter((m) => m.kind === "carousel" && m.format).slice(0, 8).map((m) => m.format);
+  return formats.length ? `RECENT CAROUSEL FORMATS, newest first (pick other angles than the last ones): ${formats.join(", ")}\n\n` : "";
+}
+
 export async function writeIdeas(client: Client, trends: Trend[], pastHooks: string[], log: (message: string) => void, made: Made[] = []): Promise<IdeaDraft[]> {
   const arabic = client.language === "ar";
   const prompt = `You are the Instagram content strategist of ${client.name} (${client.url}). Suggest today's 5 post ideas: niche, reach and shareable, never generic.
@@ -113,7 +119,7 @@ ${trends.length ? trends.map((t) => `- ${t.title}: ${t.summary} (${t.url})`).joi
 ALREADY MADE AND PAID FOR (never repeat these messages, angles or examples; each new idea must say something these don't)
 ${made.length ? made.slice(0, 40).map((m) => `- [${m.kind}] ${m.title}: ${m.lines.slice(0, 3).join(" / ").slice(0, 220)}`).join("\n") : "nothing yet"}
 
-HOOKS ALREADY USED IN THE LAST ${HISTORY_DAYS} DAYS (do not repeat or paraphrase)
+${recentFormats(made)}HOOKS ALREADY USED IN THE LAST ${HISTORY_DAYS} DAYS (do not repeat or paraphrase)
 ${pastHooks.length ? pastHooks.map((h) => `- ${h}`).join("\n") : "none"}
 
 RULES

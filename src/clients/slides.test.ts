@@ -6,7 +6,8 @@ import type { Slide } from "./types.ts";
 
 const flat = (over: Partial<FlatSlide>): FlatSlide => ({
   layout: "list", title: "", subtitle: "", value: "", label: "", note: "", items: [], myth: "", fact: "",
-  before: [], after: [], text: "", by: "", bars: [], unit: "", button: "", art: "", ...over,
+  before: [], after: [], text: "", by: "", bars: [], unit: "", button: "", art: "",
+  leftLabel: "", rightLabel: "", leftPoints: [], rightPoints: [], question: "", answer: "", problem: "", fix: "", messages: [], ...over,
 });
 const cta = { label: "احجز مكالمة مجانية", url: "https://diaaeziada.risero.io/#booking-link" };
 
@@ -48,4 +49,38 @@ test("over-long text is reported, then cut with an ellipsis", () => {
   assert.equal(fitted.title.length, LIMITS.title);
   assert.ok(fitted.title.endsWith("…"));
   assert.equal((long as { title: string }).title.length, LIMITS.title + 10, "the original is left alone");
+});
+
+test("the new layouts: checklist, versus, faq, fix and chat come out typed, and incomplete ones are dropped", () => {
+  assert.deepEqual(toSlide(flat({ layout: "checklist", title: "قبل ما تنشر", items: ["اللينك شغال", " ", "الأسعار واضحة"] }), cta), { layout: "checklist", title: "قبل ما تنشر", items: ["اللينك شغال", "الأسعار واضحة"] });
+  assert.deepEqual(toSlide(flat({ layout: "versus", title: "", leftLabel: "الرسايل", rightLabel: "صفحة حجز", leftPoints: ["بطيء"], rightPoints: ["فوري", "24/7"] }), cta), {
+    layout: "versus",
+    left: { label: "الرسايل", points: ["بطيء"] },
+    right: { label: "صفحة حجز", points: ["فوري", "24/7"] },
+  });
+  assert.equal(toSlide(flat({ layout: "versus", leftLabel: "A", rightLabel: "", leftPoints: ["x"], rightPoints: ["y"] }), cta), null);
+  assert.deepEqual(toSlide(flat({ layout: "faq", question: "غالي؟", answer: "أول مكالمة مجانية" }), cta), { layout: "faq", question: "غالي؟", answer: "أول مكالمة مجانية" });
+  assert.deepEqual(toSlide(flat({ layout: "fix", problem: "لينك بايو فيه ٦ لينكات", fix: "صفحة واحدة واضحة" }), cta), { layout: "fix", problem: "لينك بايو فيه ٦ لينكات", fix: "صفحة واحدة واضحة" });
+  assert.deepEqual(
+    toSlide(flat({ layout: "chat", messages: [{ from: "them", text: "متاح بكرة؟" }, { from: "us", text: " " }, { from: "us", text: "احجز من اللينك" }] }), cta),
+    { layout: "chat", messages: [{ from: "them", text: "متاح بكرة؟" }, { from: "us", text: "احجز من اللينك" }] },
+  );
+  assert.equal(toSlide(flat({ layout: "chat", messages: [{ from: "them", text: "hi" }] }), cta), null, "a chat needs at least two messages");
+});
+
+test("the new layouts' texts are checked against their limits and cut to fit", () => {
+  const long = "ا".repeat(400);
+  const slides: Slide[] = [
+    { layout: "faq", question: long, answer: long },
+    { layout: "versus", left: { label: long, points: [long] }, right: { label: "b", points: ["c"] } },
+    { layout: "chat", messages: [{ from: "them", text: long }, { from: "us", text: "ok" }] },
+  ];
+  const problems = slideProblems(slides, "single").join(" ");
+  assert.match(problems, /question/);
+  assert.match(problems, /answer/);
+  assert.match(problems, /message/);
+  assert.match(problems, /vsLabel/);
+  const fitted = fitSlides(slides);
+  assert.ok((fitted[0] as { question: string }).question.length <= LIMITS.question);
+  assert.ok((fitted[2] as { messages: { text: string }[] }).messages[0].text.length <= LIMITS.message);
 });

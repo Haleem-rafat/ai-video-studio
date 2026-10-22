@@ -18,11 +18,18 @@ export const LIMITS = {
   by: 40,
   bar: 24,
   button: 30,
+  vsLabel: 30,
+  point: 60,
+  question: 110,
+  answer: 170,
+  problem: 120,
+  fix: 140,
+  message: 110,
 } as const;
 
 type LimitKey = keyof typeof LIMITS;
 
-const LAYOUTS = ["cover", "stat", "list", "myth-fact", "before-after", "steps", "quote", "chart", "cta"] as const satisfies readonly SlideLayout[];
+const LAYOUTS = ["cover", "stat", "list", "myth-fact", "before-after", "steps", "quote", "chart", "cta", "checklist", "versus", "faq", "fix", "chat"] as const satisfies readonly SlideLayout[];
 
 /**
  * What the writer returns per slide: one flat shape, every field present and
@@ -35,7 +42,9 @@ export const FLAT_SLIDE = z.object({
     .describe(
       "cover: the hook (title) and a short promise (subtitle). stat: one big number (value, digits) with what it means (label) and an optional note. " +
         "list: a title and 2-5 short items. myth-fact: a common belief and the truth. before-after: 2-4 short lines each. steps: a title and 2-4 steps (in items). " +
-        "quote: one line someone would say, optional by. chart: a title and 2-5 bars (label, value number) with a unit. cta: the closing ask (title) and button text",
+        "quote: one line someone would say, optional by. chart: a title and 2-5 bars (label, value number) with a unit. cta: the closing ask (title) and button text. " +
+        "checklist: a title and 3-5 checkable items (in items). versus: two choices compared (leftLabel/rightLabel, 2-4 leftPoints/rightPoints), optional title. " +
+        "faq: one real question and a short honest answer. fix: a problem and its fix. chat: 2-5 short messages between the customer (from them) and the business (from us)",
     ),
   title: z.string(),
   subtitle: z.string(),
@@ -52,6 +61,15 @@ export const FLAT_SLIDE = z.object({
   bars: z.array(z.object({ label: z.string(), value: z.number() })),
   unit: z.string(),
   button: z.string(),
+  leftLabel: z.string(),
+  rightLabel: z.string(),
+  leftPoints: z.array(z.string()),
+  rightPoints: z.array(z.string()),
+  question: z.string(),
+  answer: z.string(),
+  problem: z.string(),
+  fix: z.string(),
+  messages: z.array(z.object({ from: z.enum(["them", "us"]), text: z.string() })),
   art: z.string().describe("An illustration for this slide, as a picture prompt in English (a subject, no text in it), or empty. Only the cover and at most 2 others"),
 });
 
@@ -88,6 +106,26 @@ export function toSlide(flat: FlatSlide, cta: { label: string; url: string }): S
     }
     case "cta":
       return { layout: "cta", title: clean(flat.title) || cta.label, button: clean(flat.button) || cta.label, url: cta.url, ...art };
+    case "checklist":
+      return clean(flat.title) && lines(flat.items).length >= 2 ? { layout: "checklist", title: clean(flat.title), items: lines(flat.items).slice(0, 5), ...art } : null;
+    case "versus":
+      return clean(flat.leftLabel) && clean(flat.rightLabel) && lines(flat.leftPoints).length && lines(flat.rightPoints).length
+        ? {
+            layout: "versus",
+            ...optional("title", flat.title),
+            left: { label: clean(flat.leftLabel), points: lines(flat.leftPoints).slice(0, 4) },
+            right: { label: clean(flat.rightLabel), points: lines(flat.rightPoints).slice(0, 4) },
+            ...art,
+          }
+        : null;
+    case "faq":
+      return clean(flat.question) && clean(flat.answer) ? { layout: "faq", question: clean(flat.question), answer: clean(flat.answer), ...art } : null;
+    case "fix":
+      return clean(flat.problem) && clean(flat.fix) ? { layout: "fix", problem: clean(flat.problem), fix: clean(flat.fix), ...art } : null;
+    case "chat": {
+      const messages = flat.messages.filter((message) => clean(message.text)).slice(0, 5).map((message) => ({ from: message.from, text: clean(message.text) }));
+      return messages.length >= 2 ? { layout: "chat", messages, ...art } : null;
+    }
   }
 }
 
@@ -100,10 +138,17 @@ function fields(slide: Slide): Field[] {
   const many = (key: string, limit: LimitKey): Field[] =>
     Array.isArray(s[key]) ? (s[key] as string[]).map((_, i) => ({ key: limit, get: () => (s[key] as string[])[i], set: (text: string) => void ((s[key] as string[])[i] = text) })) : [];
   const bars: Field[] = slide.layout === "chart" ? slide.bars.map((bar) => ({ key: "bar", get: () => bar.label, set: (text: string) => void (bar.label = text) })) : [];
+  const side = (part: { label: string; points: string[] }): Field[] => [
+    { key: "vsLabel", get: () => part.label, set: (text) => void (part.label = text) },
+    ...part.points.map((_, i): Field => ({ key: "point", get: () => part.points[i], set: (text) => void (part.points[i] = text) })),
+  ];
+  const sides: Field[] = slide.layout === "versus" ? [...side(slide.left), ...side(slide.right)] : [];
+  const messages: Field[] = slide.layout === "chat" ? slide.messages.map((message) => ({ key: "message", get: () => message.text, set: (text: string) => void (message.text = text) })) : [];
   return [
     ...one("title", "title"), ...one("subtitle", "subtitle"), ...one("value", "value"), ...one("label", "label"), ...one("note", "note"),
     ...many("items", "item"), ...one("myth", "myth"), ...one("fact", "fact"), ...many("before", "side"), ...many("after", "side"),
     ...many("steps", "step"), ...one("text", "text"), ...one("by", "by"), ...one("button", "button"), ...bars,
+    ...one("question", "question"), ...one("answer", "answer"), ...one("problem", "problem"), ...one("fix", "fix"), ...sides, ...messages,
   ];
 }
 

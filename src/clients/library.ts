@@ -63,7 +63,7 @@ export function ideasCostByDate(entries: UsageEntry[]): Record<string, number> {
   return byDate;
 }
 
-const titleOf = (post: Post) => (post.slides?.[0] && "title" in post.slides[0] ? post.slides[0].title : post.caption.split("\n")[0]);
+const titleOf = (post: Post) => (post.slides?.[0] && "title" in post.slides[0] && post.slides[0].title ? post.slides[0].title : post.caption.split("\n")[0]);
 
 /** Everything made for a client, with its cost, and the client's totals. */
 export function buildLibrary(input: {

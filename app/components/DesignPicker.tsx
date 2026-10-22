@@ -1,4 +1,4 @@
-import { CheckIcon, PaletteIcon } from "lucide-react";
+import { CheckIcon, PaletteIcon, RefreshCwIcon } from "lucide-react";
 
 import { clientFileUrl, type DesignInfo } from "../api.ts";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ type Props = {
   clientId: string;
   designs: DesignInfo[];
   value: string;
-  onChange: (id: DesignInfo["id"]) => void;
+  onChange: (id: DesignInfo["id"] | "rotate") => void;
   /** Draws the previews in this client's brand (free); shown while any is missing. */
   onDrawPreviews?: () => void;
   drawing?: boolean;
@@ -33,6 +33,20 @@ export function DesignPicker({ clientId, designs, value, onChange, onDrawPreview
         </div>
       )}
       <div role="radiogroup" aria-label="Design" className={cn("grid gap-2", size === "sm" ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6")}>
+        <Button
+          type="button"
+          role="radio"
+          aria-checked={value === "rotate"}
+          variant="outline"
+          title="A different design each post: one this client's recent posts haven't used"
+          onClick={() => onChange("rotate")}
+          className={cn("h-auto flex-col items-stretch gap-1.5 p-1.5 font-normal whitespace-normal", value === "rotate" && "border-primary ring-2 ring-primary")}
+        >
+          <span className="grid aspect-[4/5] w-full place-items-center rounded-md bg-muted text-muted-foreground">
+            <RefreshCwIcon className="size-6" />
+          </span>
+          <span className={cn("truncate text-center", size === "sm" ? "text-[11px]" : "text-xs")}>{lang === "ar" ? "تبديل" : "Rotate"}</span>
+        </Button>
         {designs.map((design) => {
           const on = value === design.id;
           const has = design.previews.includes("cover");

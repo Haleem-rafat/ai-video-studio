@@ -2,7 +2,8 @@ import type { MarketingBrief, SiteBrand } from "../types.ts";
 import type { Knowledge } from "./knowledge.ts";
 import type { BusinessProfile } from "./questionnaire.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "./styles.ts";
-import type { DesignId } from "./designs.ts";
+import type { DesignChoice, DesignId } from "./designs.ts";
+import type { FormatId } from "./formats.ts";
 
 /**
  * A business whose Instagram the studio makes posts for. Its brand and brief
@@ -32,8 +33,8 @@ export type Client = {
   /** Default art style ("rotate" takes one not used lately) and picture amount for new posts; unset means flat and light. */
   artStyle?: ArtStyleChoice;
   pictures?: PictureAmount;
-  /** Default carousel design; unset means Classic. */
-  design?: DesignId;
+  /** Default carousel design, or "rotate"; unset means Classic. */
+  design?: DesignChoice;
   createdAt: string;
   updatedAt: string;
 };
@@ -81,7 +82,12 @@ export type Slide =
   | { layout: "steps"; title: string; steps: string[]; art?: SlideArt }
   | { layout: "quote"; text: string; by?: string; art?: SlideArt }
   | { layout: "chart"; title: string; bars: { label: string; value: number }[]; unit?: string; art?: SlideArt }
-  | { layout: "cta"; title: string; button: string; url: string; art?: SlideArt };
+  | { layout: "cta"; title: string; button: string; url: string; art?: SlideArt }
+  | { layout: "checklist"; title: string; items: string[]; art?: SlideArt }
+  | { layout: "versus"; title?: string; left: { label: string; points: string[] }; right: { label: string; points: string[] }; art?: SlideArt }
+  | { layout: "faq"; question: string; answer: string; art?: SlideArt }
+  | { layout: "fix"; problem: string; fix: string; art?: SlideArt }
+  | { layout: "chat"; messages: { from: "them" | "us"; text: string }[]; art?: SlideArt };
 
 export type SlideLayout = Slide["layout"];
 
@@ -101,6 +107,8 @@ export type Post = {
   pictures?: PictureAmount;
   /** The carousel design it was rendered in; unset means Classic. */
   design?: DesignId;
+  /** The post format it was written in (list, versus, faq…); unset when the writer chose freely. */
+  postFormat?: FormatId;
   /** The quality check of its script (1-5 each) and what the reviewer noted. */
   review?: ScriptReview;
   status: "writing" | "drawing" | "rendering" | "done" | "failed";

@@ -3,7 +3,10 @@ import type { Project } from "../types.ts";
 import { hostOf } from "./library.ts";
 import { normalizeHook } from "./rules.ts";
 import { listPosts, loadClient } from "./store.ts";
-import type { Post, Slide } from "./types.ts";
+import { textsOf } from "./arabic.ts";
+import { DESIGN_IDS, type DesignChoice, type DesignId } from "./designs.ts";
+import { FORMAT_IDS, formatForIdea, type FormatId } from "./formats.ts";
+import type { Idea, Post, Slide } from "./types.ts";
 
 /** Something already made for a client, reduced to what a new piece must not repeat. */
 export type Made = {
@@ -17,6 +20,10 @@ export type Made = {
   voice?: string;
   creativity?: string;
   artStyle?: string;
+  /** A carousel's post format, design and slide layouts in order. */
+  format?: string;
+  design?: string;
+  layouts?: string[];
   createdAt: string;
 };
 
@@ -111,17 +118,52 @@ export function nextCreativity(history: Made[]): "creative" | "bold" {
   return last === "creative" ? "bold" : "creative";
 }
 
+/** Every text on a slide, whatever its layout (questions, chat messages, both sides of a versus…). */
 function slideLines(slide: Slide): string[] {
-  const s = slide as Record<string, unknown>;
-  const out: string[] = [];
-  for (const key of ["title", "subtitle", "label", "note", "myth", "fact", "text"]) if (typeof s[key] === "string") out.push(s[key] as string);
-  for (const key of ["items", "steps", "before", "after"]) if (Array.isArray(s[key])) out.push(...(s[key] as string[]));
-  return out;
+  return textsOf(slide).map((ref) => ref.get());
 }
 
-function fromPost(post: Post): Made {
+/** A made carousel or image as history: its texts, and the format, design and slide order it used. */
+export function madeFromPost(post: Post): Made {
   const lines = (post.slides ?? []).flatMap(slideLines);
-  return { id: post.id, kind: post.kind, title: lines[0] ?? post.caption.split("\n")[0], lines: [...lines.slice(1), post.caption.split("\n")[0]], artStyle: post.artStyle ?? "flat", createdAt: post.createdAt };
+  return {
+    id: post.id,
+    kind: post.kind,
+    title: lines[0] ?? post.caption.split("\n")[0],
+    lines: [...lines.slice(1), post.caption.split("\n")[0]],
+    artStyle: post.artStyle ?? "flat",
+    ...(post.postFormat ? { format: post.postFormat } : {}),
+    design: post.design ?? "classic",
+    layouts: (post.slides ?? []).map((slide) => slide.layout),
+    createdAt: post.createdAt,
+  };
+}
+
+/** "Rotate" for designs: one the recent posts haven't used, else the one used longest ago (history newest first). */
+export function pickDesign(history: { design?: string }[]): DesignId {
+  const recent = history.map((made) => made.design).filter(Boolean) as string[];
+  const unused = DESIGN_IDS.find((id) => !recent.includes(id));
+  if (unused) return unused;
+  return [...DESIGN_IDS].sort((a, b) => recent.indexOf(b) - recent.indexOf(a))[0];
+}
+
+/** The design for a new post: the one chosen, or for Rotate one the recent carousels and images haven't used. */
+export function chooseDesign(choice: DesignChoice | undefined, history: { kind: string; design?: string }[]): DesignId | undefined {
+  if (choice !== "rotate") return choice;
+  return pickDesign(history.filter((made) => made.kind === "carousel" || made.kind === "single"));
+}
+
+/**
+ * "Auto" format, without repeats: the idea's own format unless one of the last
+ * two carousels used it; else a format the recent carousels haven't used, or
+ * the one used longest ago. Comment-to-get is only made when chosen by hand.
+ */
+export function autoFormat(idea: Pick<Idea, "angle">, history: { kind: string; format?: string }[]): FormatId | undefined {
+  const recent = history.filter((made) => made.kind === "carousel").map((made) => made.format).filter(Boolean) as string[];
+  const own = formatForIdea(idea);
+  if (own && !recent.slice(0, 2).includes(own)) return own;
+  const candidates = FORMAT_IDS.filter((id) => id !== "comment" && id !== own);
+  return candidates.find((id) => !recent.includes(id)) ?? [...candidates].sort((a, b) => recent.indexOf(b) - recent.indexOf(a))[0];
 }
 
 function fromProject(project: Project, kind: "reel" | "video"): Made {
@@ -144,7 +186,7 @@ export async function loadHistory(clientId: string): Promise<Made[]> {
   const host = hostOf(client.url);
   const reels = new Set(posts.map((post) => post.projectId).filter(Boolean));
   const made = [
-    ...posts.filter((post) => post.kind !== "reel" && post.status === "done").map(fromPost),
+    ...posts.filter((post) => post.kind !== "reel" && post.status === "done").map(madeFromPost),
     ...projects.filter((project) => reels.has(project.id)).map((project) => fromProject(project, "reel")),
     ...projects.filter((project) => !reels.has(project.id) && host && project.marketing && hostOf(project.marketing.brand.url) === host).map((project) => fromProject(project, "video")),
   ];

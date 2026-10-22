@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, PaletteIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo } from "../api.ts";
+import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo, type PostFormatId, type FormatInfo } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,21 @@ const FILTERS: { id: Filter; label: string; match: (item: LibraryItem) => boolea
 ];
 
 const GOAL_LABEL: Record<Idea["goal"], string> = { awareness: "Awareness", details: "Details", offer: "Offer" };
+/** Post format names for the Library badges (the catalog itself comes from the server). */
+const FORMAT_NAMES: Record<PostFormatId, string> = {
+  list: "Numbered list",
+  checklist: "Checklist",
+  mistakes: "Mistakes + fixes",
+  myth: "Myth vs fact",
+  "before-after": "Before / after",
+  steps: "Step by step",
+  versus: "This vs that",
+  teardown: "Teardown",
+  story: "Customer story",
+  stats: "Stats",
+  faq: "People also ask",
+  comment: "Comment to get",
+};
 const FORMAT_LABEL: Record<LibraryItem["kind"], string> = { carousel: "Carousel", single: "Single image", reel: "Reel", video: "Marketing video", promo: "Website promo" };
 
 /** A client's Instagram: the day's ideas, the posts made from them, and the profile the ideas are written from. */
@@ -45,6 +60,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
   const [filter, setFilter] = useState<Filter>("all");
   const [styles, setStyles] = useState<ArtStyleInfo[]>([]);
   const [designs, setDesigns] = useState<DesignInfo[]>([]);
+  const [formats, setFormats] = useState<FormatInfo[]>([]);
   const page = `/marketing/clients/${id}`;
   const mine = jobs.filter((job) => job.link === page || jobLink(job) === page || job.label === "Art style previews");
   const working = mine.filter((job) => job.status === "queued" || job.status === "running");
@@ -71,6 +87,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
     api.library(id).then(setLibrary).catch(() => setLibrary(null));
     api.artStyles().then(setStyles).catch(() => setStyles([]));
     api.designs(id).then(setDesigns).catch(() => setDesigns([]));
+    api.formats().then(setFormats).catch(() => setFormats([]));
   }, [id, date]);
 
   // Reload whenever one of this client's jobs finishes.
@@ -157,8 +174,9 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                 key={idea.id}
                 idea={idea}
                 styles={styles}
-                defaults={{ artStyle: client.artStyle ?? "flat", pictures: client.pictures ?? "light", design: client.design ?? "classic" }}
+                defaults={{ artStyle: client.artStyle ?? "flat", pictures: client.pictures ?? "light", design: client.design ?? "classic", format: "auto" }}
                 design={designProps}
+                formats={formats}
                 onMake={(options) => {
                   const made = `Making the ${FORMAT_LABEL[idea.format].toLowerCase()}…`;
                   api
@@ -252,7 +270,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
   );
 }
 
-type MakeOptions = { artStyle: ArtStyleChoice; pictures: PictureAmount; design: DesignId };
+type MakeOptions = { artStyle: ArtStyleChoice; pictures: PictureAmount; design: DesignId | "rotate"; format: PostFormatId | "auto" };
 type DesignProps = Omit<React.ComponentProps<typeof DesignPicker>, "value" | "onChange">;
 
 /** The 12 art styles as picture tiles; a style without its sample picture shows its name only. */
@@ -283,6 +301,22 @@ function StyleGrid({ styles, value, onChange, size = "md" }: { styles: ArtStyleI
   );
 }
 
+/** Post formats as chips; Auto follows the idea's own angle. */
+function FormatChips({ formats, value, onChange }: { formats: FormatInfo[]; value: PostFormatId | "auto"; onChange: (id: PostFormatId | "auto") => void }) {
+  return (
+    <div role="radiogroup" aria-label="Format" className="flex flex-wrap gap-1.5">
+      <Button type="button" size="sm" role="radio" aria-checked={value === "auto"} variant={value === "auto" ? "default" : "outline"} title="The format the idea was written for" onClick={() => onChange("auto")}>
+        <SparklesIcon /> Auto
+      </Button>
+      {formats.map((format) => (
+        <Button key={format.id} type="button" size="sm" role="radio" aria-checked={value === format.id} variant={value === format.id ? "default" : "outline"} title={format.description.en} onClick={() => onChange(format.id)}>
+          {format.label.en}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 function PictureToggle({ value, onChange }: { value: PictureAmount; onChange: (amount: PictureAmount) => void }) {
   return (
     <div className="flex gap-1.5">
@@ -296,7 +330,23 @@ function PictureToggle({ value, onChange }: { value: PictureAmount; onChange: (a
   );
 }
 
-function IdeaCard({ idea, styles, defaults, design, onMake, onSkip }: { idea: Idea; styles: ArtStyleInfo[]; defaults: MakeOptions; design: DesignProps; onMake: (options: Partial<MakeOptions>) => void; onSkip: () => void }) {
+function IdeaCard({
+  idea,
+  styles,
+  defaults,
+  design,
+  formats,
+  onMake,
+  onSkip,
+}: {
+  idea: Idea;
+  styles: ArtStyleInfo[];
+  defaults: MakeOptions;
+  design: DesignProps;
+  formats: FormatInfo[];
+  onMake: (options: Partial<MakeOptions>) => void;
+  onSkip: () => void;
+}) {
   const [choosing, setChoosing] = useState(false);
   const [options, setOptions] = useState<MakeOptions>(defaults);
   const pictured = idea.format !== "reel";
@@ -340,7 +390,13 @@ function IdeaCard({ idea, styles, defaults, design, onMake, onSkip }: { idea: Id
       </div>
       {choosing && idea.status === "new" && (
         <div className="grid gap-2 rounded-lg border bg-muted/30 p-3">
-          <span className="text-xs font-medium">Design (how the slides look)</span>
+          {idea.format === "carousel" && formats.length > 0 && (
+            <>
+              <span className="text-xs font-medium">Format (what the post says, in what order)</span>
+              <FormatChips formats={formats} value={options.format} onChange={(format) => setOptions({ ...options, format })} />
+            </>
+          )}
+          <span className="pt-1 text-xs font-medium">Design (how the slides look)</span>
           <DesignPicker {...design} size="sm" value={options.design} onChange={(id) => setOptions({ ...options, design: id })} />
           <span className="pt-1 text-xs font-medium">Art style {options.design === "classic" ? "" : "(the pictures)"}</span>
           <StyleGrid size="sm" styles={styles} value={options.artStyle} onChange={(artStyle) => setOptions({ ...options, artStyle })} />
@@ -384,6 +440,7 @@ function PostCard({ client, post, cost, designs, onOpenProject, onSaved }: { cli
           </Badge>
         )}
         {post.review && <ReviewBadge review={post.review} />}
+        {post.postFormat && <Badge variant="outline">{FORMAT_NAMES[post.postFormat]}</Badge>}
         {post.kind !== "reel" && <Badge variant="outline">{designs.find((design) => design.id === (post.design ?? "classic"))?.label.en ?? "Classic"}</Badge>}
         <span className="ms-auto text-xs text-muted-foreground">{new Date(post.createdAt).toLocaleString()}</span>
       </div>

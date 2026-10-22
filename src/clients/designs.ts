@@ -9,6 +9,8 @@ import type { SiteBrand } from "../types.ts";
 
 export const DESIGN_IDS = ["classic", "bold", "neon", "magazine", "minimal", "glass", "brutal", "notes", "tweet", "chat", "sticky", "swiss"] as const;
 export type DesignId = (typeof DESIGN_IDS)[number];
+/** A design, or "rotate": one the client's recent posts haven't used. */
+export type DesignChoice = DesignId | "rotate";
 
 type Colors = SiteBrand["colors"];
 type Text = { en: string; ar: string };
@@ -181,7 +183,7 @@ h1{font-size:80px;color:#1c1c1e}
 h2{font-size:58px;color:#1c1c1e}
 .sub,footer{color:#8e8e93}
 ${BOXES}{background:none;border-radius:0;padding:10px 0;color:#1c1c1e}
-.list li .num,.step .num{background:none;border:4px solid #d4a20a;color:transparent;width:46px;height:46px;font-size:0}
+.list li .num,.step .num{background:none;border:4px solid #d4a20a;color:transparent;width:46px;height:46px;font-size:0;display:flex;align-items:center;justify-content:center}
 .list li .num::after,.step .num::after{content:"✓";color:#d4a20a;font-size:30px}
 .card{border-inline-start:6px solid #d4a20a;padding:6px 26px}
 .card.hot{outline:none;border-color:${c.cta}}

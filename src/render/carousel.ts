@@ -15,8 +15,8 @@ const HEIGHT = 1350;
 export type SlideContext = { client: Pick<Client, "language" | "instagramHandle" | "brand"> & { name?: string }; index: number; total: number; logo?: string; art?: string; style?: string; design?: string };
 
 const WORDS = {
-  ar: { myth: "خرافة", fact: "الحقيقة", before: "قبل", after: "بعد" },
-  en: { myth: "Myth", fact: "Fact", before: "Before", after: "After" },
+  ar: { myth: "خرافة", fact: "الحقيقة", before: "قبل", after: "بعد", question: "سؤال", answer: "الإجابة", problem: "المشكلة", fix: "الحل", vs: "ولا" },
+  en: { myth: "Myth", fact: "Fact", before: "Before", after: "After", question: "Question", answer: "Answer", problem: "The problem", fix: "The fix", vs: "vs" },
 };
 
 const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -55,6 +55,20 @@ function body(slide: Slide, ctx: SlideContext): string {
     }
     case "cta":
       return `${art}${ctx.logo ? `<img class="cta-logo" src="${ctx.logo}" alt="">` : ""}<h1 data-fit="44">${escape(slide.title)}</h1><div class="button">${escape(slide.button)}</div><p class="sub link">${escape(slide.url.replace(/^https?:\/\//, ""))}</p>`;
+    // The new layouts reuse the list rows and cards, so every design styles them too.
+    case "checklist":
+      return `${art}<h2 data-fit="36">${escape(slide.title)}</h2><ol class="list check">${slide.items.map((item) => `<li><span class="num">✓</span><span data-fit="26">${escape(item)}</span></li>`).join("")}</ol>`;
+    case "versus": {
+      const side = (part: { label: string; points: string[] }, hot: boolean) =>
+        `<div class="card ${hot ? "hot" : "muted"} side"><span class="tag">${escape(part.label)}</span>${part.points.map((point) => `<p data-fit="24">${escape(point)}</p>`).join("")}</div>`;
+      return `${art}${slide.title ? `<h2 data-fit="34">${escape(slide.title)}</h2>` : ""}<div class="cols versus">${side(slide.left, false)}<span class="vs">${w.vs}</span>${side(slide.right, true)}</div>`;
+    }
+    case "faq":
+      return `${art}<div class="card muted ask"><span class="tag">${w.question}</span><p class="q" data-fit="30">${escape(slide.question)}</p></div><div class="card hot"><span class="tag">${w.answer}</span><p data-fit="28">${escape(slide.answer)}</p></div>`;
+    case "fix":
+      return `${art}<div class="card muted"><span class="tag">✕ ${w.problem}</span><p data-fit="28">${escape(slide.problem)}</p></div><div class="card hot"><span class="tag">✓ ${w.fix}</span><p data-fit="28">${escape(slide.fix)}</p></div>`;
+    case "chat":
+      return `${art}<div class="chat">${slide.messages.map((message) => `<p class="bubble ${message.from}" data-fit="26">${escape(message.text)}</p>`).join("")}</div>`;
   }
 }
 
@@ -108,6 +122,16 @@ blockquote{font-size:62px;line-height:1.35;font-weight:600}
 .content:has(.button){text-align:center;align-items:center}
 .button{background:${colors.cta};color:${colors.background};font-size:52px;padding:30px 64px;border-radius:999px}
 .link{direction:ltr}
+.list.check .num{font-size:30px}
+.versus{align-items:stretch;position:relative;gap:108px}
+.versus .side p{font-size:32px}
+.vs{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;width:84px;height:84px;border-radius:50%;display:grid;place-items:center;background:${colors.cta};color:${colors.background};font-family:'${fonts.heading}','${fonts.body}',${fallback};font-weight:800;font-size:30px;box-shadow:0 8px 24px #0006}
+.card.muted.ask p,.versus .card.muted p{text-decoration:none;color:inherit}
+.ask .q{font-weight:700}
+.chat{display:flex;flex-direction:column;gap:18px}
+.bubble{max-width:78%;padding:22px 30px;font-size:36px;line-height:1.4;border-radius:36px}
+.bubble.them{align-self:flex-start;background:${colors.panel};color:${colors.text};border-end-start-radius:10px}
+.bubble.us{align-self:flex-end;background:${colors.cta};color:${colors.background};border-end-end-radius:10px}
 ${design.id === "classic" ? styleOf(ctx.style).css(colors) : ""}
 ${design.css({ c: colors, arabic, name: ctx.client.name ?? ctx.client.brand.name ?? "", handle: handle ?? "", logo: ctx.logo, index: ctx.index, total: ctx.total })}
 </style></head><body>
