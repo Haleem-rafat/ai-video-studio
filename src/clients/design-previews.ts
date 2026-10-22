@@ -6,8 +6,8 @@ import puppeteer from "puppeteer-core";
 
 import { slideHtml } from "../render/carousel.ts";
 import { DESIGN_IDS, type DesignId } from "./designs.ts";
-import { clientDir } from "./store.ts";
-import type { Client, Slide } from "./types.ts";
+import { clientDir, postDir } from "./store.ts";
+import type { Client, Post, Slide } from "./types.ts";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -86,6 +86,43 @@ export async function renderDesignPreviews(
         const file = out(design, name);
         await mkdir(join(file, ".."), { recursive: true });
         await page.screenshot({ path: file as `${string}.png` });
+        drawn++;
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+  return drawn;
+}
+
+/** <post>/designs/<design>-<n>.png: a post's own slide n drawn in another design. */
+export const postDesignPath = (clientId: string, postId: string, design: DesignId, n: number) => join(postDir(clientId, postId), "designs", `${design}-${n}.png`);
+
+/**
+ * Draws a post's first two slides, with its own text and pictures, in each
+ * design, so the designs can be compared on the real post. Chrome only: free.
+ */
+export async function renderPostDesigns(client: Client, post: Post, log: (message: string) => void = console.log, designs: readonly DesignId[] = DESIGN_IDS): Promise<number> {
+  const slides = (post.slides ?? []).slice(0, 2);
+  if (!slides.length) return 0;
+  const dir = postDir(client.id, post.id);
+  const logo = client.brand.logo ? await dataUrl(join(clientDir(client.id), client.brand.logo)) : undefined;
+  const arts = await Promise.all(slides.map((slide) => (slide.art?.file ? dataUrl(join(dir, slide.art.file)) : Promise.resolve(undefined))));
+  await mkdir(join(dir, "designs"), { recursive: true });
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
+  let drawn = 0;
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: 0.4 });
+    for (const [n, design] of designs.entries()) {
+      log(`designs: ${design} (${n + 1}/${designs.length}) ...`);
+      for (const [index, slide] of slides.entries()) {
+        await page.setContent(slideHtml(slide, { client, index, total: post.slides!.length, logo, art: arts[index], style: post.artStyle, design }), { waitUntil: "load", timeout: 30000 });
+        await page.evaluate(async (names: string[]) => {
+          await Promise.all(names.flatMap((family) => ["400", "800"].map((weight) => document.fonts.load(`${weight} 40px '${family}'`, document.body.innerText || "a").catch(() => []))));
+          await document.fonts.ready;
+        }, [client.brand.fonts.heading, client.brand.fonts.body]);
+        await page.screenshot({ path: postDesignPath(client.id, post.id, design, index + 1) as `${string}.png` });
         drawn++;
       }
     }

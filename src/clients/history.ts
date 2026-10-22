@@ -165,10 +165,11 @@ export function pickDesign(history: { design?: string }[]): DesignId {
  * is spent. Only ideas still to make are checked; `reelOf` maps a post to its
  * reel's project, which history knows the reel by.
  */
-export function flagRepeats<T extends Pick<Idea, "status" | "hook" | "outline"> & { postId?: string }>(ideas: T[], history: Made[], reelOf: Record<string, string> = {}): (T & { repeats?: { title: string; createdAt: string; score: number } })[] {
+export function flagRepeats<T extends Pick<Idea, "status" | "hook" | "outline"> & { postId?: string; fromProject?: string }>(ideas: T[], history: Made[], reelOf: Record<string, string> = {}): (T & { repeats?: { title: string; createdAt: string; score: number } })[] {
   return ideas.map((idea) => {
     if (idea.status !== "new") return idea;
-    const own = new Set([idea.postId, idea.postId && reelOf[idea.postId]].filter(Boolean));
+    // Its own post or reel, and the marketing video it was taken from, are not repeats.
+    const own = new Set([idea.postId, idea.postId && reelOf[idea.postId], idea.fromProject].filter(Boolean));
     const twin = duplicateOf([idea.hook, ...idea.outline].join(" "), history.filter((made) => !own.has(made.id)));
     return twin ? { ...idea, repeats: { title: twin.made.title, createdAt: twin.made.createdAt, score: twin.score } } : idea;
   });

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Field } from "./shared.tsx";
+import { MakeForInstagram } from "./MakeForInstagram.tsx";
 
 type Marketing = NonNullable<ProjectState["marketing"]>;
 
@@ -67,6 +68,7 @@ export function MarketingPanel({ project, busy, onEdit }: Props) {
         >
           Instagram client
         </Button>
+        <MakeForInstagram projectId={project.id} disabled={busy} />
       </div>
 
       <Field label="Brand colours (from the website)">

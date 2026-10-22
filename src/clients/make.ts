@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { build } from "../pipeline.ts";
 import { loadProject } from "../project.ts";
+import type { Project } from "../types.ts";
 import { renderSlides } from "../render/carousel.ts";
 import type { DesignChoice, DesignId } from "./designs.ts";
 import type { FormatId } from "./formats.ts";
@@ -17,8 +18,29 @@ import { pickRotation, type ArtStyleChoice, type PictureAmount } from "./styles.
 import type { Idea, Post, Slide } from "./types.ts";
 
 /** "<idea id>-<format>", so one idea has one post folder. */
-export function postIdFor(idea: Idea): string {
-  return `${idea.id}-${idea.format}`;
+/** The post's folder name: the idea and its kind, plus the variant when several are made to compare. */
+export function postIdFor(idea: Pick<Idea, "id" | "format">, variant?: string): string {
+  return `${idea.id}-${idea.format}${variant ? `-${variant}` : ""}`;
+}
+
+/**
+ * A marketing video's message as an idea of the chosen kind, numbered after
+ * the day's ideas: the post's first line is the hook, the narration the outline.
+ */
+export function ideaFromProject(project: Project, format: Idea["format"], date: string, existing: Pick<Idea, "id">[]): Idea {
+  const next = Math.max(0, ...existing.map((idea) => Number(idea.id.slice(11)) || 0)) + 1;
+  const first = (project.marketing?.post?.caption ?? "").split("\n").map((line) => line.trim()).find(Boolean);
+  return {
+    id: `${date}-${next}`,
+    format,
+    goal: "details",
+    angle: "trend",
+    hook: first || project.title,
+    outline: project.scenes.map((scene) => scene.narration.trim()).filter(Boolean).slice(0, 6),
+    why: `From the marketing video “${project.title}”.`,
+    status: "new",
+    fromProject: project.id,
+  };
 }
 
 const dateOf = (ideaId: string) => ideaId.slice(0, 10);
@@ -53,7 +75,8 @@ export async function recoverInterrupted(clientId: string): Promise<number> {
     const day = await loadIdeas(clientId, file.slice(0, 10));
     const stuck = day?.ideas.filter((idea) => idea.status === "making") ?? [];
     if (!day || !stuck.length) continue;
-    for (const idea of stuck) idea.status = "new";
+    // A compare stopped half way keeps the variants it made.
+    for (const idea of stuck) idea.status = idea.variants?.length ? "made" : "new";
     freed += stuck.length;
     await saveIdeas(clientId, day);
   }
@@ -66,8 +89,18 @@ export async function recoverInterrupted(clientId: string): Promise<number> {
   return freed;
 }
 
-/** Makes the idea into a post. The idea must have been claimed first (see `claimIdea`). */
-export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; design?: DesignChoice; format?: FormatId | "auto"; reelStyle?: ReelStyleId | "auto" } = {}): Promise<Post> {
+export type MakeOptions = {
+  artStyle?: ArtStyleChoice;
+  pictures?: PictureAmount;
+  design?: DesignChoice;
+  format?: FormatId | "auto";
+  reelStyle?: ReelStyleId | "auto";
+  /** One of several posts made from the idea to compare: its folder gets this suffix, and `compareVariant` records it on the idea. */
+  variant?: string;
+};
+
+/** Makes the idea into a post. The idea must have been claimed first (see `claimIdea`); a variant leaves the idea to `compareVariant`. */
+export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: MakeOptions = {}): Promise<Post> {
   const client = await loadClient(clientId);
   const idea = (await loadIdeas(clientId, dateOf(ideaId)))?.ideas.find((i) => i.id === ideaId);
   if (!idea) throw new Error(`No idea ${ideaId}`);
@@ -80,7 +113,7 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   // Rotate and Auto never repeat the look or structure of the last posts.
   const design = chooseDesign(options.design ?? client.design, history);
   const format = options.format === "auto" ? autoFormat(idea, history) : options.format;
-  const post: Post = { id: postIdFor(idea), clientId, ideaId, kind: idea.format, caption: "", hashtags: [], artStyle, pictures, ...(design && idea.format !== "reel" ? { design } : {}), status: "writing", createdAt: now, updatedAt: now };
+  const post: Post = { id: postIdFor(idea, options.variant), clientId, ideaId, kind: idea.format, caption: "", hashtags: [], artStyle, pictures, ...(design && idea.format !== "reel" ? { design } : {}), status: "writing", createdAt: now, updatedAt: now };
   await savePost(post);
   try {
     if (idea.format === "reel") {
@@ -115,17 +148,38 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
     await writeFile(join(postDir(clientId, post.id), "caption.txt"), captionText(post.caption, post.hashtags));
     post.status = "done";
     await savePost(post);
-    await setIdea(clientId, ideaId, (i) => {
-      i.status = "made";
-      i.postId = post.id;
-    });
+    if (!options.variant)
+      await setIdea(clientId, ideaId, (i) => {
+        i.status = "made";
+        i.postId = post.id;
+      });
     return post;
   } catch (error) {
     post.status = "failed";
     post.error = error instanceof Error ? error.message : String(error);
     await savePost(post);
     // The idea can be made again.
-    await setIdea(clientId, ideaId, (i) => void (i.status = "new"));
+    if (!options.variant) await setIdea(clientId, ideaId, (i) => void (i.status = "new"));
+    throw error;
+  }
+}
+
+/**
+ * Makes one of several variants of a claimed idea, to compare them. The idea
+ * lists every variant made and is "made" once one is; when the last variant
+ * is done and none was made, it can be made again.
+ */
+export async function compareVariant(clientId: string, ideaId: string, options: MakeOptions & { variant: string }, last: boolean, log: (message: string) => void = console.log): Promise<Post | null> {
+  try {
+    const post = await makePost(clientId, ideaId, log, options);
+    await setIdea(clientId, ideaId, (i) => {
+      i.variants = [...(i.variants ?? []), post.id];
+      i.postId ??= post.id;
+      i.status = "made";
+    });
+    return post;
+  } catch (error) {
+    if (last) await setIdea(clientId, ideaId, (i) => void (i.status = i.variants?.length ? "made" : "new"));
     throw error;
   }
 }

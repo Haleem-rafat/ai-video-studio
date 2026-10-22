@@ -122,6 +122,13 @@ export const api = {
   ideas: (id: string, date?: string) => call<IdeaDay>("GET", `/api/clients/${id}/ideas${date ? `?date=${date}` : ""}`),
   moreIdeas: (id: string) => call<Job>("POST", `/api/clients/${id}/ideas`),
   formats: () => call<FormatInfo[]>("GET", "/api/clients/formats"),
+  postDesigns: (id: string, postId: string) => call<DesignId[]>("GET", `/api/clients/${id}/posts/${postId}/designs`),
+  drawPostDesigns: (id: string, postId: string) => call<Job>("POST", `/api/clients/${id}/posts/${postId}/designs`),
+  compareIdea: (id: string, ideaId: string, variants: string[], options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; design?: DesignId | "rotate" } = {}) =>
+    call<Job[]>("POST", `/api/clients/${id}/ideas/${ideaId}/compare`, { variants, ...options }),
+  /** Marketing mode: a marketing video's message made into a post for its website's client. */
+  makeFromProject: (projectId: string, input: { format: "carousel" | "single" | "reel"; postFormat?: PostFormatId | "auto"; reelStyle?: ReelStyleId | "auto"; pictures?: PictureAmount; design?: DesignId | "rotate"; force?: boolean }) =>
+    call<{ job: Job; clientId: string; ideaId: string }>("POST", `/api/clients/from-project/${projectId}/make`, input),
   reelStyles: () => call<ReelStyleInfo[]>("GET", "/api/clients/reel-styles"),
   designs: (clientId?: string) => call<DesignInfo[]>("GET", `/api/clients/designs${clientId ? `?client=${clientId}` : ""}`),
   drawDesignPreviews: (id: string) => call<Job>("POST", `/api/clients/${id}/designs/previews`),

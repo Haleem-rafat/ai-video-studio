@@ -65,6 +65,10 @@ export type Idea = {
   trend?: string;
   status: "new" | "making" | "made" | "skipped";
   postId?: string;
+  /** Posts made from it to compare (one per format or reel style); `postId` is the first. */
+  variants?: string[];
+  /** The marketing video it was taken from, in Marketing mode. */
+  fromProject?: string;
   /** Sent to the app, not saved: what this idea repeats from what was already made. */
   repeats?: { title: string; createdAt: string; score: number };
 };

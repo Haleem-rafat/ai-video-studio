@@ -95,3 +95,33 @@ test("a reel style's direction reaches the reel's writer; Classic or none adds n
   assert.doesNotMatch(reelNotes(client, idea, [], "classic"), /REEL STYLE/);
   assert.doesNotMatch(reelNotes(client, idea), /REEL STYLE/);
 });
+
+test("compared variants of one idea get their own post folders; the plain post keeps its id", async () => {
+  const { postIdFor } = await import("./make.ts");
+  assert.equal(postIdFor(idea), "2026-10-20-1-reel");
+  assert.equal(postIdFor(idea, "kinetic"), "2026-10-20-1-reel-kinetic");
+  assert.equal(postIdFor({ ...idea, format: "carousel" }, "versus"), "2026-10-20-1-carousel-versus");
+});
+
+test("a marketing video becomes an idea of the chosen kind, numbered after the day's ideas, marked as coming from it", async () => {
+  const { ideaFromProject } = await import("./make.ts");
+  const project = { id: "202610221500-marketing-short-risero", title: "Risero: one link instead of DMs", marketing: { post: { caption: "Stop answering the same DM\nOne link does it" } }, scenes: [{ narration: "Clients ask the same thing" }, { narration: "Send one link" }, { narration: "They book alone" }] };
+  const made = ideaFromProject(project as never, "carousel", "2026-10-22", [{ id: "2026-10-22-7" }, { id: "2026-10-22-12" }] as never);
+  assert.equal(made.id, "2026-10-22-13");
+  assert.equal(made.format, "carousel");
+  assert.equal(made.hook, "Stop answering the same DM");
+  assert.deepEqual(made.outline, ["Clients ask the same thing", "Send one link", "They book alone"]);
+  assert.equal(made.fromProject, "202610221500-marketing-short-risero");
+  assert.equal(made.status, "new");
+});
+
+test("comparing designs draws the post's own first slides in every design, for free, into its folder", async () => {
+  const { renderPostDesigns } = await import("./design-previews.ts");
+  const { DESIGN_IDS } = await import("./designs.ts");
+  const { existsSync } = await import("node:fs");
+  const post = await store.loadPost("design-test", "2026-10-22-1-carousel");
+  const drawn = await renderPostDesigns(await store.loadClient("design-test"), post, () => {}, ["classic", "neon"]);
+  assert.equal(drawn, 4, "two designs × the first two slides");
+  for (const design of ["classic", "neon"]) for (const n of [1, 2]) assert.ok(existsSync(join(store.postDir("design-test", post.id), "designs", `${design}-${n}.png`)));
+  assert.ok(DESIGN_IDS.length >= 18);
+});

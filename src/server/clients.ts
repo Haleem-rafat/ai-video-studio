@@ -3,21 +3,21 @@ import { existsSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { makeIdeas } from "../clients/ideas.ts";
-import { claimIdea, makePost, recoverInterrupted, rerenderPost } from "../clients/make.ts";
-import { loadLibrary } from "../clients/library.ts";
+import { claimIdea, compareVariant, ideaFromProject, makePost, recoverInterrupted, rerenderPost } from "../clients/make.ts";
+import { hostOf, loadLibrary } from "../clients/library.ts";
 import { draftKnowledge, foldAnswer, type Knowledge } from "../clients/knowledge.ts";
 import { drawPreviews, previewPath, previewsMade } from "../clients/previews.ts";
 import { DESIGN_IDS, DESIGNS, type DesignChoice, type DesignId } from "../clients/designs.ts";
 import { FORMAT_IDS, FORMATS, type FormatId } from "../clients/formats.ts";
 import { REEL_STYLE_IDS, REEL_STYLES, type ReelStyleId } from "../clients/reel-styles.ts";
-import { designPreviewPath, PREVIEW_SLIDES, renderDesignPreviews } from "../clients/design-previews.ts";
+import { designPreviewPath, postDesignPath, PREVIEW_SLIDES, renderDesignPreviews, renderPostDesigns } from "../clients/design-previews.ts";
 import { ART_STYLE_IDS, ART_STYLES, type ArtStyleChoice, type PictureAmount } from "../clients/styles.ts";
 import { duplicateOf, flagRepeats, loadHistory } from "../clients/history.ts";
 import { clientFromMarketingProject, clientFromUrl } from "../clients/onboard.ts";
 import { startSchedule } from "../clients/schedule.ts";
 import { clientDir, listClients, listPosts, loadClient, loadIdeas, loadPost, localDate, postDir, saveClient, saveIdeas } from "../clients/store.ts";
-import type { Client, Slide } from "../clients/types.ts";
-import { projectDir } from "../project.ts";
+import type { Client, Idea, Slide } from "../clients/types.ts";
+import { loadProject, projectDir } from "../project.ts";
 import { enqueue, recentJobs } from "./jobs.ts";
 import { handlePrompted } from "./prompted.ts";
 
@@ -65,6 +65,30 @@ const isDesignChoice = (id: unknown): id is DesignChoice => id === "rotate" || i
 const isFormat = (id: unknown): id is FormatId | "auto" => id === "auto" || (typeof id === "string" && (FORMAT_IDS as readonly string[]).includes(id));
 const isReelStyle = (id: unknown): id is ReelStyleId | "auto" => id === "auto" || (typeof id === "string" && (REEL_STYLE_IDS as readonly string[]).includes(id));
 const isAmount = (amount: unknown): amount is PictureAmount => amount === "none" || amount === "light" || amount === "rich";
+
+/** Starts making a claimed idea into a post, as a job whose cost lands on the post (or the reel's project). */
+function queueMake(client: Client, idea: Idea, options: { artStyle?: string; pictures?: string; design?: string; format?: string; reelStyle?: string }) {
+  const clientId = client.id;
+  const ideaId = idea.id;
+  const job = enqueue(
+    `Make ${idea.format}: ${client.name}: ${idea.hook.slice(0, 40)}`,
+    async (log) => {
+      const post = await makePost(clientId, ideaId, log, {
+        ...(isStyle(options.artStyle) ? { artStyle: options.artStyle } : {}),
+        ...(isAmount(options.pictures) ? { pictures: options.pictures } : {}),
+        ...(isDesignChoice(options.design) ? { design: options.design } : {}),
+        ...(isFormat(options.format) ? { format: options.format } : {}),
+        ...(isReelStyle(options.reelStyle) ? { reelStyle: options.reelStyle } : {}),
+      });
+      return post.projectId ?? post.id;
+    },
+    undefined,
+    // A reel returns its project id (costs go to the project), a carousel its post id.
+    (result) => (typeof result !== "string" ? null : /^\d{12}-/.test(result) ? projectDir(result) : postDir(clientId, result)),
+  );
+  job.link = clientPage(clientId);
+  return job;
+}
 
 /** Handles /api/clients…, /client-files/… and /client-styles/…; false when the path is not one of them. */
 export async function handleClients(ctx: Ctx): Promise<boolean> {
@@ -212,31 +236,79 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
     // Nothing is spent on an idea that repeats something already made, unless asked to.
     if (!options.force) {
       const idea = (await loadIdeas(clientId, date))?.ideas.find((i) => i.id === ideaId);
-      const twin = idea && duplicateOf([idea.hook, ...idea.outline].join(" "), await loadHistory(clientId));
+      // An idea taken from a marketing video re-uses that video's message on purpose: only that video is left out.
+      const twin = idea && duplicateOf([idea.hook, ...idea.outline].join(" "), (await loadHistory(clientId)).filter((made) => made.id !== idea.fromProject));
       if (twin) throw fail(409, `Too close to: “${twin.made.title}” (made ${twin.made.createdAt.slice(0, 10)}). Make anyway to spend on it.`);
     }
     const idea = await claimIdea(clientId, date, ideaId).catch((error: Error) => {
       throw fail(409, error.message);
     });
-    const client = await find(clientId);
-    const job = enqueue(
-      `Make ${idea.format}: ${client.name}: ${idea.hook.slice(0, 40)}`,
-      async (log) => {
-        const post = await makePost(clientId, ideaId, log, {
-          ...(isStyle(options.artStyle) ? { artStyle: options.artStyle } : {}),
-          ...(isAmount(options.pictures) ? { pictures: options.pictures } : {}),
-          ...(isDesignChoice(options.design) ? { design: options.design } : {}),
-          ...(isFormat(options.format) ? { format: options.format } : {}),
-          ...(isReelStyle(options.reelStyle) ? { reelStyle: options.reelStyle } : {}),
-        });
-        return post.projectId ?? post.id;
-      },
-      undefined,
-      // A reel returns its project id (costs go to the project), a carousel its post id.
-      (result) => (typeof result !== "string" ? null : /^\d{12}-/.test(result) ? projectDir(result) : postDir(clientId, result)),
-    );
-    job.link = clientPage(clientId);
+    const job = queueMake(await find(clientId), idea, options);
     json(response, 202, job);
+    return true;
+  }
+
+  // Marketing mode: a marketing video's message made into an Instagram post for the website's client (found by its address, or made from the video).
+  if ((match = path.match(/^\/api\/clients\/from-project\/([a-z0-9-]+)\/make$/)) && method === "POST") {
+    const projectId = match[1];
+    const project = await loadProject(projectId).catch(() => {
+      throw fail(404, `No project "${projectId}"`);
+    });
+    const host = project.marketing ? hostOf(project.marketing.brand.url) : "";
+    if (!host) throw fail(400, "Only a marketing video with a website can be made into posts.");
+    const input = await body<{ format?: string; artStyle?: string; pictures?: string; design?: string; postFormat?: string; reelStyle?: string; force?: boolean }>(request);
+    const format = input.format === "carousel" || input.format === "single" || input.format === "reel" ? input.format : null;
+    if (!format) throw fail(400, "Pick carousel, single or reel.");
+    const client = (await listClients()).find((each) => hostOf(each.url) === host) ?? (await clientFromMarketingProject(projectId));
+    const date = localDate();
+    const day = (await loadIdeas(client.id, date)) ?? { date, trends: [], ideas: [] };
+    const idea = ideaFromProject(project, format, date, day.ideas);
+    // Re-using this video's message is the point; anything else already made still counts as a repeat.
+    if (!input.force) {
+      const twin = duplicateOf([idea.hook, ...idea.outline].join(" "), (await loadHistory(client.id)).filter((made) => made.id !== projectId));
+      if (twin) throw fail(409, `Too close to: “${twin.made.title}” (made ${twin.made.createdAt.slice(0, 10)}). Make anyway to spend on it.`);
+    }
+    await saveIdeas(client.id, { ...day, ideas: [...day.ideas, { ...idea, status: "making" }] });
+    const job = queueMake(client, idea, { ...input, format: input.postFormat });
+    json(response, 202, { job, clientId: client.id, ideaId: idea.id });
+    return true;
+  }
+
+  // Compare: one idea made 2-4 ways (formats for a carousel, reel styles for a reel), one job each so each post carries its own cost.
+  if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/ideas\/(\d{4}-\d{2}-\d{2}-\d+)\/compare$/)) && method === "POST") {
+    const [, clientId, ideaId] = match;
+    const date = ideaId.slice(0, 10);
+    const client = await find(clientId);
+    const input = await body<{ variants?: unknown; artStyle?: string; pictures?: string; design?: string }>(request);
+    const found = (await loadIdeas(clientId, date))?.ideas.find((i) => i.id === ideaId);
+    if (!found) throw fail(404, `No idea ${ideaId}`);
+    const allowed: readonly string[] = found.format === "reel" ? REEL_STYLE_IDS : found.format === "carousel" ? FORMAT_IDS : [];
+    if (!allowed.length) throw fail(400, "Compare formats on carousels and reel styles on reels; compare a single image's designs on its post for free.");
+    const variants = [...new Set(Array.isArray(input.variants) ? input.variants : [])].filter((v): v is string => typeof v === "string" && allowed.includes(v));
+    if (variants.length < 2 || variants.length > 4) throw fail(400, "Pick 2 to 4 to compare.");
+    const idea = await claimIdea(clientId, date, ideaId).catch((error: Error) => {
+      throw fail(409, error.message);
+    });
+    const base = {
+      ...(isStyle(input.artStyle) ? { artStyle: input.artStyle } : {}),
+      ...(isAmount(input.pictures) ? { pictures: input.pictures } : {}),
+      ...(isDesignChoice(input.design) ? { design: input.design } : {}),
+    };
+    const jobs = variants.map((variant, i) =>
+      Object.assign(
+        enqueue(
+          `Compare ${i + 1}/${variants.length} (${variant}): ${client.name}: ${idea.hook.slice(0, 30)}`,
+          async (log) => {
+            const post = await compareVariant(clientId, ideaId, { ...base, ...(idea.format === "reel" ? { reelStyle: variant as ReelStyleId } : { format: variant as FormatId }), variant }, i === variants.length - 1, log);
+            return post?.projectId ?? post?.id;
+          },
+          undefined,
+          (result) => (typeof result !== "string" ? null : /^\d{12}-/.test(result) ? projectDir(result) : postDir(clientId, result)),
+        ),
+        { link: clientPage(clientId) },
+      ),
+    );
+    json(response, 202, jobs);
     return true;
   }
 
@@ -283,6 +355,36 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       const raw = await body<{ slides?: Slide[]; caption?: string; hashtags?: string[]; design?: string }>(request);
       const edits = { slides: raw.slides, caption: raw.caption, hashtags: raw.hashtags, ...(isDesign(raw.design) ? { design: raw.design } : {}) };
       json(response, 202, Object.assign(enqueue(`Re-render post: ${postId}`, async (log) => (await rerenderPost(clientId, postId, edits, log)).id, undefined, () => postDir(clientId, postId)), { link: clientPage(clientId) }));
+      return true;
+    }
+  }
+
+  // Compare designs on the real post: its first slides drawn in every design (Chrome only, $0); GET lists the ones drawn.
+  if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/posts\/([a-z0-9-]+)\/designs$/))) {
+    const [, clientId, postId] = match;
+    const post = await loadPost(clientId, postId).catch(() => {
+      throw fail(404, `No post ${postId}`);
+    });
+    if (method === "GET") {
+      json(response, 200, DESIGN_IDS.filter((id) => existsSync(postDesignPath(clientId, postId, id, 1))));
+      return true;
+    }
+    if (method === "POST") {
+      if (post.kind === "reel" || !post.slides?.length) throw fail(400, "Only carousels and images have designs.");
+      const client = await find(clientId);
+      const job = Object.assign(
+        enqueue(
+          `Design compare: ${client.name}: ${postId}`,
+          async (log) => {
+            await renderPostDesigns(await loadClient(clientId), await loadPost(clientId, postId), log);
+            return postId;
+          },
+          undefined,
+          () => null,
+        ),
+        { link: clientPage(clientId) },
+      );
+      json(response, 202, job);
       return true;
     }
   }

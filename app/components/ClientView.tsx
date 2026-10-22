@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, PaletteIcon, SparklesIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, SparklesIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo, type PostFormatId, type FormatInfo, type ReelStyleId, type ReelStyleInfo } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +13,7 @@ import { Confirm, Field } from "./shared.tsx";
 import { JobProgress } from "./JobProgress.tsx";
 import { KnowledgePanel } from "./KnowledgePanel.tsx";
 import { DesignPicker } from "./DesignPicker.tsx";
+import { CompareDesigns } from "./CompareDesigns.tsx";
 import { PromptedMode } from "./PromptedMode.tsx";
 import { VideoPlayer } from "./VideoPlayer.tsx";
 
@@ -192,6 +192,9 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                     // A repeat is refused before anything is spent; the card shows it and asks before making it anyway.
                     .catch((error: Error) => (error.message.startsWith("Too close to") ? (toast.warning(`${error.message.split(". Make anyway")[0]}. Nothing was spent.`), refresh()) : toast.error(error.message)));
                 }}
+                onCompare={(variants, options) =>
+                  act(api.compareIdea(client.id, idea.id, variants, { artStyle: options.artStyle, pictures: options.pictures, design: options.design }), `Making ${variants.length} versions to compare…`)
+                }
                 onSkip={() => act(api.skipIdea(client.id, idea.id), "Skipped")}
               />
             ))}
@@ -351,6 +354,7 @@ function IdeaCard({
   formats,
   reelStyles,
   onMake,
+  onCompare,
   onSkip,
 }: {
   idea: Idea;
@@ -360,9 +364,13 @@ function IdeaCard({
   formats: FormatInfo[];
   reelStyles: ReelStyleInfo[];
   onMake: (options: Partial<MakeOptions>, force?: boolean) => void;
+  onCompare: (variants: string[], options: MakeOptions) => void;
   onSkip: () => void;
 }) {
   const [choosing, setChoosing] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const comparable = idea.format === "carousel" ? formats : idea.format === "reel" ? reelStyles : [];
   const [options, setOptions] = useState<MakeOptions>(defaults);
   const pictured = idea.format !== "reel";
   return (
@@ -398,9 +406,14 @@ function IdeaCard({
         </a>
       )}
       <div className="flex gap-2">
-        {idea.status === "new" && !choosing && (
+        {idea.status === "new" && !choosing && !comparing && (
           <Button size="sm" onClick={() => (pictured || reelStyles.length ? setChoosing(true) : onMake({}))}>
             Make
+          </Button>
+        )}
+        {idea.status === "new" && !choosing && !comparing && comparable.length > 0 && (
+          <Button size="sm" variant="outline" title={`Make it 2-4 ways (${idea.format === "reel" ? "reel styles" : "formats"}) and pick the best`} onClick={() => setComparing(true)}>
+            Compare…
           </Button>
         )}
         {idea.status === "new" && (
@@ -411,6 +424,57 @@ function IdeaCard({
         {idea.status === "making" && <span className="text-xs text-muted-foreground">Being made, see the jobs panel</span>}
         {idea.status === "made" && <span className="text-xs text-muted-foreground">Made: see Library</span>}
       </div>
+      {comparing && idea.status === "new" && (
+        <div className="grid gap-2 rounded-lg border bg-muted/30 p-3">
+          <span className="text-xs font-medium">Pick 2 to 4 {idea.format === "reel" ? "reel styles" : "formats"} to compare: one post each</span>
+          <div role="group" className="flex flex-wrap gap-1.5">
+            {comparable.map((option) => {
+              const on = picked.includes(option.id);
+              return (
+                <Button
+                  key={option.id}
+                  type="button"
+                  size="sm"
+                  role="checkbox"
+                  aria-checked={on}
+                  variant={on ? "default" : "outline"}
+                  disabled={!on && picked.length >= 4}
+                  title={option.description.en}
+                  onClick={() => setPicked(on ? picked.filter((id) => id !== option.id) : [...picked, option.id])}
+                >
+                  {option.label.en}
+                </Button>
+              );
+            })}
+          </div>
+          {pictured && (
+            <>
+              <span className="pt-1 text-xs font-medium">Pictures</span>
+              <PictureToggle value={options.pictures} onChange={(pictures) => setOptions({ ...options, pictures })} />
+            </>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Confirm
+              trigger={
+                <Button size="sm" disabled={picked.length < 2}>
+                  Compare {picked.length || ""} · ~${(Number(estimate(idea, options).slice(1)) * Math.max(picked.length, 1)).toFixed(2)}
+                </Button>
+              }
+              title={`Make ${picked.length} versions to compare?`}
+              description={`One post per ${idea.format === "reel" ? "reel style" : "format"}: ${picked.map((id) => comparable.find((option) => option.id === id)?.label.en).join(", ")}. About ${estimate(idea, options)} each, ~$${(Number(estimate(idea, options).slice(1)) * picked.length).toFixed(2)} in all. Each version gets its own pictures; you keep the best and can delete the rest.`}
+              action={`Make ${picked.length} versions`}
+              onConfirm={() => {
+                setComparing(false);
+                onCompare(picked, options);
+                setPicked([]);
+              }}
+            />
+            <Button size="sm" variant="ghost" onClick={() => setComparing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       {choosing && idea.status === "new" && (
         <div className="grid gap-2 rounded-lg border bg-muted/30 p-3">
           {!pictured && (
@@ -533,31 +597,7 @@ function PostCard({ client, post, cost, designs, onOpenProject, onSaved }: { cli
         <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(text).then(() => toast.success("Caption copied"))}>
           <CopyIcon /> Copy caption
         </Button>
-        {post.kind !== "reel" && post.status === "done" && designs.length > 0 && (
-          <Select
-            value={post.design ?? "classic"}
-            onValueChange={(design) =>
-              api
-                .editPost(client.id, post.id, { design: design as DesignId })
-                .then(() => {
-                  toast.success(`Redrawing in ${designs.find((each) => each.id === design)?.label.en} ($0)…`);
-                  onSaved();
-                })
-                .catch((error: Error) => toast.error(error.message))
-            }
-          >
-            <SelectTrigger size="sm" className="w-auto" title="Change the design: only the slides are redrawn, no AI, $0">
-              <PaletteIcon /> <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {designs.map((design) => (
-                <SelectItem key={design.id} value={design.id}>
-                  {design.label.en}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        {post.kind !== "reel" && post.status === "done" && designs.length > 0 && <CompareDesigns client={client} post={post} designs={designs} onChosen={onSaved} />}
         {post.kind !== "reel" && post.status === "done" && (
           <Button size="sm" variant="outline" asChild>
             <a href={`/api/clients/${client.id}/posts/${post.id}/zip`}>
