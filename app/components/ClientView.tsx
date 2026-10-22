@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, SparklesIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, PaletteIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post } from "../api.ts";
+import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "./shared.tsx";
 import { JobProgress } from "./JobProgress.tsx";
 import { KnowledgePanel } from "./KnowledgePanel.tsx";
+import { DesignPicker } from "./DesignPicker.tsx";
 import { PromptedMode } from "./PromptedMode.tsx";
 import { VideoPlayer } from "./VideoPlayer.tsx";
 
@@ -42,11 +44,25 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
   const [library, setLibrary] = useState<Library | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [styles, setStyles] = useState<ArtStyleInfo[]>([]);
+  const [designs, setDesigns] = useState<DesignInfo[]>([]);
   const page = `/marketing/clients/${id}`;
   const mine = jobs.filter((job) => job.link === page || jobLink(job) === page || job.label === "Art style previews");
   const working = mine.filter((job) => job.status === "queued" || job.status === "running");
   const writingIdeas = mine.some((job) => job.label.startsWith("Ideas: ") && (job.status === "queued" || job.status === "running"));
   const finished = mine.filter((job) => job.status === "done" || job.status === "failed").length;
+  const drawingDesigns = mine.some((job) => job.label.startsWith("Design previews:") && (job.status === "queued" || job.status === "running"));
+  /** Design previews, as the page knows them: drawn in this client's brand for free. */
+  const designProps = {
+    clientId: id,
+    designs,
+    drawing: drawingDesigns,
+    version: String(finished),
+    onDrawPreviews: () =>
+      api
+        .drawDesignPreviews(id)
+        .then(() => toast.success("Drawing the design previews ($0)…"))
+        .catch((error: Error) => toast.error(error.message)),
+  };
 
   const refresh = useCallback(() => {
     api.client(id).then(setClient).catch((error: Error) => toast.error(error.message));
@@ -54,6 +70,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
     api.posts(id).then(setPosts).catch(() => setPosts([]));
     api.library(id).then(setLibrary).catch(() => setLibrary(null));
     api.artStyles().then(setStyles).catch(() => setStyles([]));
+    api.designs(id).then(setDesigns).catch(() => setDesigns([]));
   }, [id, date]);
 
   // Reload whenever one of this client's jobs finishes.
@@ -140,7 +157,8 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                 key={idea.id}
                 idea={idea}
                 styles={styles}
-                defaults={{ artStyle: client.artStyle ?? "flat", pictures: client.pictures ?? "light" }}
+                defaults={{ artStyle: client.artStyle ?? "flat", pictures: client.pictures ?? "light", design: client.design ?? "classic" }}
+                design={designProps}
                 onMake={(options) => {
                   const made = `Making the ${FORMAT_LABEL[idea.format].toLowerCase()}…`;
                   api
@@ -189,7 +207,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
               .map((item) => {
                 const post = item.postId && item.kind !== "reel" ? posts.find((entry) => entry.id === item.postId) : undefined;
                 return post ? (
-                  <PostCard key={item.id} client={client} post={post} cost={item.cost} onOpenProject={onOpenProject} onSaved={refresh} />
+                  <PostCard key={item.id} client={client} post={post} cost={item.cost} designs={designs} onOpenProject={onOpenProject} onSaved={refresh} />
                 ) : item.promoId ? (
                   <PromoCard key={item.id} item={item} onOpen={() => onOpenPromo(item.promoId!)} />
                 ) : (
@@ -218,6 +236,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
 
         <TabsContent value="profile" className="pt-2">
           <ProfileForm
+            design={designProps}
             key={client.updatedAt}
             client={client}
             styles={styles}
@@ -233,7 +252,8 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
   );
 }
 
-type MakeOptions = { artStyle: ArtStyleChoice; pictures: PictureAmount };
+type MakeOptions = { artStyle: ArtStyleChoice; pictures: PictureAmount; design: DesignId };
+type DesignProps = Omit<React.ComponentProps<typeof DesignPicker>, "value" | "onChange">;
 
 /** The 12 art styles as picture tiles; a style without its sample picture shows its name only. */
 function StyleGrid({ styles, value, onChange, size = "md" }: { styles: ArtStyleInfo[]; value: ArtStyleChoice; onChange: (id: ArtStyleChoice) => void; size?: "sm" | "md" }) {
@@ -276,7 +296,7 @@ function PictureToggle({ value, onChange }: { value: PictureAmount; onChange: (a
   );
 }
 
-function IdeaCard({ idea, styles, defaults, onMake, onSkip }: { idea: Idea; styles: ArtStyleInfo[]; defaults: MakeOptions; onMake: (options: Partial<MakeOptions>) => void; onSkip: () => void }) {
+function IdeaCard({ idea, styles, defaults, design, onMake, onSkip }: { idea: Idea; styles: ArtStyleInfo[]; defaults: MakeOptions; design: DesignProps; onMake: (options: Partial<MakeOptions>) => void; onSkip: () => void }) {
   const [choosing, setChoosing] = useState(false);
   const [options, setOptions] = useState<MakeOptions>(defaults);
   const pictured = idea.format !== "reel";
@@ -320,7 +340,9 @@ function IdeaCard({ idea, styles, defaults, onMake, onSkip }: { idea: Idea; styl
       </div>
       {choosing && idea.status === "new" && (
         <div className="grid gap-2 rounded-lg border bg-muted/30 p-3">
-          <span className="text-xs font-medium">Art style</span>
+          <span className="text-xs font-medium">Design (how the slides look)</span>
+          <DesignPicker {...design} size="sm" value={options.design} onChange={(id) => setOptions({ ...options, design: id })} />
+          <span className="pt-1 text-xs font-medium">Art style {options.design === "classic" ? "" : "(the pictures)"}</span>
           <StyleGrid size="sm" styles={styles} value={options.artStyle} onChange={(artStyle) => setOptions({ ...options, artStyle })} />
           {idea.format === "carousel" && <PictureToggle value={options.pictures} onChange={(pictures) => setOptions({ ...options, pictures })} />}
           <div className="flex gap-2">
@@ -344,7 +366,7 @@ function IdeaCard({ idea, styles, defaults, onMake, onSkip }: { idea: Idea; styl
 }
 
 /** A made post: a swipeable carousel preview with its caption, or a link to the reel's project. */
-function PostCard({ client, post, cost, onOpenProject, onSaved }: { client: Client; post: Post; cost?: number; onOpenProject: (id: string) => void; onSaved: () => void }) {
+function PostCard({ client, post, cost, designs, onOpenProject, onSaved }: { client: Client; post: Post; cost?: number; designs: DesignInfo[]; onOpenProject: (id: string) => void; onSaved: () => void }) {
   const [index, setIndex] = useState(0);
   const [caption, setCaption] = useState(post.caption);
   const count = post.slides?.length ?? 0;
@@ -362,6 +384,7 @@ function PostCard({ client, post, cost, onOpenProject, onSaved }: { client: Clie
           </Badge>
         )}
         {post.review && <ReviewBadge review={post.review} />}
+        {post.kind !== "reel" && <Badge variant="outline">{designs.find((design) => design.id === (post.design ?? "classic"))?.label.en ?? "Classic"}</Badge>}
         <span className="ms-auto text-xs text-muted-foreground">{new Date(post.createdAt).toLocaleString()}</span>
       </div>
       {post.error && <p className="text-xs text-destructive">{post.error}</p>}
@@ -398,6 +421,31 @@ function PostCard({ client, post, cost, onOpenProject, onSaved }: { client: Clie
         <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(text).then(() => toast.success("Caption copied"))}>
           <CopyIcon /> Copy caption
         </Button>
+        {post.kind !== "reel" && post.status === "done" && designs.length > 0 && (
+          <Select
+            value={post.design ?? "classic"}
+            onValueChange={(design) =>
+              api
+                .editPost(client.id, post.id, { design: design as DesignId })
+                .then(() => {
+                  toast.success(`Redrawing in ${designs.find((each) => each.id === design)?.label.en} ($0)…`);
+                  onSaved();
+                })
+                .catch((error: Error) => toast.error(error.message))
+            }
+          >
+            <SelectTrigger size="sm" className="w-auto" title="Change the design: only the slides are redrawn, no AI, $0">
+              <PaletteIcon /> <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {designs.map((design) => (
+                <SelectItem key={design.id} value={design.id}>
+                  {design.label.en}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {post.kind !== "reel" && post.status === "done" && (
           <Button size="sm" variant="outline" asChild>
             <a href={`/api/clients/${client.id}/posts/${post.id}/zip`}>
@@ -494,7 +542,7 @@ function PromoCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) 
 }
 
 /** What ideas and posts are written from. */
-function ProfileForm({ client, styles, onPreviews, onSaved }: { client: Client; styles: ArtStyleInfo[]; onPreviews: () => void; onSaved: (client: Client) => void }) {
+function ProfileForm({ client, styles, design, onPreviews, onSaved }: { client: Client; styles: ArtStyleInfo[]; design: DesignProps; onPreviews: () => void; onSaved: (client: Client) => void }) {
   const [draft, setDraft] = useState(client);
   const brief = draft.brief;
   const [names, setNames] = useState(() => Object.entries(client.pronounce ?? {}).map(([word, said]) => `${word} = ${said}`).join("\n"));
@@ -511,6 +559,7 @@ function ProfileForm({ client, styles, onPreviews, onSaved }: { client: Client; 
         artStyle: draft.artStyle ?? "flat",
         pronounce: Object.fromEntries(names.split("\n").map((line) => line.split("=").map((part) => part.trim())).filter((pair) => pair.length === 2 && pair[0] && pair[1])),
         pictures: draft.pictures ?? "light",
+        design: draft.design ?? "classic",
         brief: { ...brief, problems: brief.problems.map((line) => line.trim()).filter(Boolean), features: brief.features.map((line) => line.trim()).filter(Boolean) },
       })
       .then((next) => {
@@ -564,6 +613,9 @@ function ProfileForm({ client, styles, onPreviews, onSaved }: { client: Client; 
       <label className="flex items-center gap-2 text-sm">
         <Switch checked={draft.dailyIdeas} onCheckedChange={(dailyIdeas) => setDraft({ ...draft, dailyIdeas })} /> 5 new ideas every morning
       </label>
+      <Field label="Default design for carousels" detail="How the slides look; change it on any post later for $0">
+        <DesignPicker {...design} value={draft.design ?? "classic"} onChange={(id) => setDraft({ ...draft, design: id })} />
+      </Field>
       <Field label="Default art style for posts" detail={styles.some((style) => !style.preview) ? <button type="button" className="underline" onClick={onPreviews}>Draw style previews (~$0.30)</button> : undefined}>
         <StyleGrid styles={styles} value={draft.artStyle ?? "flat"} onChange={(artStyle) => setDraft({ ...draft, artStyle })} />
       </Field>

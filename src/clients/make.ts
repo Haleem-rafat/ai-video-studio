@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { build } from "../pipeline.ts";
 import { loadProject } from "../project.ts";
 import { renderSlides } from "../render/carousel.ts";
+import type { DesignId } from "./designs.ts";
 import { drawSlideArt, writeCarousel } from "./carousel.ts";
 import { createReel } from "./reel.ts";
 import { captionText, cleanHashtags } from "./rules.ts";
@@ -64,7 +65,7 @@ export async function recoverInterrupted(clientId: string): Promise<number> {
 }
 
 /** Makes the idea into a post. The idea must have been claimed first (see `claimIdea`). */
-export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount } = {}): Promise<Post> {
+export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; design?: DesignId } = {}): Promise<Post> {
   const client = await loadClient(clientId);
   const idea = (await loadIdeas(clientId, dateOf(ideaId)))?.ideas.find((i) => i.id === ideaId);
   if (!idea) throw new Error(`No idea ${ideaId}`);
@@ -73,7 +74,8 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   const choice = options.artStyle ?? client.artStyle ?? "flat";
   const artStyle = choice === "rotate" ? pickRotation(history.filter((made) => made.kind === "carousel" || made.kind === "single")) : choice;
   const pictures = options.pictures ?? client.pictures ?? "light";
-  const post: Post = { id: postIdFor(idea), clientId, ideaId, kind: idea.format, caption: "", hashtags: [], artStyle, pictures, status: "writing", createdAt: now, updatedAt: now };
+  const design = options.design ?? client.design;
+  const post: Post = { id: postIdFor(idea), clientId, ideaId, kind: idea.format, caption: "", hashtags: [], artStyle, pictures, ...(design && idea.format !== "reel" ? { design } : {}), status: "writing", createdAt: now, updatedAt: now };
   await savePost(post);
   try {
     if (idea.format === "reel") {
@@ -98,7 +100,7 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
       post.slides = await drawSlideArt(dir, client, written.slides, log, artStyle);
       post.status = "rendering";
       await savePost(post);
-      await renderSlides(dir, client, clientDir(clientId), post.slides, log, artStyle);
+      await renderSlides(dir, client, clientDir(clientId), post.slides, log, artStyle, post.design);
     }
     await writeFile(join(postDir(clientId, post.id), "caption.txt"), captionText(post.caption, post.hashtags));
     post.status = "done";
@@ -118,11 +120,14 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   }
 }
 
-/** Saves edited slides or caption and renders the slides again; art is redrawn only where its prompt changed. */
+/**
+ * Saves edited slides or caption and renders the slides again; art is redrawn
+ * only where its prompt changed. A new design only redraws the slides: no AI.
+ */
 export async function rerenderPost(
   clientId: string,
   postId: string,
-  edits: { slides?: Slide[]; caption?: string; hashtags?: string[] },
+  edits: { slides?: Slide[]; caption?: string; hashtags?: string[]; design?: DesignId },
   log: (message: string) => void = console.log,
 ): Promise<Post> {
   const client = await loadClient(clientId);
@@ -130,11 +135,12 @@ export async function rerenderPost(
   if (edits.caption !== undefined) post.caption = edits.caption;
   if (edits.hashtags) post.hashtags = cleanHashtags(edits.hashtags);
   const dir = postDir(clientId, postId);
-  if (edits.slides && post.kind !== "reel") {
-    const before = post.slides ?? [];
-    const slides = edits.slides.map((slide, i) => (slide.art && slide.art.prompt !== before[i]?.art?.prompt ? { ...slide, art: { prompt: slide.art.prompt } } : slide));
+  if (edits.design && post.kind !== "reel") post.design = edits.design;
+  if ((edits.slides || edits.design) && post.kind !== "reel" && post.slides) {
+    const before = post.slides;
+    const slides = (edits.slides ?? before).map((slide, i) => (slide.art && slide.art.prompt !== before[i]?.art?.prompt ? { ...slide, art: { prompt: slide.art.prompt } } : slide));
     post.slides = await drawSlideArt(dir, client, slides, log, post.artStyle);
-    await renderSlides(dir, client, clientDir(clientId), post.slides, log, post.artStyle);
+    await renderSlides(dir, client, clientDir(clientId), post.slides, log, post.artStyle, post.design);
   }
   await writeFile(join(dir, "caption.txt"), captionText(post.caption, post.hashtags));
   await savePost(post);

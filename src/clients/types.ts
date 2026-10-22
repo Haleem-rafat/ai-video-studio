@@ -2,6 +2,7 @@ import type { MarketingBrief, SiteBrand } from "../types.ts";
 import type { Knowledge } from "./knowledge.ts";
 import type { BusinessProfile } from "./questionnaire.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "./styles.ts";
+import type { DesignId } from "./designs.ts";
 
 /**
  * A business whose Instagram the studio makes posts for. Its brand and brief
@@ -31,6 +32,8 @@ export type Client = {
   /** Default art style ("rotate" takes one not used lately) and picture amount for new posts; unset means flat and light. */
   artStyle?: ArtStyleChoice;
   pictures?: PictureAmount;
+  /** Default carousel design; unset means Classic. */
+  design?: DesignId;
   createdAt: string;
   updatedAt: string;
 };
@@ -96,6 +99,8 @@ export type Post = {
   /** The art style and picture amount it was made with; unset means flat and light. */
   artStyle?: ArtStyleId;
   pictures?: PictureAmount;
+  /** The carousel design it was rendered in; unset means Classic. */
+  design?: DesignId;
   /** The quality check of its script (1-5 each) and what the reviewer noted. */
   review?: ScriptReview;
   status: "writing" | "drawing" | "rendering" | "done" | "failed";

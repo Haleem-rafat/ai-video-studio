@@ -70,3 +70,22 @@ test("a reel's writer gets the client's Prompted mode answers and restrictions",
   // Without answers the notes are what they were.
   assert.doesNotMatch(reelNotes(client, idea), /<client>/);
 });
+
+test("changing a carousel's design redraws its slides in the new look, with no AI and nothing else changed", async () => {
+  const { rerenderPost } = await import("./make.ts");
+  const { readFile } = await import("node:fs/promises");
+  const brand = { url: "https://x", name: "Risero", colors: { background: "#14112b", panel: "#221d45", text: "#f4f1ff", accent: "#a78bfa", cta: "#ff8a65", muted: "#b9b3d9" }, fonts: { heading: "Helvetica", body: "Helvetica" }, googleFonts: [] };
+  await store.saveClient({ ...client, id: "design-test", brand } as unknown as Client);
+  const post = { id: "2026-10-22-1-carousel", clientId: "design-test", kind: "carousel" as const, caption: "Caption", hashtags: ["a"], slides: [{ layout: "cover" as const, title: "Five mistakes" }, { layout: "list" as const, title: "Steps", items: ["One", "Two"] }], status: "done" as const, createdAt: "", updatedAt: "" };
+  await store.savePost(post);
+  const before = await rerenderPost("design-test", post.id, { slides: post.slides }, () => {});
+  assert.equal(before.design, undefined);
+  const first = await readFile(join(store.postDir("design-test", post.id), "slides", "01.png"));
+  const after = await rerenderPost("design-test", post.id, { design: "neon" }, () => {});
+  assert.equal(after.design, "neon");
+  assert.equal(after.caption, "Caption");
+  assert.deepEqual(after.slides, post.slides);
+  const second = await readFile(join(store.postDir("design-test", post.id), "slides", "01.png"));
+  assert.notDeepEqual(first, second, "the slide looks different");
+  assert.equal((await store.loadPost("design-test", post.id)).design, "neon");
+});

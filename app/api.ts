@@ -12,6 +12,7 @@ import type { ProfileView } from "../src/clients/profile.ts";
 import type { AnswerError, Purpose, Value } from "../src/clients/questionnaire.ts";
 import type { Preview as ChatPreview } from "../src/clients/client-prompt.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
+import type { DesignId } from "../src/clients/designs.ts";
 
 export type { Knowledge, Promo, PromoOptions };
 export type { AnswerError, ChatPreview, ProfileView, Purpose, Value };
@@ -20,6 +21,9 @@ export type ImportPreview = { count: number; answers: Record<string, Value>; err
 export type PromoState = Promo & { canChangeMusic: boolean };
 export type { ArtStyleChoice, ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
 export type ArtStyleInfo = { id: ArtStyleId; label: string; preview: boolean };
+export type { DesignId };
+/** A carousel design, with which of its previews exist for the client asked about. */
+export type DesignInfo = { id: DesignId; label: { en: string; ar: string }; description: { en: string; ar: string }; previews: string[] };
 export type { Channel, ChatMessage, Creativity, FormatId, MarketingBrief, Progress, Project, Scene, Session, SiteBrand, StyleId, UsageEntry, UsageSummary };
 
 /** What one video, or the whole studio, has cost. */
@@ -110,10 +114,12 @@ export const api = {
   clients: () => call<Client[]>("GET", "/api/clients"),
   client: (id: string) => call<Client>("GET", `/api/clients/${id}`),
   newClient: (input: { fromProject?: string; url?: string }) => call<Job>("POST", "/api/clients", input),
-  editClient: (id: string, edits: Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce" | "knowledge">>) => call<Client>("PUT", `/api/clients/${id}`, edits),
+  editClient: (id: string, edits: Partial<Pick<Client, "name" | "instagramHandle" | "language" | "niche" | "avoid" | "dailyIdeas" | "brief" | "artStyle" | "pictures" | "pronounce" | "knowledge" | "design">>) => call<Client>("PUT", `/api/clients/${id}`, edits),
   ideas: (id: string, date?: string) => call<IdeaDay>("GET", `/api/clients/${id}/ideas${date ? `?date=${date}` : ""}`),
   moreIdeas: (id: string) => call<Job>("POST", `/api/clients/${id}/ideas`),
-  makeIdea: (id: string, ideaId: string, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; force?: boolean } = {}) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`, options),
+  designs: (clientId?: string) => call<DesignInfo[]>("GET", `/api/clients/designs${clientId ? `?client=${clientId}` : ""}`),
+  drawDesignPreviews: (id: string) => call<Job>("POST", `/api/clients/${id}/designs/previews`),
+  makeIdea: (id: string, ideaId: string, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; design?: DesignId; force?: boolean } = {}) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`, options),
   artStyles: () => call<ArtStyleInfo[]>("GET", "/api/clients/styles"),
   drawStylePreviews: () => call<Job>("POST", "/api/clients/styles/previews"),
   skipIdea: (id: string, ideaId: string) => call<IdeaDay>("POST", `/api/clients/${id}/ideas/${ideaId}/skip`),
@@ -156,7 +162,7 @@ export const api = {
   deletePromo: (id: string) => call<{ deleted: string[] }>("DELETE", `/api/promos/${id}`),
   deleteFailedPromos: () => call<{ deleted: string[] }>("DELETE", "/api/promos/failed"),
   makePromo: (url: string, options?: PromoOptions) => call<Job & { promoId: string }>("POST", "/api/promos", { url, ...options }),
-  editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[] }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
+  editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[]; design?: DesignId }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
 };
 
 /** A picture of a marketing chat (a website screenshot or logo), before it has a project. */

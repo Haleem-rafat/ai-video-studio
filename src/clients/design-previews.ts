@@ -1,0 +1,81 @@
+import { existsSync } from "node:fs";
+import { mkdir, readFile } from "node:fs/promises";
+import { extname, join } from "node:path";
+
+import puppeteer from "puppeteer-core";
+
+import { slideHtml } from "../render/carousel.ts";
+import { DESIGN_IDS, type DesignId } from "./designs.ts";
+import { clientDir } from "./store.ts";
+import type { Client, Slide } from "./types.ts";
+
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+
+/** Sample slides a design is previewed with, in the client's language (no AI, no cost). */
+export function sampleSlides(language: "en" | "ar", url: string): Record<"cover" | "list" | "mythfact" | "stat" | "cta", Slide> {
+  const ar = language === "ar";
+  return {
+    cover: { layout: "cover", title: ar ? "٥ أخطاء بتضيّع عليك عملاء كل يوم" : "5 mistakes that cost you clients every day", subtitle: ar ? "اعرفها قبل ما تنشر البوست الجاي" : "Fix them before your next post" },
+    list: {
+      layout: "list",
+      title: ar ? "إزاي العميل يحجز لوحده" : "How clients book on their own",
+      items: ar ? ["يفتح لينك البايو", "يختار يوم وميعاد فاضي", "يوصله تأكيد وتذكير"] : ["They open your bio link", "Pick a free day and time", "Get a confirmation and reminder"],
+    },
+    mythfact: { layout: "myth-fact", myth: ar ? "العميل هيحجز من الرسايل" : "Clients will book in your DMs", fact: ar ? "نص العملاء بيختفوا قبل ما ترد" : "Half of them leave before you reply" },
+    stat: { layout: "stat", value: "3x", label: ar ? "حجوزات أكتر من نفس البوستات" : "more bookings from the same posts", note: ar ? "مثال" : "example" },
+    cta: { layout: "cta", title: ar ? "احجز مكالمة مجانية ١٥ دقيقة" : "Book a free 15-minute call", button: ar ? "احجز دلوقتي" : "Book now", url },
+  };
+}
+
+export const PREVIEW_SLIDES = ["cover", "list"] as const;
+
+/** <client>/designs/<design>-<slide>.png: previews drawn in the client's brand. */
+export const designPreviewPath = (clientId: string, design: DesignId, slide: string) => join(clientDir(clientId), "designs", `${design}-${slide}.png`);
+
+async function dataUrl(path: string): Promise<string | undefined> {
+  if (!existsSync(path)) return undefined;
+  const type = extname(path) === ".png" ? "image/png" : extname(path) === ".webp" ? "image/webp" : "image/jpeg";
+  return `data:${type};base64,${(await readFile(path)).toString("base64")}`;
+}
+
+/**
+ * Draws sample slides of each design in the client's brand, with Chrome only.
+ * `slides` picks which samples (the cover and a list by default); `out` maps a
+ * design and sample to a file (the client's designs folder by default).
+ */
+export async function renderDesignPreviews(
+  client: Client,
+  log: (message: string) => void = console.log,
+  options: { designs?: readonly DesignId[]; slides?: readonly (keyof ReturnType<typeof sampleSlides>)[]; out?: (design: DesignId, slide: string) => string; scale?: number } = {},
+): Promise<number> {
+  const designs = options.designs ?? DESIGN_IDS;
+  const slides = options.slides ?? PREVIEW_SLIDES;
+  const out = options.out ?? ((design, slide) => designPreviewPath(client.id, design, slide));
+  const samples = sampleSlides(client.language, client.brief.cta.url || client.url);
+  const logo = client.brand.logo ? await dataUrl(join(clientDir(client.id), client.brand.logo)) : undefined;
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
+  let drawn = 0;
+  try {
+    const page = await browser.newPage();
+    // Previews are small in the app: drawn at half size.
+    const scale = options.scale ?? 0.5;
+    await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: scale });
+    for (const [n, design] of designs.entries()) {
+      log(`designs: ${design} (${n + 1}/${designs.length}) ...`);
+      for (const [index, name] of slides.entries()) {
+        await page.setContent(slideHtml(samples[name], { client, index, total: 5, logo, design }), { waitUntil: "load", timeout: 30000 });
+        await page.evaluate(async (names: string[]) => {
+          await Promise.all(names.flatMap((family) => ["400", "800"].map((weight) => document.fonts.load(`${weight} 40px '${family}'`, document.body.innerText || "a").catch(() => []))));
+          await document.fonts.ready;
+        }, [client.brand.fonts.heading, client.brand.fonts.body]);
+        const file = out(design, name);
+        await mkdir(join(file, ".."), { recursive: true });
+        await page.screenshot({ path: file as `${string}.png` });
+        drawn++;
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+  return drawn;
+}
