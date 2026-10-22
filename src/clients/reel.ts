@@ -9,6 +9,7 @@ import type { MarketingBrief, Project } from "../types.ts";
 import { prepareSpeech, proofread } from "./arabic.ts";
 import { nextCreativity, nextVoice, reelProblems, type Made } from "./history.ts";
 import { businessContext } from "./context.ts";
+import { autoReelStyle, reelStyleNotes, reelStyleOf, reelStyleProblems, type ReelStyleId } from "./reel-styles.ts";
 import { needsRewrite, reviewScript, rewriteNotes, scriptOf } from "./review.ts";
 import { clientDir } from "./store.ts";
 import type { Client, Idea, ScriptReview } from "./types.ts";
@@ -54,30 +55,42 @@ export function avoidNotes(history: Made[]): string {
 }
 
 /** Everything the reel's writer is told about this client and this idea, on top of the brief. */
-export function reelNotes(client: Client, idea: Idea, history: Made[] = []): string {
+export function reelNotes(client: Client, idea: Idea, history: Made[] = [], reelStyle?: string): string {
   const knowledge = businessContext(client, "reel");
   return [
     reelBrief(client, idea).notes,
     idea.persona ? `Speak to: ${idea.persona}, in their own words. Show this real step of how the product works: ${idea.step ?? "one concrete step"}.` : "",
     knowledge ? `${knowledge}\nWrite like someone who knows this product: show how it really works for this customer, in their words. No generic marketing lines; claim only what the knowledge says.` : "",
     avoidNotes(history),
+    reelStyleNotes(reelStyle),
   ]
     .filter(Boolean)
     .join("\n\n");
 }
 
 /** Writes a reel as an ordinary 9:16 marketing project (the same writer as Marketing mode) and returns its id. */
-export async function createReel(client: Client, idea: Idea, log: (message: string) => void, history: Made[] = []): Promise<{ projectId: string; review?: ScriptReview }> {
+export async function createReel(
+  client: Client,
+  idea: Idea,
+  log: (message: string) => void,
+  history: Made[] = [],
+  styleChoice?: ReelStyleId | "auto",
+): Promise<{ projectId: string; review?: ScriptReview; reelStyle?: ReelStyleId }> {
   const subtitles = client.profile?.answers["creative.subtitles"]?.value as string | undefined;
-  const brief = { ...reelBrief(client, idea), notes: reelNotes(client, idea, history) };
-  // Reels take turns between creative and bold, and between the narrators of the brief's voice.
-  const creativity = nextCreativity(history);
+  // Auto never repeats the style of the client's last two reels.
+  const reelStyle = styleChoice === "auto" ? autoReelStyle(history) : styleChoice;
+  const style = reelStyleOf(reelStyle);
+  if (style && style.id !== "classic") log(`script: reel style ${style.label.en}`);
+  const brief = { ...reelBrief(client, idea), notes: reelNotes(client, idea, history, reelStyle) };
+  // Reels take turns between creative and bold, and between the narrators of the brief's voice; some styles set their own.
+  const creativity = style?.creativity ?? nextCreativity(history);
   const voice = nextVoice(history, brief.voice === "female" ? "female" : "male");
   const write = (notes: string) => writeMarketing({ brand: client.brand, brief: { ...brief, notes }, script: reelScript(idea), language: client.language, format: "short", creativity }, log);
   let draft = await write(brief.notes);
-  const problems = reelProblems({ beats: draft.scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? ""), lines: draft.scenes.map((scene) => scene.narration) }, history);
+  const beatsOf = (scenes: typeof draft.scenes) => scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? "");
+  const problems = [...reelProblems({ beats: beatsOf(draft.scenes), lines: draft.scenes.map((scene) => scene.narration) }, history), ...reelStyleProblems(beatsOf(draft.scenes), reelStyle)];
   if (problems.length) {
-    log(`script: the reel repeats earlier videos (${problems.length}), writing it again ...`);
+    log(`script: the reel repeats earlier videos or misses its style (${problems.length}), writing it again ...`);
     draft = await write(`${brief.notes}\n\nYOUR FIRST DRAFT REPEATED EARLIER VIDEOS:\n${problems.map((p) => `- ${p}`).join("\n")}`);
     const still = reelProblems({ beats: draft.scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? ""), lines: draft.scenes.map((scene) => scene.narration) }, history);
     if (still.length) log(`script: still close to earlier videos: ${still.join(" ")}`);
@@ -113,7 +126,8 @@ export async function createReel(client: Client, idea: Idea, log: (message: stri
       language: client.language,
       narrator: { voice, style: MARKETING_STYLE[client.language] },
       // Prompted mode's subtitles answer, when given, decides; else the brief.
-      captions: subtitles === undefined ? Boolean(brief.captions) : subtitles === "yes",
+      captions: subtitles !== undefined ? subtitles === "yes" : (style?.captions ?? Boolean(brief.captions)),
+      ...(style && style.id !== "classic" ? { reelStyle: style.id } : {}),
       // The art director stays clear of the styles and pictures this client already used.
       artAvoid: {
         styles: history.filter((made) => (made.kind === "reel" || made.kind === "video") && made.artStyle).map((made) => made.artStyle!),
@@ -129,5 +143,5 @@ export async function createReel(client: Client, idea: Idea, log: (message: stri
   if (existsSync(join(clientDir(client.id), "shots"))) await cp(join(clientDir(client.id), "shots"), join(projectDir(project.id), "shots"), { recursive: true });
   await saveProject(project);
   log(`script: reel saved as ${project.id}`);
-  return { projectId: project.id, ...(review ? { review: { ...review, rewritten } } : {}) };
+  return { projectId: project.id, ...(review ? { review: { ...review, rewritten } } : {}), ...(style ? { reelStyle: style.id } : {}) };
 }

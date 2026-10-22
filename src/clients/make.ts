@@ -7,6 +7,7 @@ import { loadProject } from "../project.ts";
 import { renderSlides } from "../render/carousel.ts";
 import type { DesignChoice, DesignId } from "./designs.ts";
 import type { FormatId } from "./formats.ts";
+import type { ReelStyleId } from "./reel-styles.ts";
 import { drawSlideArt, writeCarousel } from "./carousel.ts";
 import { createReel } from "./reel.ts";
 import { captionText, cleanHashtags } from "./rules.ts";
@@ -66,7 +67,7 @@ export async function recoverInterrupted(clientId: string): Promise<number> {
 }
 
 /** Makes the idea into a post. The idea must have been claimed first (see `claimIdea`). */
-export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; design?: DesignChoice; format?: FormatId | "auto" } = {}): Promise<Post> {
+export async function makePost(clientId: string, ideaId: string, log: (message: string) => void = console.log, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; design?: DesignChoice; format?: FormatId | "auto"; reelStyle?: ReelStyleId | "auto" } = {}): Promise<Post> {
   const client = await loadClient(clientId);
   const idea = (await loadIdeas(clientId, dateOf(ideaId)))?.ideas.find((i) => i.id === ideaId);
   if (!idea) throw new Error(`No idea ${ideaId}`);
@@ -83,8 +84,9 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   await savePost(post);
   try {
     if (idea.format === "reel") {
-      const reel = await createReel(client, idea, log, history);
+      const reel = await createReel(client, idea, log, history, options.reelStyle);
       post.projectId = reel.projectId;
+      if (reel.reelStyle && reel.reelStyle !== "classic") post.reelStyle = reel.reelStyle;
       if (reel.review) post.review = reel.review;
       post.status = "rendering";
       await savePost(post);

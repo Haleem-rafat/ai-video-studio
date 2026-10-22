@@ -9,6 +9,7 @@ import { draftKnowledge, foldAnswer, type Knowledge } from "../clients/knowledge
 import { drawPreviews, previewPath, previewsMade } from "../clients/previews.ts";
 import { DESIGN_IDS, DESIGNS, type DesignChoice, type DesignId } from "../clients/designs.ts";
 import { FORMAT_IDS, FORMATS, type FormatId } from "../clients/formats.ts";
+import { REEL_STYLE_IDS, REEL_STYLES, type ReelStyleId } from "../clients/reel-styles.ts";
 import { designPreviewPath, PREVIEW_SLIDES, renderDesignPreviews } from "../clients/design-previews.ts";
 import { ART_STYLE_IDS, ART_STYLES, type ArtStyleChoice, type PictureAmount } from "../clients/styles.ts";
 import { duplicateOf, loadHistory } from "../clients/history.ts";
@@ -62,6 +63,7 @@ const isStyle = (id: unknown): id is ArtStyleChoice => id === "rotate" || (typeo
 const isDesign = (id: unknown): id is DesignId => typeof id === "string" && (DESIGN_IDS as readonly string[]).includes(id);
 const isDesignChoice = (id: unknown): id is DesignChoice => id === "rotate" || isDesign(id);
 const isFormat = (id: unknown): id is FormatId | "auto" => id === "auto" || (typeof id === "string" && (FORMAT_IDS as readonly string[]).includes(id));
+const isReelStyle = (id: unknown): id is ReelStyleId | "auto" => id === "auto" || (typeof id === "string" && (REEL_STYLE_IDS as readonly string[]).includes(id));
 const isAmount = (amount: unknown): amount is PictureAmount => amount === "none" || amount === "light" || amount === "rich";
 
 /** Handles /api/clients…, /client-files/… and /client-styles/…; false when the path is not one of them. */
@@ -100,6 +102,11 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       200,
       DESIGN_IDS.map((id) => ({ id, label: DESIGNS[id].label, description: DESIGNS[id].description, previews: clientId && /^[a-z0-9-]+$/.test(clientId) ? PREVIEW_SLIDES.filter((slide) => existsSync(designPreviewPath(clientId, id, slide))) : [] })),
     );
+    return true;
+  }
+
+  if (path === "/api/clients/reel-styles" && method === "GET") {
+    json(response, 200, REEL_STYLE_IDS.map((id) => ({ id, label: REEL_STYLES[id].label, description: REEL_STYLES[id].description })));
     return true;
   }
 
@@ -196,7 +203,7 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
       json(response, 200, day);
       return true;
     }
-    type MakeBody = { artStyle?: string; pictures?: string; design?: string; format?: string; force?: boolean };
+    type MakeBody = { artStyle?: string; pictures?: string; design?: string; format?: string; reelStyle?: string; force?: boolean };
     const options = await body<MakeBody>(request).catch(() => ({}) as MakeBody);
     // Nothing is spent on an idea that repeats something already made, unless asked to.
     if (!options.force) {
@@ -216,6 +223,7 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
           ...(isAmount(options.pictures) ? { pictures: options.pictures } : {}),
           ...(isDesignChoice(options.design) ? { design: options.design } : {}),
           ...(isFormat(options.format) ? { format: options.format } : {}),
+          ...(isReelStyle(options.reelStyle) ? { reelStyle: options.reelStyle } : {}),
         });
         return post.projectId ?? post.id;
       },

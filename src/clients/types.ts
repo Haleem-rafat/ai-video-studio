@@ -4,6 +4,7 @@ import type { BusinessProfile } from "./questionnaire.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "./styles.ts";
 import type { DesignChoice, DesignId } from "./designs.ts";
 import type { FormatId } from "./formats.ts";
+import type { ReelStyleId } from "./reel-styles.ts";
 
 /**
  * A business whose Instagram the studio makes posts for. Its brand and brief
@@ -109,6 +110,8 @@ export type Post = {
   design?: DesignId;
   /** The post format it was written in (list, versus, faq…); unset when the writer chose freely. */
   postFormat?: FormatId;
+  /** A reel's style (kinetic, tour…); unset for Classic. */
+  reelStyle?: ReelStyleId;
   /** The quality check of its script (1-5 each) and what the reviewer noted. */
   review?: ScriptReview;
   status: "writing" | "drawing" | "rendering" | "done" | "failed";

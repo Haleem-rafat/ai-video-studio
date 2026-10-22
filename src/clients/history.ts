@@ -24,6 +24,8 @@ export type Made = {
   format?: string;
   design?: string;
   layouts?: string[];
+  /** A reel's style. */
+  reelStyle?: string;
   /** The pictures it used: a carousel's picture prompts, a reel's planned subjects. */
   pictures?: string[];
   createdAt: string;
@@ -197,6 +199,7 @@ export function madeFromProject(project: Project, kind: "reel" | "video"): Made 
     voice: project.marketing?.narrator.voice,
     creativity: project.marketing?.creativity,
     ...(project.marketing?.art?.style ? { artStyle: project.marketing.art.style } : {}),
+    ...(project.marketing?.reelStyle ? { reelStyle: project.marketing.reelStyle } : {}),
     pictures: subjectsOf(project),
     createdAt: project.createdAt,
   };

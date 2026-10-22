@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, MonitorSmartphoneIcon, PaletteIcon, SparklesIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo, type PostFormatId, type FormatInfo } from "../api.ts";
+import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo, type PostFormatId, type FormatInfo, type ReelStyleId, type ReelStyleInfo } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
   const [styles, setStyles] = useState<ArtStyleInfo[]>([]);
   const [designs, setDesigns] = useState<DesignInfo[]>([]);
   const [formats, setFormats] = useState<FormatInfo[]>([]);
+  const [reelStyles, setReelStyles] = useState<ReelStyleInfo[]>([]);
   const page = `/marketing/clients/${id}`;
   const mine = jobs.filter((job) => job.link === page || jobLink(job) === page || job.label === "Art style previews");
   const working = mine.filter((job) => job.status === "queued" || job.status === "running");
@@ -92,6 +93,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
     api.artStyles().then(setStyles).catch(() => setStyles([]));
     api.designs(id).then(setDesigns).catch(() => setDesigns([]));
     api.formats().then(setFormats).catch(() => setFormats([]));
+    api.reelStyles().then(setReelStyles).catch(() => setReelStyles([]));
   }, [id, date]);
 
   // Reload whenever one of this client's jobs finishes.
@@ -178,9 +180,10 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                 key={idea.id}
                 idea={idea}
                 styles={styles}
-                defaults={{ artStyle: client.artStyle ?? "rotate", pictures: client.pictures ?? "light", design: client.design ?? "classic", format: "auto" }}
+                defaults={{ artStyle: client.artStyle ?? "rotate", pictures: client.pictures ?? "light", design: client.design ?? "classic", format: "auto", reelStyle: "auto" }}
                 design={designProps}
                 formats={formats}
+                reelStyles={reelStyles}
                 onMake={(options) => {
                   const made = `Making the ${FORMAT_LABEL[idea.format].toLowerCase()}…`;
                   api
@@ -233,7 +236,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                 ) : item.promoId ? (
                   <PromoCard key={item.id} item={item} onOpen={() => onOpenPromo(item.promoId!)} />
                 ) : (
-                  <VideoCard key={item.id} item={item} onOpenProject={onOpenProject} />
+                  <VideoCard key={item.id} item={item} reelStyles={reelStyles} onOpenProject={onOpenProject} />
                 );
               })}
           </div>
@@ -274,7 +277,7 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
   );
 }
 
-type MakeOptions = { artStyle: ArtStyleChoice; pictures: PictureAmount; design: DesignId | "rotate"; format: PostFormatId | "auto" };
+type MakeOptions = { artStyle: ArtStyleChoice; pictures: PictureAmount; design: DesignId | "rotate"; format: PostFormatId | "auto"; reelStyle: ReelStyleId | "auto" };
 type DesignProps = Omit<React.ComponentProps<typeof DesignPicker>, "value" | "onChange">;
 
 /** The 12 art styles as picture tiles; a style without its sample picture shows its name only. */
@@ -305,16 +308,16 @@ function StyleGrid({ styles, value, onChange, size = "md" }: { styles: ArtStyleI
   );
 }
 
-/** Post formats as chips; Auto follows the idea's own angle. */
-function FormatChips({ formats, value, onChange }: { formats: FormatInfo[]; value: PostFormatId | "auto"; onChange: (id: PostFormatId | "auto") => void }) {
+/** Formats or reel styles as chips; Auto picks one the client's recent posts didn't use. */
+function ChoiceChips<T extends string>({ options, value, onChange }: { options: { id: T; label: { en: string }; description: { en: string } }[]; value: T | "auto"; onChange: (id: T | "auto") => void }) {
   return (
-    <div role="radiogroup" aria-label="Format" className="flex flex-wrap gap-1.5">
-      <Button type="button" size="sm" role="radio" aria-checked={value === "auto"} variant={value === "auto" ? "default" : "outline"} title="The format the idea was written for" onClick={() => onChange("auto")}>
+    <div role="radiogroup" className="flex flex-wrap gap-1.5">
+      <Button type="button" size="sm" role="radio" aria-checked={value === "auto"} variant={value === "auto" ? "default" : "outline"} title="One the client's recent posts haven't used" onClick={() => onChange("auto")}>
         <SparklesIcon /> Auto
       </Button>
-      {formats.map((format) => (
-        <Button key={format.id} type="button" size="sm" role="radio" aria-checked={value === format.id} variant={value === format.id ? "default" : "outline"} title={format.description.en} onClick={() => onChange(format.id)}>
-          {format.label.en}
+      {options.map((option) => (
+        <Button key={option.id} type="button" size="sm" role="radio" aria-checked={value === option.id} variant={value === option.id ? "default" : "outline"} title={option.description.en} onClick={() => onChange(option.id)}>
+          {option.label.en}
         </Button>
       ))}
     </div>
@@ -343,6 +346,7 @@ function IdeaCard({
   defaults,
   design,
   formats,
+  reelStyles,
   onMake,
   onSkip,
 }: {
@@ -351,6 +355,7 @@ function IdeaCard({
   defaults: MakeOptions;
   design: DesignProps;
   formats: FormatInfo[];
+  reelStyles: ReelStyleInfo[];
   onMake: (options: Partial<MakeOptions>) => void;
   onSkip: () => void;
 }) {
@@ -383,7 +388,7 @@ function IdeaCard({
       )}
       <div className="flex gap-2">
         {idea.status === "new" && !choosing && (
-          <Button size="sm" onClick={() => (pictured ? setChoosing(true) : onMake({}))}>
+          <Button size="sm" onClick={() => (pictured || reelStyles.length ? setChoosing(true) : onMake({}))}>
             Make
           </Button>
         )}
@@ -397,17 +402,27 @@ function IdeaCard({
       </div>
       {choosing && idea.status === "new" && (
         <div className="grid gap-2 rounded-lg border bg-muted/30 p-3">
+          {!pictured && (
+            <>
+              <span className="text-xs font-medium">Reel style (how it looks and moves)</span>
+              <ChoiceChips options={reelStyles} value={options.reelStyle} onChange={(reelStyle) => setOptions({ ...options, reelStyle })} />
+            </>
+          )}
           {idea.format === "carousel" && formats.length > 0 && (
             <>
               <span className="text-xs font-medium">Format (what the post says, in what order)</span>
-              <FormatChips formats={formats} value={options.format} onChange={(format) => setOptions({ ...options, format })} />
+              <ChoiceChips options={formats} value={options.format} onChange={(format) => setOptions({ ...options, format })} />
             </>
           )}
-          <span className="pt-1 text-xs font-medium">Design (how the slides look)</span>
-          <DesignPicker {...design} size="sm" value={options.design} onChange={(id) => setOptions({ ...options, design: id })} />
-          <span className="pt-1 text-xs font-medium">Pictures</span>
-          <PictureToggle value={options.pictures} onChange={(pictures) => setOptions({ ...options, pictures })} />
-          {options.pictures !== "none" && (
+          {pictured && (
+            <>
+              <span className="pt-1 text-xs font-medium">Design (how the slides look)</span>
+              <DesignPicker {...design} size="sm" value={options.design} onChange={(id) => setOptions({ ...options, design: id })} />
+              <span className="pt-1 text-xs font-medium">Pictures</span>
+              <PictureToggle value={options.pictures} onChange={(pictures) => setOptions({ ...options, pictures })} />
+            </>
+          )}
+          {pictured && options.pictures !== "none" && (
             <>
               <span className="pt-1 text-xs font-medium">Art style {options.design === "classic" ? "" : "(the pictures)"}</span>
               <StyleGrid size="sm" styles={styles} value={options.artStyle} onChange={(artStyle) => setOptions({ ...options, artStyle })} />
@@ -558,7 +573,7 @@ function ReviewBadge({ review }: { review: NonNullable<Post["review"]> }) {
 }
 
 /** A reel or an earlier marketing video: plays inline, opens its project. */
-function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: (id: string) => void }) {
+function VideoCard({ item, reelStyles, onOpenProject }: { item: LibraryItem; reelStyles: ReelStyleInfo[]; onOpenProject: (id: string) => void }) {
   return (
     <div className="grid content-start gap-3 rounded-xl border p-4">
       <div className="flex items-center gap-2">
@@ -568,6 +583,7 @@ function VideoCard({ item, onOpenProject }: { item: LibraryItem; onOpenProject: 
           {formatCost(item.cost)}
         </Badge>
         {item.review && <ReviewBadge review={item.review} />}
+        {item.reelStyle && <Badge variant="outline">{reelStyles.find((style) => style.id === item.reelStyle)?.label.en ?? item.reelStyle}</Badge>}
         <span className="ms-auto text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</span>
       </div>
       <p className="font-medium" dir="auto">

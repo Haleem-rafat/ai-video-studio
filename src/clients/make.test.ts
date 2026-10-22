@@ -89,3 +89,9 @@ test("changing a carousel's design redraws its slides in the new look, with no A
   assert.notDeepEqual(first, second, "the slide looks different");
   assert.equal((await store.loadPost("design-test", post.id)).design, "neon");
 });
+
+test("a reel style's direction reaches the reel's writer; Classic or none adds nothing", () => {
+  assert.match(reelNotes(client, idea, [], "dm"), /REEL STYLE: DM \/ notification story/);
+  assert.doesNotMatch(reelNotes(client, idea, [], "classic"), /REEL STYLE/);
+  assert.doesNotMatch(reelNotes(client, idea), /REEL STYLE/);
+});

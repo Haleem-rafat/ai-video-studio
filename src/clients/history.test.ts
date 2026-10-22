@@ -155,3 +155,9 @@ test("a picture too close to one already used is caught; a fresh one passes", as
   assert.deepEqual(pictureRepeats(["a smartphone showing a calendar with chat bubbles around it", "a lighthouse guiding small boats at dusk"], used), ["a smartphone showing a calendar with chat bubbles around it"]);
   assert.deepEqual(pictureRepeats(["a baker handing a cake box to a smiling customer"], used), []);
 });
+
+test("a reel's history remembers its style", async () => {
+  const { madeFromProject } = await import("./history.ts");
+  const reel = madeFromProject({ id: "r", title: "", createdAt: "", scenes: [], marketing: { narrator: {}, reelStyle: "countdown" } } as never, "reel");
+  assert.equal(reel.reelStyle, "countdown");
+});

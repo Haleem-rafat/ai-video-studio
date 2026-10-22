@@ -27,6 +27,8 @@ export type LibraryItem = {
   cover?: string;
   /** The quality check of its script, for posts made since checks began. */
   review?: Post["review"];
+  /** A reel's style (kinetic, tour…). */
+  reelStyle?: Post["reelStyle"];
 };
 
 export type Library = {
@@ -95,6 +97,7 @@ export function buildLibrary(input: {
       status: post.status,
       postId: post.id,
       ...(post.review ? { review: post.review } : {}),
+      ...(post.reelStyle ? { reelStyle: post.reelStyle } : {}),
       ...(post.projectId ? { projectId: post.projectId, format: project?.format } : {}),
       ...(post.kind !== "reel" && post.slides?.length ? { cover: `posts/${post.id}/slides/01.png` } : {}),
     };

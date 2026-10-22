@@ -14,6 +14,7 @@ import type { Preview as ChatPreview } from "../src/clients/client-prompt.ts";
 import type { ArtStyleChoice, ArtStyleId, PictureAmount } from "../src/clients/styles.ts";
 import type { DesignId } from "../src/clients/designs.ts";
 import type { FormatId as PostFormatId } from "../src/clients/formats.ts";
+import type { ReelStyleId } from "../src/clients/reel-styles.ts";
 
 export type { Knowledge, Promo, PromoOptions };
 export type { AnswerError, ChatPreview, ProfileView, Purpose, Value };
@@ -22,7 +23,8 @@ export type ImportPreview = { count: number; answers: Record<string, Value>; err
 export type PromoState = Promo & { canChangeMusic: boolean };
 export type { ArtStyleChoice, ArtStyleId, Client, Idea, IdeaDay, Library, LibraryItem, PictureAmount, Post, Slide, Trend };
 export type ArtStyleInfo = { id: ArtStyleId; label: string; preview: boolean };
-export type { DesignId, PostFormatId };
+export type { DesignId, PostFormatId, ReelStyleId };
+export type ReelStyleInfo = { id: ReelStyleId; label: { en: string; ar: string }; description: { en: string; ar: string } };
 export type FormatInfo = { id: PostFormatId; label: { en: string; ar: string }; description: { en: string; ar: string } };
 /** A carousel design, with which of its previews exist for the client asked about. */
 export type DesignInfo = { id: DesignId; label: { en: string; ar: string }; description: { en: string; ar: string }; previews: string[] };
@@ -120,9 +122,10 @@ export const api = {
   ideas: (id: string, date?: string) => call<IdeaDay>("GET", `/api/clients/${id}/ideas${date ? `?date=${date}` : ""}`),
   moreIdeas: (id: string) => call<Job>("POST", `/api/clients/${id}/ideas`),
   formats: () => call<FormatInfo[]>("GET", "/api/clients/formats"),
+  reelStyles: () => call<ReelStyleInfo[]>("GET", "/api/clients/reel-styles"),
   designs: (clientId?: string) => call<DesignInfo[]>("GET", `/api/clients/designs${clientId ? `?client=${clientId}` : ""}`),
   drawDesignPreviews: (id: string) => call<Job>("POST", `/api/clients/${id}/designs/previews`),
-  makeIdea: (id: string, ideaId: string, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; design?: DesignId | "rotate"; format?: PostFormatId | "auto"; force?: boolean } = {}) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`, options),
+  makeIdea: (id: string, ideaId: string, options: { artStyle?: ArtStyleChoice; pictures?: PictureAmount; design?: DesignId | "rotate"; format?: PostFormatId | "auto"; reelStyle?: ReelStyleId | "auto"; force?: boolean } = {}) => call<Job>("POST", `/api/clients/${id}/ideas/${ideaId}/make`, options),
   artStyles: () => call<ArtStyleInfo[]>("GET", "/api/clients/styles"),
   drawStylePreviews: () => call<Job>("POST", "/api/clients/styles/previews"),
   skipIdea: (id: string, ideaId: string) => call<IdeaDay>("POST", `/api/clients/${id}/ideas/${ideaId}/skip`),
