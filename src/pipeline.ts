@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { copyFile, cp, rename, writeFile } from "node:fs/promises";
+import { copyFile, cp, readFile, rename, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -8,7 +9,7 @@ import { loadChannel, type Channel } from "./config.ts";
 import { assertLlmRunning } from "./llm.ts";
 import { drawProject } from "./media/images.ts";
 import { audioSeconds, voiceProject } from "./media/voice.ts";
-import { loadProject, newProjectId, projectDir, saveProject } from "./project.ts";
+import { listProjects, loadProject, newProjectId, projectDir, saveProject } from "./project.ts";
 import { buildComposition } from "./render/composition.ts";
 import { buildExplainer } from "./render/explainer.ts";
 import { buildMixedPreview, buildSegments } from "./render/mixed.ts";
@@ -17,7 +18,7 @@ import { lookOf } from "./render/looks.ts";
 import { buildWhiteboard, HAND_ASSET } from "./render/whiteboard.ts";
 import { reviewScenes, toScenes, writeScript } from "./script/write.ts";
 import { writeVersus } from "./script/versus.ts";
-import { writeProsCons } from "./script/proscons.ts";
+import { recentResearch, writeProsCons } from "./script/proscons.ts";
 import { writeDeepDive } from "./script/deepdive.ts";
 import { photoCredits, preparePhotos } from "./media/photos.ts";
 import { buildDeepDive, deepChapters } from "./render/deepdive.ts";
@@ -157,9 +158,23 @@ export async function createProject(channelId: string, format: FormatId, topic: 
   return project;
 }
 
+/** Where a researched video keeps its notes, so later videos on the same products can reuse them. */
+const RESEARCH_FILE = "research.md";
+
+async function withResearch(projects: Project[]): Promise<(Project & { research?: string })[]> {
+  return Promise.all(
+    projects.map(async (project) => {
+      const path = join(projectDir(project.id), RESEARCH_FILE);
+      return existsSync(path) ? { ...project, research: await readFile(path, "utf8") } : project;
+    }),
+  );
+}
+
 /** Step 1 for a versus video: researched on the web and written through the AI Gateway, not Bonsai. */
 async function createVersus(channelId: string, format: FormatId, topic: string, look: VersusLook, log: Log): Promise<Project> {
-  const draft = await (look === "proscons" ? writeProsCons : writeVersus)(loadChannel(channelId), format, topic, log);
+  // A pros-and-cons Short reuses a recent video's research on the same two products instead of searching again.
+  const known = look === "proscons" ? recentResearch(await withResearch(await listProjects()), channelId, topic) : undefined;
+  const draft = look === "proscons" ? await writeProsCons(loadChannel(channelId), format, topic, log, known) : await writeVersus(loadChannel(channelId), format, topic, log);
   const now = new Date().toISOString();
   const project: Project = {
     id: newProjectId(channelId, format, topic),
@@ -176,6 +191,7 @@ async function createVersus(channelId: string, format: FormatId, topic: string, 
     updatedAt: now,
   };
   await saveProject(project);
+  if ("research" in draft && typeof draft.research === "string") await writeFile(join(projectDir(project.id), RESEARCH_FILE), draft.research);
   log(`script: ${project.scenes.length} rounds saved as ${project.id}`);
   return project;
 }

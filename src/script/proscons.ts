@@ -102,12 +102,17 @@ export function prosConsScenes(sections: Draft["sections"]): Scene[] {
 const factsOf = (section: Draft["sections"][number]) =>
   [...section.rows.map((row) => `${row.a} | ${row.b}`), section.explain.meaning, ...section.pros.a, ...section.pros.b, ...section.cons.a, ...section.cons.b, section.buyers.a, section.buyers.b].filter(Boolean).join(" ; ");
 
-export async function writeProsCons(channel: Channel, format: FormatId, topic: string, log: (message: string) => void = console.log): Promise<VersusDraft> {
+/**
+ * Writes the video. `known` is research already done for the same two
+ * products (a Short cut from a long video): it's used instead of searching again.
+ */
+export async function writeProsCons(channel: Channel, format: FormatId, topic: string, log: (message: string) => void = console.log, known?: string): Promise<VersusDraft & { research: string }> {
   const pair = productsOf(topic);
   if (!pair) throw new Error('Write the topic as "Product A vs Product B"');
   const [a, b] = pair;
   const angle = topic.split(":").slice(1).join(":").trim();
-  const research = await researchPair(a, b, angle, log, REVIEWS);
+  if (known) log(`research: reusing ${known.length} characters of notes on ${a} and ${b} from a recent video`);
+  const research = known ? { text: known } : await researchPair(a, b, angle, log, REVIEWS);
 
   const short = format === "short";
   log(`script: writing the pros-and-cons ${short ? "Short" : "video"} ...`);
@@ -162,5 +167,19 @@ ${research.text}`,
     tags: output.tags,
     versus: { a: output.a, b: output.b, hook: output.hook, thumbnail: output.thumbnail },
     scenes,
+    research: research.text,
   };
+}
+
+const samePair = (x: string, y: string) => {
+  const [p, q] = [productsOf(x), productsOf(y)];
+  const key = (pair: [string, string]) => pair.map((name) => name.toLowerCase().replace(/\s+/g, " ").trim()).sort().join(" | ");
+  return Boolean(p && q && key(p) === key(q));
+};
+
+/** Research a recent pros-and-cons video of the same channel did on the same two products, if any (newest first, within `days`). */
+export function recentResearch(projects: { channel: string; topic: string; createdAt: string; versus?: { look?: string } ; research?: string }[], channel: string, topic: string, now = Date.now(), days = 3): string | undefined {
+  return projects
+    .filter((p) => p.channel === channel && p.versus?.look === "proscons" && p.research && samePair(p.topic, topic) && now - Date.parse(p.createdAt) < days * 86_400_000)
+    .sort((x, y) => y.createdAt.localeCompare(x.createdAt))[0]?.research;
 }

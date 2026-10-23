@@ -68,3 +68,13 @@ test("the page draws every chapter, the ledger, the score and the verdict, for a
     assert.ok(!html.includes("undefined"), `${format}: no undefined on the page`);
   }
 });
+
+test("a Short reuses a recent pros-and-cons video's research on the same two products, in any order or case", async () => {
+  const { recentResearch } = await import("../script/proscons.ts");
+  const now = Date.parse("2026-10-23T12:00:00Z");
+  const p = (topic: string, createdAt: string, extra = {}) => ({ channel: "haleemrafat", topic, createdAt, versus: { look: "proscons" }, research: `notes ${topic}`, ...extra });
+  const projects = [p("iPhone Duo vs iPhone 18 Pro: هل الأغلى أحسن؟", "2026-10-23T10:00:00Z"), p("iPhone Duo vs Galaxy Z Fold 8", "2026-10-23T11:00:00Z"), p("iPhone Duo vs iPhone 18 Pro", "2026-10-15T10:00:00Z", { research: "old" })];
+  assert.equal(recentResearch(projects, "haleemrafat", "iphone 18 pro vs iPhone Duo: الكاميرا", now), "notes iPhone Duo vs iPhone 18 Pro: هل الأغلى أحسن؟");
+  assert.equal(recentResearch(projects, "dev-pixel", "iPhone Duo vs iPhone 18 Pro", now), undefined);
+  assert.equal(recentResearch([{ ...projects[0], versus: { look: "arena" } }], "haleemrafat", "iPhone Duo vs iPhone 18 Pro", now), undefined);
+});
