@@ -13,7 +13,11 @@ export function projectDir(id: string): string {
 export function newProjectId(channel: string, format: FormatId, topic: string): string {
   const slug = topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40).replace(/-$/, "");
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-  return `${stamp}-${channel}-${format}-${slug}`;
+  const base = `${stamp}-${channel}-${format}-${slug}`;
+  // Two videos in the same minute whose topics differ only in non-Latin words would share a folder.
+  let id = base;
+  for (let n = 2; existsSync(join(OUTPUT_DIR, id)); n++) id = `${base}-${n}`;
+  return id;
 }
 
 export async function loadProject(id: string): Promise<Project> {

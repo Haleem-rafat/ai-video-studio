@@ -49,3 +49,19 @@ test("localDate uses the local calendar day", () => {
 test("bad ids are refused", () => {
   assert.throws(() => store.clientDir("../etc"));
 });
+
+test("two videos made in the same minute with the same Latin words get different folders", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { OUTPUT_DIR } = await import("../config.ts");
+  const { newProjectId } = await import("../project.ts");
+  const first = newProjectId("test-channel", "short", "Phone A vs Phone B: السعر");
+  mkdirSync(join(OUTPUT_DIR, first), { recursive: true });
+  try {
+    const second = newProjectId("test-channel", "short", "Phone A vs Phone B: الكاميرا");
+    assert.notEqual(second, first);
+    assert.equal(second, `${first}-2`);
+  } finally {
+    (await import("node:fs")).rmSync(join(OUTPUT_DIR, first), { recursive: true, force: true });
+  }
+});
