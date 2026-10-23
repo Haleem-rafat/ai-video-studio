@@ -44,12 +44,13 @@ export function chapterTimes(scene: Pick<VersusScene, "seconds" | "visual">): { 
   return { rows, explain, points: points.map((_, i) => r(from + (span * i) / Math.max(1, points.length))), verdict: r(Math.max(from + span, D - 1.2)) };
 }
 
-/** The final count: chapters won, and every pro and con, per side. */
+/** The final count: topic chapters won, and every pro and con, per side. */
 export function tallyOf(scenes: Pick<VersusScene, "visual">[]): { wins: { a: number; b: number }; pros: { a: number; b: number }; cons: { a: number; b: number } } {
   const t = { wins: { a: 0, b: 0 }, pros: { a: 0, b: 0 }, cons: { a: 0, b: 0 } };
   for (const scene of scenes) {
     const v = scene.visual;
-    if (v.verdict === "a" || v.verdict === "b") t.wins[v.verdict]++;
+    // Only topic chapters are won; the problems chapter is weighed in the pros and cons.
+    if ((v.kind ?? "chapter") === "chapter" && (v.verdict === "a" || v.verdict === "b")) t.wins[v.verdict]++;
     for (const point of pointsOf(v)) t[point.good ? "pros" : "cons"][point.side]++;
   }
   return t;
@@ -378,7 +379,7 @@ D.forEach((s, k) => {
       bump('#l' + (p.good ? 'p' : 'x') + p.side, ++count[key], at + .15);
     });
     tl.fromTo('#wn' + k, { opacity: 0, scale: 2.2 }, { opacity: 1, scale: 1, duration: .4, ease: 'back.out(2)', immediateRender: false }, s.start + s.verdict);
-    if (s.winner === 'a' || s.winner === 'b') {
+    if (s.kind === 'chapter' && (s.winner === 'a' || s.winner === 'b')) {
       bump('#lw' + s.winner, ++count['w' + s.winner], s.start + s.verdict + .2);
       tl.fromTo('#flash', { opacity: .35 }, { opacity: 0, duration: .4, immediateRender: false }, s.start + s.verdict);
     }

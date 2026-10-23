@@ -52,7 +52,7 @@ function prosConsCues(project: Project): Cue[] {
     if (kind !== "chapter" && kind !== "problems") return;
     const times = chapterTimes(scene);
     pointsOf(scene.visual).forEach((point, i) => cues.push({ sound: point.good ? "pop" : "click", at: scene.start + times.points[i], gain: point.good ? 0.25 : 0.3 }));
-    if (scene.visual.verdict === "a" || scene.visual.verdict === "b") cues.push({ sound: "chime", at: scene.start + times.verdict, gain: 0.25 });
+    if (kind === "chapter" && (scene.visual.verdict === "a" || scene.visual.verdict === "b")) cues.push({ sound: "chime", at: scene.start + times.verdict, gain: 0.25 });
   });
   cues.push({ sound: "pop", at: outro, gain: 0.35 }, { sound: "click", at: outro + 1.15, gain: 0.6 }, { sound: "chime", at: total - 2, gain: 0.3 });
   return cues.filter((cue) => cue.at >= 0 && existsSync(join(SFX_DIR, `${cue.sound}.mp3`)));

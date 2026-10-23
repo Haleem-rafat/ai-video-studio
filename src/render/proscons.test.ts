@@ -31,9 +31,9 @@ test("a chapter's parts land in order inside its time: rows, the term, the point
   assert.ok(t.verdict > t.points.at(-1)! && t.verdict < 30);
 });
 
-test("the tally counts chapters won and every pro and con per side; ties count for no one", () => {
-  const tally = tallyOf([{ visual: camera }, { visual: { ...camera, verdict: "tie" } }, { visual: { ...camera, verdict: "a", pros: undefined, cons: { a: [], b: ["بطارية أقل"] } } }]);
-  assert.deepEqual(tally, { wins: { a: 1, b: 1 }, pros: { a: 2, b: 4 }, cons: { a: 2, b: 1 } });
+test("the tally counts topic chapters won and every pro and con per side; ties and the problems chapter win nothing", () => {
+  const tally = tallyOf([{ visual: camera }, { visual: { ...camera, verdict: "tie" } }, { visual: { ...camera, verdict: "a", pros: undefined, cons: { a: [], b: ["بطارية أقل"] } } }, { visual: { ...camera, kind: "problems", pros: undefined, cons: { a: ["x"], b: [] } } }]);
+  assert.deepEqual(tally, { wins: { a: 1, b: 1 }, pros: { a: 2, b: 4 }, cons: { a: 3, b: 1 } });
 });
 
 test("the writer's sections become scenes with only what each shows", () => {

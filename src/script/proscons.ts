@@ -132,7 +132,7 @@ ${
 - Whole video 55-70 seconds spoken: each narration 1-2 short sentences.`
     : `- Then 7-9 sections of kind "chapter" (for phones: design & build, screens, performance & heat, camera, video, battery & charging, apps & software, durability & repair, price & value; whichever matter here), each with 1-3 rows, the one term a normal buyer wouldn't know explained in plain words, 1-3 pros and 1-3 cons per side, and a verdict. Alternate poses point/think.
 - Then one section of kind "problems": title like "مشاكل محدش بيقولها": the real problems reviewers found after using them (apps that aren't ready, with names; crease; biometrics; heat; speakers; repair), mostly cons, said with which reviewer found them; verdict for the side with fewer problems.
-- Then one section of kind "score": title like "النتيجة", no rows or points: count the chapters each won and what that means.
+- Then one section of kind "score": title like "النتيجة", no rows or points: count the "chapter" sections each won (the problems section doesn't count; ties count for no one), say the exact counts, and what that means.
 - Last section, kind "verdict": title like "مين يشتري إيه؟", buyers for each side, pose "wave": the honest answer, ask viewers to comment, and to subscribe.
 - Whole video about 8-10 minutes spoken: each chapter narration 5-7 sentences: the spec, what it means in real use (an everyday example), then the pros and cons in words.`
 }
