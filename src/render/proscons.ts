@@ -252,6 +252,8 @@ export function buildProsCons(project: Project, channel: Channel): string {
   .bgp.fit img { object-fit: contain; padding: 10%; }
   /* Light enough that the footage is seen; the panels carry their own backgrounds. */
   #shade { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, #08080b55 0%, #08080bad 70%, #08080bdd 100%); }
+  /* Darkens the footage while the score and the verdict are read. */
+  #veil { position: absolute; inset: 0; background: #08080b; opacity: 0; }
   #grid { position: absolute; inset: 0; opacity: .06; background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px); background-size: 60px 60px; }
 
   /* The ledger: every pro, con and chapter won, counted as they land. */
@@ -342,6 +344,7 @@ export function buildProsCons(project: Project, channel: Channel): string {
  <div id="world">
   ${backgrounds.join("\n  ")}
   <div id="shade"></div>
+  <div id="veil"></div>
   <div id="grid"></div>
   ${hero("a")}${hero("b")}
   <div id="hook">${hookWords.map((word, i) => `<span class="hw${i === hookWords.length - 1 || /\d|\$/.test(word) ? " hot" : ""}">${esc(unglue(word))}</span>`).join(" ")}</div>
@@ -418,6 +421,11 @@ D.forEach((s, k) => {
       tl.fromTo('#flash', { opacity: .35 }, { opacity: 0, duration: .4, immediateRender: false }, s.start + s.verdict);
     }
     tl.to(body, { opacity: 0, duration: .3 }, end + .1);
+  }
+
+  if (s.kind === 'score' || s.kind === 'verdict') {
+    tl.to('#veil', { opacity: .72, duration: .5 }, s.start - .4);
+    if (s.kind === 'score') tl.to('#veil', { opacity: 0, duration: .5 }, end + .2);
   }
 
   if (s.kind === 'score') {
