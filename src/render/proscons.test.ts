@@ -78,3 +78,16 @@ test("a Short reuses a recent pros-and-cons video's research on the same two pro
   assert.equal(recentResearch(projects, "dev-pixel", "iPhone Duo vs iPhone 18 Pro", now), undefined);
   assert.equal(recentResearch([{ ...projects[0], versus: { look: "arena" } }], "haleemrafat", "iPhone Duo vs iPhone 18 Pro", now), undefined);
 });
+
+test("footage and photos are taken two clips to a photo, and a clip never shows longer than it lasts", async () => {
+  const { backdropPlan, mediaPool } = await import("./proscons.ts");
+  const clip = (path: string, seconds: number) => ({ path, seconds });
+  const photo = (path: string) => ({ query: "", path });
+  const pool = mediaPool({ clips: [clip("a1", 8), clip("a2", 3)], photos: [photo("pa")] }, { clips: [clip("b1", 10)], photos: [photo("pb")] });
+  assert.deepEqual(pool.map((m) => m.path), ["a1", "b1", "pa", "a2", "pb"]);
+  const plan = backdropPlan(20, 1, pool, false);
+  for (const step of plan) if (step.item.clip) assert.ok(step.len <= step.item.seconds! - 1.4 + 1e-9 || step.len === 1, `${step.item.path} ${step.len}`);
+  assert.ok(plan.at(-1)!.at + plan.at(-1)!.len >= 20.4);
+  assert.ok(backdropPlan(6, 0, pool, true).every((step) => step.len <= 1.1));
+  assert.deepEqual(backdropPlan(5, 0, [], false), []);
+});

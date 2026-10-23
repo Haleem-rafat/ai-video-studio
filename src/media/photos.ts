@@ -199,5 +199,8 @@ export function photoCredits(project: Project, arabic: boolean): string {
   ];
   // Commons licences ask for a credit; press photos (uploads) carry one when their maker is named.
   const credits = [...new Set(photos.filter((photo) => photo?.source !== "ai" && photo?.credit).map((photo) => `- ${photo!.credit}`))];
-  return credits.length ? `${arabic ? "الصور" : "Photos"}:\n${credits.join("\n")}` : "";
+  // Footage of the products, from their makers' pages.
+  const clips = [...(project.versus?.a.clips ?? []), ...(project.versus?.b.clips ?? [])];
+  const footage = [...new Set(clips.filter((clip) => clip.credit).map((clip) => `- ${clip.credit}${clip.url ? ` (${clip.url})` : ""}`))];
+  return [credits.length ? `${arabic ? "الصور" : "Photos"}:\n${credits.join("\n")}` : "", footage.length ? `${arabic ? "لقطات الفيديو" : "Footage"}:\n${footage.join("\n")}` : ""].filter(Boolean).join("\n\n");
 }

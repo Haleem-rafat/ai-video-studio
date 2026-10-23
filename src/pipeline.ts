@@ -23,6 +23,7 @@ import { writeDeepDive } from "./script/deepdive.ts";
 import { photoCredits, preparePhotos } from "./media/photos.ts";
 import { buildDeepDive, deepChapters } from "./render/deepdive.ts";
 import { prepareProducts } from "./media/products.ts";
+import { fetchPressMedia } from "./media/press.ts";
 import { buildVersus, chapters } from "./render/versus.ts";
 import { buildArena } from "./render/arena.ts";
 import { buildProsCons } from "./render/proscons.ts";
@@ -255,6 +256,20 @@ export async function prepareMedia(id: string, options: { images?: boolean } = {
   await saveProject(project);
 
   if (project.versus) {
+    // Real press photos, footage and a cut-out product picture, looked for once per product.
+    for (const side of ["a", "b"] as const) {
+      const product = project.versus[side];
+      if (product.pressAt) continue;
+      const press = await fetchPressMedia(dir, product, side, log);
+      const replace = press.image && product.imageSource !== "photo";
+      project.versus[side] = {
+        ...product,
+        photos: [...(product.photos ?? []).filter((photo) => photo.source !== "press"), ...press.photos],
+        clips: press.clips,
+        ...(replace ? { image: press.image, imageSource: "photo" as const } : {}),
+        pressAt: new Date().toISOString(),
+      };
+    }
     const drawn = await prepareProducts(dir, project);
     if (drawn) log(`products: ${drawn} AI picture(s); upload real photos on the project page to replace them`);
     await saveProject(project);

@@ -2,7 +2,7 @@ import { brandPaths } from "../brand/brand.ts";
 import { ARABIC, karaoke } from "./arena.ts";
 import { placeVersus, type VersusScene } from "./versus.ts";
 import { FORMATS, type Channel } from "../config.ts";
-import type { Photo, Project } from "../types.ts";
+import type { Product, Project } from "../types.ts";
 
 /**
  * A "pros and cons" video: a review and a comparison at once. Each chapter
@@ -90,13 +90,37 @@ function layoutFor(project: Project): Layout {
   };
 }
 
-/** The pictures behind a chapter: its own, else the products' photos taken in turn. */
-function picturesOf(scene: VersusScene, k: number, pool: Photo[]): Photo[] {
-  const own = (scene.visual.gallery ?? []).filter((photo) => photo.path);
-  if (own.length) return own;
+/** Something behind a scene: a product's footage, or a photo. */
+export type Backdrop = { path: string; clip: boolean; seconds?: number; fit?: "cover" | "contain" };
+
+/** Both products' footage and photos, taken in turn: two clips, then a photo, so most of the video moves. */
+export function mediaPool(a: Pick<Product, "photos" | "clips">, b: Pick<Product, "photos" | "clips">): Backdrop[] {
+  const weave = <T>(x: T[], y: T[]) => Array.from({ length: Math.max(x.length, y.length) }, (_, i) => [x[i], y[i]]).flat().filter((item): item is T => item !== undefined);
+  const clips = weave(a.clips ?? [], b.clips ?? []).map((clip) => ({ path: clip.path, clip: true, seconds: clip.seconds }));
+  const photos = weave((a.photos ?? []).filter((p) => p.path), (b.photos ?? []).filter((p) => p.path)).map((photo) => ({ path: photo.path!, clip: false, fit: photo.fit }));
+  const out: Backdrop[] = [];
+  while (clips.length || photos.length) out.push(...clips.splice(0, 2), ...photos.splice(0, 1));
+  return out;
+}
+
+/**
+ * What plays behind a scene and when (seconds from its start): the intro is
+ * a fast montage of 1.1s cuts; a chapter changes every few seconds, a clip
+ * never longer than it lasts. Each scene starts at its own place in the pool.
+ */
+export function backdropPlan(seconds: number, k: number, pool: Backdrop[], intro: boolean): { item: Backdrop; at: number; len: number }[] {
   if (!pool.length) return [];
-  const count = Math.max(1, Math.ceil(scene.seconds / 8));
-  return Array.from({ length: Math.min(count, pool.length) }, (_, i) => pool[(k * 2 + i) % pool.length]);
+  const plan: { item: Backdrop; at: number; len: number }[] = [];
+  let t = 0;
+  for (let i = intro ? 0 : k * 3; t < seconds + 0.4; i++) {
+    const item = pool[i % pool.length];
+    const most = item.clip ? Math.max(1, (item.seconds ?? 2) - 1.4) : 6;
+    const len = r(intro ? Math.min(1.1, most) : Math.min(6, most));
+    plan.push({ item, at: r(t), len });
+    t += len;
+    if (plan.length > 60) break;
+  }
+  return plan;
 }
 
 export function buildProsCons(project: Project, channel: Channel): string {
@@ -124,10 +148,7 @@ export function buildProsCons(project: Project, channel: Channel): string {
     ifYou: arabic ? "لو" : "if",
   };
 
-  const pool: Photo[] = [];
-  const pa = (a.photos ?? []).filter((photo) => photo.path);
-  const pb = (b.photos ?? []).filter((photo) => photo.path);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) pool.push(...(pa[i] ? [pa[i]] : []), ...(pb[i] ? [pb[i]] : []));
+  const pool = mediaPool(a, b);
 
   const tally = tallyOf(scenes);
   const name = (side: "a" | "b") => (side === "a" ? a : b);
@@ -138,9 +159,16 @@ export function buildProsCons(project: Project, channel: Channel): string {
   const data = scenes.map((scene, k) => {
     const v = scene.visual;
     const kind = k === 0 ? "intro" : (v.kind ?? "chapter");
-    const pictures = k === 0 ? pool.slice(0, 8) : picturesOf(scene, k, pool);
-    const step = k === 0 ? Math.max(0.8, (scene.seconds + 0.4) / Math.max(1, pictures.length)) : scene.seconds / Math.max(1, pictures.length);
-    pictures.forEach((photo, j) => backgrounds.push(`<div class="bgp${photo.fit === "contain" ? " fit" : ""}" id="bg${k}_${j}"><img src="${photo.path}" /></div>`));
+    const own = (v.gallery ?? []).filter((photo) => photo.path).map((photo) => ({ path: photo.path!, clip: false, fit: photo.fit }));
+    const plan = backdropPlan(scene.seconds, k, own.length ? own : pool, k === 0);
+    // A clip plays from its first frame for exactly as long as it shows (with the fades around it).
+    plan.forEach(({ item, at, len }, j) =>
+      backgrounds.push(
+        item.clip
+          ? `<div class="bgp clip" id="bg${k}_${j}"><video src="${item.path}" muted playsinline data-start="${r(Math.max(0, scene.start + at - 0.5))}" data-duration="${r(Math.min(len + 1.1, (item.seconds ?? len) - 0.05))}" data-media-start="0" data-track-index="3"></video></div>`
+          : `<div class="bgp${item.fit === "contain" ? " fit" : ""}" id="bg${k}_${j}"><img src="${item.path}" /></div>`,
+      ),
+    );
     const times = chapterTimes(scene);
     const points = pointsOf(v);
 
@@ -189,7 +217,8 @@ export function buildProsCons(project: Project, channel: Channel): string {
       kind,
       start: scene.start,
       dur: r(scene.seconds),
-      cuts: pictures.map((_, j) => r(j * step)),
+      cuts: plan.map((step) => step.at),
+      clips: plan.map((step) => step.item.clip),
       rows: times.rows,
       explain: v.explain ? times.explain : -1,
       points: points.map((point, j) => ({ at: times.points[j], side: point.side, good: point.good })),
@@ -218,10 +247,11 @@ export function buildProsCons(project: Project, channel: Channel): string {
   body { margin: 0; background: #08080b; }
   #root { position: relative; width: ${width}px; height: ${height}px; overflow: hidden; font-family: ${font}; color: #fff; background: #08080b; }
   .bgp { position: absolute; inset: -4%; opacity: 0; }
-  .bgp img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .bgp img, .bgp video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .bgp.fit { background: radial-gradient(circle at 50% 45%, #24242c, #08080b 70%); }
   .bgp.fit img { object-fit: contain; padding: 10%; }
-  #shade { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, #08080b99 0%, #08080be6 70%, #08080bf7 100%); }
+  /* Light enough that the footage is seen; the panels carry their own backgrounds. */
+  #shade { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, #08080b55 0%, #08080bad 70%, #08080bdd 100%); }
   #grid { position: absolute; inset: 0; opacity: .06; background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px); background-size: 60px 60px; }
 
   /* The ledger: every pro, con and chapter won, counted as they land. */
@@ -337,9 +367,13 @@ D.forEach((s, k) => s.cuts.forEach((c, j) => {
   const id = '#bg' + k + '_' + j;
   const t = s.start + c;
   const next = j + 1 < s.cuts.length ? s.start + s.cuts[j + 1] : (k + 1 < D.length ? D[k + 1].start - .8 : OUTRO + 5);
-  tl.fromTo(id, { opacity: 0 }, { opacity: 1, duration: .8, immediateRender: false }, Math.max(0, t - .5));
-  tl.fromTo(id, { scale: j % 2 ? 1.16 : 1.04, xPercent: j % 2 ? 2 * DIR : -2 * DIR }, { scale: j % 2 ? 1.04 : 1.16, xPercent: j % 2 ? -1 * DIR : 2 * DIR, duration: Math.max(1, next - t + 1), ease: 'none', immediateRender: false }, Math.max(0, t - .5));
-  tl.to(id, { opacity: 0, duration: .6 }, next + .2);
+  const fade = k === 0 ? .15 : .5;
+  tl.fromTo(id, { opacity: 0 }, { opacity: 1, duration: fade, immediateRender: false }, Math.max(0, t - fade));
+  // Photos drift (Ken Burns); footage already moves, so it only breathes.
+  const zoom = s.clips[j] ? [1.02, 1.08] : [j % 2 ? 1.16 : 1.04, j % 2 ? 1.04 : 1.16];
+  tl.fromTo(id, { scale: zoom[0], xPercent: s.clips[j] ? 0 : (j % 2 ? 2 : -2) * DIR }, { scale: zoom[1], xPercent: s.clips[j] ? 0 : (j % 2 ? -1 : 2) * DIR, duration: Math.max(1, next - t + 1), ease: 'none', immediateRender: false }, Math.max(0, t - fade));
+  if (k === 0 && j > 0) tl.fromTo('#flash', { opacity: .25 }, { opacity: 0, duration: .2, immediateRender: false }, t);
+  tl.to(id, { opacity: 0, duration: fade }, next + (k === 0 ? 0 : .2));
 }));
 
 // The intro: both products rise in, the hook word by word, then the ledger.

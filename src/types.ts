@@ -114,7 +114,10 @@ export type DeepItem = { label: string; note?: string; cells?: string[]; image?:
  * Wikimedia Commons; `path` (project-relative) is set once one is found,
  * uploaded or drawn, with its credit line when the licence asks for one.
  */
-export type Photo = { query: string; path?: string; credit?: string; url?: string; source?: "commons" | "upload" | "ai"; fit?: "cover" | "contain" };
+export type Photo = { query: string; path?: string; credit?: string; url?: string; source?: "commons" | "upload" | "ai" | "press"; fit?: "cover" | "contain" };
+
+/** A short silent video of a product (its maker's footage), played behind a scene. */
+export type Clip = { path: string; seconds: number; credit?: string; url?: string };
 
 /** `label` names what the row compares (Battery, Price); an arena video shows it above the values. */
 /**
@@ -136,7 +139,17 @@ export type Pose = "point" | "think" | "wave";
 export const VISUAL_TYPES = ["title", "chapter", "stat", "list", "quote", "code", "compare", "chart", "versus", "deepdive", "marketing"] as const;
 
 /** A product in a versus video. `image` is project-relative: a cut-out photo or an AI picture. */
-export type Product = { name: string; short: string; color: string; image?: string; imageSource?: "photo" | "ai"; photos?: Photo[] };
+export type Product = {
+  name: string;
+  short: string;
+  color: string;
+  image?: string;
+  imageSource?: "photo" | "ai";
+  photos?: Photo[];
+  clips?: Clip[];
+  /** When its press photos and clips were looked for (once). */
+  pressAt?: string;
+};
 
 /** The text of a thumbnail: 2-3 huge words, the one in the accent colour, and a small sticker. */
 export type Thumbnail = { headline: string; highlight?: string; tag?: string };
