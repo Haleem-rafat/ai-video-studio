@@ -49,6 +49,13 @@ export function articleImages(html: string): string[] {
   return out;
 }
 
+/** Product-page clips that end on the product itself, best first (their folder names). */
+const PRODUCT_CLIPS = ["highlights-colors", "colors", "hero-display", "highlights-display", "design", "highlights-design", "lineup"];
+export const productClipRank = (name: string | undefined) => {
+  const rank = PRODUCT_CLIPS.indexOf(name ?? "");
+  return rank === -1 ? PRODUCT_CLIPS.length : rank;
+};
+
 /** A photo that shows the product itself, for its cut-out: the lineup, colours, open and closed… */
 const PRODUCT_SHOT = /(hero|lineup|colou?rs?|closed-and-open|back|front|design|finish)/i;
 
@@ -83,7 +90,7 @@ export async function fetchPressMedia(dir: string, product: Product, side: "a" |
       try {
         await writeFile(join(dir, path), Buffer.from(await (await get(`${APPLE}${folder}large.mp4`)).arrayBuffer()));
         const length = await seconds(join(dir, path));
-        if (length >= 1.5) clips.push({ path, seconds: Math.round(length * 100) / 100, credit: "Apple", url: `${APPLE}/${slug}/` });
+        if (length >= 1.5) clips.push({ path, seconds: Math.round(length * 100) / 100, credit: "Apple", url: `${APPLE}/${slug}/`, name: folder.split("/").filter(Boolean).at(-1) });
       } catch {
         // Some folders hold image sequences, not a clip.
       }
@@ -104,29 +111,28 @@ export async function fetchPressMedia(dir: string, product: Product, side: "a" |
         // A missing size is skipped.
       }
     }
-    // The product itself, cut out of a press photo, replaces a drawn one.
-    const shot = photos.find((photo) => PRODUCT_SHOT.test(photo.path!));
-    if (shot) {
-      const cut = `press/${side}-product.png`;
-      await cutout(join(dir, shot.path!), join(dir, cut)).then(
-        () => (image = cut),
-        () => undefined,
-      );
-    }
   } catch (error) {
     log(`press: no newsroom photos for ${product.name} (${error instanceof Error ? error.message : error})`);
   }
 
-  // Else a frame of the product page's opening clip, which shows the product.
-  if (!image && clips[0]) {
-    const frame = `press/${side}-hero-frame.png`;
+  // The product itself, cut out where it rests at the end of the clip that shows it best, else from a press photo.
+  const candidates: { clip?: Clip; photo?: Photo }[] = [
+    ...[...clips].filter((clip) => productClipRank(clip.name) < PRODUCT_CLIPS.length).sort((x, y) => productClipRank(x.name) - productClipRank(y.name)).map((clip) => ({ clip })),
+    ...photos.filter((photo) => PRODUCT_SHOT.test(photo.path!)).map((photo) => ({ photo })),
+  ];
+  for (const [n, candidate] of candidates.slice(0, 4).entries()) {
     const cut = `press/${side}-product.png`;
     try {
-      await run("ffmpeg", ["-v", "error", "-y", "-ss", String(Math.min(1.5, clips[0].seconds / 2)), "-i", join(dir, clips[0].path), "-frames:v", "1", join(dir, frame)]);
-      await cutout(join(dir, frame), join(dir, cut));
+      let source = candidate.photo?.path;
+      if (candidate.clip) {
+        source = `press/${side}-frame-${n + 1}.png`;
+        await run("ffmpeg", ["-v", "error", "-y", "-sseof", "-0.3", "-i", join(dir, candidate.clip.path), "-frames:v", "1", join(dir, source)]);
+      }
+      await cutout(join(dir, source!), join(dir, cut));
       image = cut;
+      break;
     } catch {
-      // Keeps the picture it had.
+      // No clear subject in this one; the next is tried.
     }
   }
 

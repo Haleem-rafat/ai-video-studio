@@ -18,3 +18,10 @@ test("the page's clip folders, the newsroom's articles and an article's photos a
   const article = `src="/newsroom/images/2026/10/x/article/Apple-iPhone-Duo-closed-and-open_big.jpg.medium_2x.jpg" srcset="/newsroom/images/2026/10/x/article/Apple-iPhone-Duo-closed-and-open_big.jpg.large_2x.jpg" "/newsroom/images/2026/10/x/article/Apple-iPhone-Duo-StandBy_big.jpg.jpg" "/newsroom/images/2026/10/x/tile/Apple-iPhone-Duo-hero-lp.jpg.og.jpg"`;
   assert.deepEqual(articleImages(article), ["/newsroom/images/2026/10/x/article/Apple-iPhone-Duo-closed-and-open_big.jpg.large_2x.jpg", "/newsroom/images/2026/10/x/article/Apple-iPhone-Duo-StandBy_big.jpg.large_2x.jpg"]);
 });
+
+test("the product picture comes from the clips that end on the product, colours first", async () => {
+  const { productClipRank } = await import("./press.ts");
+  const names = ["hero", "highlights-display", "highlights-colors", "timelapse", undefined, "design"];
+  assert.deepEqual([...names].sort((x, y) => productClipRank(x) - productClipRank(y)).slice(0, 3), ["highlights-colors", "highlights-display", "design"]);
+  assert.equal(productClipRank("timelapse"), productClipRank(undefined));
+});

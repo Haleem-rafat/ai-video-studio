@@ -117,7 +117,7 @@ export type DeepItem = { label: string; note?: string; cells?: string[]; image?:
 export type Photo = { query: string; path?: string; credit?: string; url?: string; source?: "commons" | "upload" | "ai" | "press"; fit?: "cover" | "contain" };
 
 /** A short silent video of a product (its maker's footage), played behind a scene. */
-export type Clip = { path: string; seconds: number; credit?: string; url?: string };
+export type Clip = { path: string; seconds: number; credit?: string; url?: string; /** What it shows, e.g. "highlights-colors". */ name?: string };
 
 /** `label` names what the row compares (Battery, Price); an arena video shows it above the values. */
 /**
