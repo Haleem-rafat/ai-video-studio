@@ -13,12 +13,12 @@ export type FormatId = "short" | "long";
  * without a style is "motion", so older projects keep theirs.
  */
 /** "arena" only picks a look when a video is created: it is saved as a "versus" video with `versus.look` "arena". */
-export type StyleId = "motion" | "whiteboard" | "explainer" | "mixed" | "versus" | "arena" | "deepdive" | "marketing";
+export type StyleId = "motion" | "whiteboard" | "explainer" | "mixed" | "versus" | "arena" | "proscons" | "deepdive" | "marketing";
 
-export const STYLES = ["motion", "whiteboard", "explainer", "mixed", "versus", "arena", "deepdive", "marketing"] as const;
+export const STYLES = ["motion", "whiteboard", "explainer", "mixed", "versus", "arena", "proscons", "deepdive", "marketing"] as const;
 
 /** The look of one scene. A "mixed" project gives every scene its own; "versus" and "deepdive" are whole-video formats. */
-export type Look = Exclude<StyleId, "mixed" | "versus" | "arena" | "deepdive" | "marketing">;
+export type Look = Exclude<StyleId, "mixed" | "versus" | "arena" | "proscons" | "deepdive" | "marketing">;
 
 export const LOOKS = ["motion", "whiteboard", "explainer"] as const;
 
@@ -32,7 +32,21 @@ export type Visual =
   | { type: "compare"; left: { label: string; value: string }; right: { label: string; value: string } }
   | { type: "chart"; headline: string; bars: { label: string; value: number }[] }
   /** One round of a versus video: a topic and its spec rows, product A's value first; `winner` gets the check mark. */
-  | { type: "versus"; title: string; rows: VersusRow[]; pose?: Pose; gallery?: Photo[] }
+  | {
+      type: "versus";
+      title: string;
+      rows: VersusRow[];
+      pose?: Pose;
+      gallery?: Photo[];
+      /** A pros-and-cons video's chapter: what it is, a term explained simply, each side's pros and cons, and who won it. */
+      kind?: ProsConsKind;
+      explain?: { term: string; meaning: string };
+      pros?: { a: string[]; b: string[] };
+      cons?: { a: string[]; b: string[] };
+      verdict?: "a" | "b" | "tie";
+      /** The verdict chapter: who should buy each. */
+      buyers?: { a: string; b: string };
+    }
   /**
    * One chapter of a deep-dive explainer. `layout` picks the picture: a real
    * photo with points beside it, a chip map whose blocks light up in turn,
@@ -109,7 +123,10 @@ export type Photo = { query: string; path?: string; credit?: string; url?: strin
  * real photos behind every round, numbers racing as bars, karaoke captions
  * and a K.O. for the winner.
  */
-export type VersusLook = "classic" | "arena";
+export type VersusLook = "classic" | "arena" | "proscons";
+
+/** The parts of a pros-and-cons video: the hook, a chapter per topic, the problems reviews found, the score, and who should buy which. */
+export type ProsConsKind = "intro" | "chapter" | "problems" | "score" | "verdict";
 
 export type VersusRow = { label?: string; a: string; b: string; winner?: "a" | "b" };
 

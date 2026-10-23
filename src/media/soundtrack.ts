@@ -8,6 +8,7 @@ import { placeScenes, totalSeconds } from "../render/composition.ts";
 import { lookOf } from "../render/looks.ts";
 import { placeVersus, rowTimes } from "../render/versus.ts";
 import { arenaRowTimes, hitDelay, meetAt, resultAt } from "../render/arena.ts";
+import { chapterTimes, pointsOf } from "../render/proscons.ts";
 import { itemTimes, photoBeat, placeDeep, planMotion } from "../render/deepdive.ts";
 import { itemTimes as beatTimes, phraseTimes, placeMarketing } from "../render/marketing-kit.ts";
 import type { Project } from "../types.ts";
@@ -22,7 +23,7 @@ type Cue = { sound: "whoosh" | "pop" | "click" | "typing" | "pen" | "chime"; at:
 
 /** The beats of the video a viewer should hear: cuts, numbers landing, code typing, the pen. */
 export function cuesFor(project: Project): Cue[] {
-  if (project.style === "versus") return project.versus?.look === "arena" ? arenaCues(project) : versusCues(project);
+  if (project.style === "versus") return project.versus?.look === "arena" ? arenaCues(project) : project.versus?.look === "proscons" ? prosConsCues(project) : versusCues(project);
   if (project.style === "deepdive") return deepCues(project);
   if (project.style === "marketing") return marketingCues(project);
   const scenes = placeScenes(project.scenes);
@@ -37,6 +38,23 @@ export function cuesFor(project: Project): Cue[] {
     if (look === "whiteboard" && scene.image) cues.push({ sound: "pen", at: scene.start + 0.5, gain: 0.16 });
   });
   cues.push({ sound: "chime", at: Math.max(0, total - 2.2), gain: 0.3 });
+  return cues.filter((cue) => cue.at >= 0 && existsSync(join(SFX_DIR, `${cue.sound}.mp3`)));
+}
+
+/** A pros-and-cons video's beats: a whoosh per chapter card, a pop per pro, a click per con, a chime per chapter won, the subscribe click. */
+function prosConsCues(project: Project): Cue[] {
+  const { scenes, outro, total } = placeVersus(project);
+  const cues: Cue[] = [{ sound: "whoosh", at: 0.2, gain: 0.45 }];
+  scenes.forEach((scene, index) => {
+    if (index === 0) return;
+    cues.push({ sound: "whoosh", at: scene.start - 1.35, gain: 0.45 });
+    const kind = scene.visual.kind ?? "chapter";
+    if (kind !== "chapter" && kind !== "problems") return;
+    const times = chapterTimes(scene);
+    pointsOf(scene.visual).forEach((point, i) => cues.push({ sound: point.good ? "pop" : "click", at: scene.start + times.points[i], gain: point.good ? 0.25 : 0.3 }));
+    if (scene.visual.verdict === "a" || scene.visual.verdict === "b") cues.push({ sound: "chime", at: scene.start + times.verdict, gain: 0.25 });
+  });
+  cues.push({ sound: "pop", at: outro, gain: 0.35 }, { sound: "click", at: outro + 1.15, gain: 0.6 }, { sound: "chime", at: total - 2, gain: 0.3 });
   return cues.filter((cue) => cue.at >= 0 && existsSync(join(SFX_DIR, `${cue.sound}.mp3`)));
 }
 

@@ -1,4 +1,4 @@
-import { AppWindowIcon, CheckIcon, Columns2Icon, MicroscopeIcon, SwordsIcon, ShapesIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
+import { AppWindowIcon, CheckIcon, Columns2Icon, MicroscopeIcon, ScaleIcon, SwordsIcon, ShapesIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { api, type Channel, type FormatId, type Job, type StyleId, type TopicIdea } from "../api.ts";
@@ -164,6 +164,15 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                   captions and a winner reveal. Add each product's press photos on the project page. Type the topic as "A vs B".
                 </span>
               </Choice>
+              <Choice active={style === "proscons"} onClick={() => setStyle("proscons")}>
+                <ModeClip mode="proscons" />
+                <ScaleIcon className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Pros &amp; Cons</span>
+                <span className="text-xs text-muted-foreground">
+                  A review and a comparison at once: every chapter compares the specs, explains one term in plain words, stamps each product's pros and cons, and names its winner. A
+                  "problems nobody tells you" chapter from real reviews, a pros/cons ledger, the score, and who should buy which. Never assumes the dearer one wins. Type the topic as "A vs B".
+                </span>
+              </Choice>
               <Choice active={style === "deepdive"} onClick={() => setStyle("deepdive")}>
                 <ModeClip mode="deepdive" />
                 <MicroscopeIcon className="size-4 text-muted-foreground" />
@@ -228,7 +237,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
             <Field label="What is the video about?" detail={topic.trim() ? `${topic.trim().split(/\s+/).length} words` : undefined}>
               <Textarea
                 rows={3}
-                placeholder={style === "deepdive" ? "e.g. How a smartphone SoC works, why it's a System on a Chip, and how chips are made" : style === "versus" || style === "arena" ? "e.g. iPhone 17 Pro Max vs iPhone 18 Pro Max (add a question after a colon: Apple M5 vs Intel x86: why is M faster?)" : "e.g. How Isaac Newton lost a fortune in the South Sea Bubble"}
+                placeholder={style === "deepdive" ? "e.g. How a smartphone SoC works, why it's a System on a Chip, and how chips are made" : style === "versus" || style === "arena" || style === "proscons" ? "e.g. iPhone 17 Pro Max vs iPhone 18 Pro Max (add a question after a colon: Apple M5 vs Intel x86: why is M faster?)" : "e.g. How Isaac Newton lost a fortune in the South Sea Bubble"}
                 value={topic}
                 onChange={(event) => setTopic(event.target.value)}
               />
@@ -238,7 +247,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
               <p className="text-xs text-muted-foreground">
                 {style === "deepdive"
                   ? "Research and writing take 2–3 minutes, through the AI Gateway."
-                  : style === "versus" || style === "arena"
+                  : style === "versus" || style === "arena" || style === "proscons"
                   ? /\s(vs\.?|versus|ضد|ولا|مقابل)\s/i.test(topic)
                     ? "Research and writing take about a minute, through the AI Gateway."
                     : 'Write it as "Product A vs Product B".'

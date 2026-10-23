@@ -187,7 +187,7 @@ server.registerTool(
       channel: z.string().describe("Channel id from list_channels"),
       topic: z.string().min(3).describe("What the video is about, e.g. 'iPhone 18 Pro vs Pixel 11 Pro'"),
       format: FORMAT,
-      look: z.enum(["motion", "whiteboard", "explainer", "mixed", "deepdive", "arena", "versus"]).optional().describe("Default motion"),
+      look: z.enum(["motion", "whiteboard", "explainer", "mixed", "deepdive", "arena", "proscons", "versus"]).optional().describe("Default motion"),
       wait: WAIT,
     },
   },

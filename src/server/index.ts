@@ -424,7 +424,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     if (input.format !== "short" && input.format !== "long" && input.format !== "both") throw new HttpError(400, "Format is short, long or both.");
     const style = input.style ?? "motion";
     if (!STYLES.includes(style)) throw new HttpError(400, `Style is one of ${STYLES.join(", ")}.`);
-    if ((style === "versus" || style === "arena") && !productsOf(input.topic)) throw new HttpError(400, 'For a versus video, write the topic as "Product A vs Product B".');
+    if ((style === "versus" || style === "arena" || style === "proscons") && !productsOf(input.topic)) throw new HttpError(400, 'For a versus video, write the topic as "Product A vs Product B".');
     loadChannel(input.channel);
     // "Both" writes two scripts: a long video for the laptop and a Short, each sized for its format.
     const formats: FormatId[] = input.format === "both" ? ["long", "short"] : [input.format];

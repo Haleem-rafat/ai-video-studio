@@ -117,16 +117,10 @@ export function productsOf(topic: string): [string, string] | null {
 const angleOf = (topic: string) => topic.split(":").slice(1).join(":").trim();
 
 /**
- * Researches both products on the web, then writes a comparison in the
- * channel's language and dialect: an intro, one section per topic with spec
- * rows and a winner, and an honest verdict.
+ * Searches the web for two products: official specs first, then launch
+ * reviews; `extra` asks for more (e.g. what reviewers found). Returns the notes.
  */
-export async function writeVersus(channel: Channel, format: FormatId, topic: string, log: (message: string) => void = console.log): Promise<VersusDraft> {
-  const pair = productsOf(topic);
-  if (!pair) throw new Error('Write the topic as "Product A vs Product B"');
-  const [a, b] = pair;
-  const angle = angleOf(topic);
-
+export async function researchPair(a: string, b: string, angle: string, log: (message: string) => void, extra = ""): Promise<{ text: string }> {
   log(`research: looking up ${a} and ${b} ...`);
   const research = await generateText({
     telemetry: { functionId: "research" },
@@ -142,9 +136,25 @@ export async function writeVersus(channel: Channel, format: FormatId, topic: str
       "For chips and processors: instruction set and design (ARM/RISC vs x86/CISC, decoders, core types), process node, cores, clocks, memory design, power draw, benchmark scores (Geekbench single/multi, Cinebench) with the laptop they were measured in, " +
       "performance per watt, battery life of laptops using them, and the history behind them. " +
       (angle ? `The video must answer: "${angle}". Find the facts and dated events that answer it, with sources. ` : "") +
+      extra +
       "Where sources disagree, give the manufacturer's figure. Mark only truly unconfirmed items. End with the source URLs you used.",
   });
   log(`research: ${research.steps.length} step(s), ${research.text.length} characters of notes`);
+  return { text: research.text };
+}
+
+/**
+ * Researches both products on the web, then writes a comparison in the
+ * channel's language and dialect: an intro, one section per topic with spec
+ * rows and a winner, and an honest verdict.
+ */
+export async function writeVersus(channel: Channel, format: FormatId, topic: string, log: (message: string) => void = console.log): Promise<VersusDraft> {
+  const pair = productsOf(topic);
+  if (!pair) throw new Error('Write the topic as "Product A vs Product B"');
+  const [a, b] = pair;
+  const angle = angleOf(topic);
+
+  const research = await researchPair(a, b, angle, log);
 
   const short = format === "short";
   log(`script: writing the ${short ? "Short" : "video"} ...`);

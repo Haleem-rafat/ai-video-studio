@@ -32,7 +32,10 @@ function asVersus(scene: Scene): VersusScene["visual"] {
  */
 const ARENA = { intro: 0.4, gap: 1.2, outro: 5 };
 
-const timingOf = (project: Pick<Project, "versus">) => (project.versus?.look === "arena" ? ARENA : { intro: INTRO, gap: GAP, outro: OUTRO });
+/** A pros-and-cons video's beats: a chapter card between chapters, and room for the subscribe close. */
+export const PROSCONS = { intro: 0.6, gap: 1.5, outro: 4.5 };
+
+const timingOf = (project: Pick<Project, "versus">) => (project.versus?.look === "arena" ? ARENA : project.versus?.look === "proscons" ? PROSCONS : { intro: INTRO, gap: GAP, outro: OUTRO });
 
 /** When each scene speaks, and when the closing subscribe beat starts. */
 export function placeVersus(project: Project): { scenes: VersusScene[]; outro: number; total: number } {

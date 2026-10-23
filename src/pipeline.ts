@@ -17,12 +17,14 @@ import { lookOf } from "./render/looks.ts";
 import { buildWhiteboard, HAND_ASSET } from "./render/whiteboard.ts";
 import { reviewScenes, toScenes, writeScript } from "./script/write.ts";
 import { writeVersus } from "./script/versus.ts";
+import { writeProsCons } from "./script/proscons.ts";
 import { writeDeepDive } from "./script/deepdive.ts";
 import { photoCredits, preparePhotos } from "./media/photos.ts";
 import { buildDeepDive, deepChapters } from "./render/deepdive.ts";
 import { prepareProducts } from "./media/products.ts";
 import { buildVersus, chapters } from "./render/versus.ts";
 import { buildArena } from "./render/arena.ts";
+import { buildProsCons } from "./render/proscons.ts";
 import { renderThumbnail } from "./render/thumbnail.ts";
 import { buildMarketing } from "./render/marketing.ts";
 import { loadSession, saveSession, sessionDir } from "./marketing/session.ts";
@@ -129,7 +131,7 @@ export async function createMarketing(sessionId: string, log: Log = console.log,
 /** Step 1: Bonsai writes the script into a new project. */
 export async function createProject(channelId: string, format: FormatId, topic: string, style: StyleId = "motion", log: Log = console.log): Promise<Project> {
   const channel = loadChannel(channelId);
-  if (style === "versus" || style === "arena") return createVersus(channelId, format, topic, style === "arena" ? "arena" : "classic", log);
+  if (style === "versus" || style === "arena" || style === "proscons") return createVersus(channelId, format, topic, style === "versus" ? "classic" : style, log);
   if (style === "deepdive") return createDeepDive(channelId, format, topic, log);
   await assertLlmRunning();
 
@@ -157,7 +159,7 @@ export async function createProject(channelId: string, format: FormatId, topic: 
 
 /** Step 1 for a versus video: researched on the web and written through the AI Gateway, not Bonsai. */
 async function createVersus(channelId: string, format: FormatId, topic: string, look: VersusLook, log: Log): Promise<Project> {
-  const draft = await writeVersus(loadChannel(channelId), format, topic, log);
+  const draft = await (look === "proscons" ? writeProsCons : writeVersus)(loadChannel(channelId), format, topic, log);
   const now = new Date().toISOString();
   const project: Project = {
     id: newProjectId(channelId, format, topic),
@@ -279,7 +281,7 @@ export async function compose(id: string, log: Log = console.log): Promise<Proje
     const post = project.marketing?.post;
     await writeFile(join(dir, "post.txt"), `${post?.caption ?? project.description}\n\n${(post?.hashtags ?? project.tags).map((tag) => `#${tag}`).join(" ")}\n`);
   } else if (project.style === "versus" || project.style === "deepdive") {
-    const html = project.style === "deepdive" ? buildDeepDive(project, channel) : project.versus?.look === "arena" ? buildArena(project, channel) : buildVersus(project, channel);
+    const html = project.style === "deepdive" ? buildDeepDive(project, channel) : project.versus?.look === "arena" ? buildArena(project, channel) : project.versus?.look === "proscons" ? buildProsCons(project, channel) : buildVersus(project, channel);
     await writeFile(join(dir, "index.html"), html);
     project.description = withChapters(project, channel.language === "ar");
     await saveProject(project);

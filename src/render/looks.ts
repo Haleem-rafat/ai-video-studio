@@ -8,7 +8,7 @@ import type { Look, Project, Scene } from "../types.ts";
  */
 export function lookOf(project: Pick<Project, "style">, scene: Pick<Scene, "look" | "visual">): Look {
   // A versus video has no AI pictures; "motion" keeps the picture code out of its way.
-  if (project.style === "versus" || project.style === "arena" || project.style === "deepdive" || project.style === "marketing") return "motion";
+  if (project.style === "versus" || project.style === "arena" || project.style === "proscons" || project.style === "deepdive" || project.style === "marketing") return "motion";
   if (project.style !== "mixed") return project.style ?? "motion";
   if (scene.look) return scene.look;
   switch (scene.visual.type) {
