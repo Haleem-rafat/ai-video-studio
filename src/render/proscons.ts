@@ -20,6 +20,26 @@ const unglue = (text: string) => text.replace(/(^|\s)([وب])(?=[A-Za-z0-9$])/g,
 
 export type Point = { side: "a" | "b"; good: boolean; text: string };
 
+// A run of English words, numbers and their signs: "A20 Pro", "$50", "2nm", "Tom's".
+const LATIN_RUN = /[A-Za-z0-9$€£%](?:[A-Za-z0-9$€£%.,'’+\-/ ]*[A-Za-z0-9$€£%'’])?/g;
+
+/**
+ * An Arabic line that mixes in English and numbers, as HTML: always laid out
+ * right to left (a line starting "A20 Pro…" would otherwise be laid out as
+ * English and scramble the Arabic), each English or number run kept whole and
+ * left to right inside it, so "$50" never shows as "50$".
+ */
+export function arabicLine(text: string): string {
+  const line = unglue(text);
+  let out = "";
+  let last = 0;
+  for (const match of line.matchAll(LATIN_RUN)) {
+    out += `${esc(line.slice(last, match.index))}<bdi dir="ltr">${esc(match[0])}</bdi>`;
+    last = match.index! + match[0].length;
+  }
+  return `<bdi dir="rtl">${out}${esc(line.slice(last))}</bdi>`;
+}
+
 /** A chapter's points in the order they're stamped: the pros of both, then the cons of both, alternating sides. */
 export function pointsOf(visual: VersusScene["visual"]): Point[] {
   const weave = (list: { a: string[]; b: string[] } | undefined, good: boolean): Point[] => {
@@ -134,6 +154,7 @@ export function buildProsCons(project: Project, channel: Channel): string {
   const { scenes, outro, total } = placeVersus(project);
   const brand = brandPaths(channel);
   const start = arabic ? "right" : "left";
+  const line = (text: string) => (arabic ? arabicLine(text) : `<bdi>${esc(unglue(text))}</bdi>`);
   const end = arabic ? "left" : "right";
   const W = {
     chapter: arabic ? "الفصل" : "CHAPTER",
@@ -186,10 +207,10 @@ export function buildProsCons(project: Project, channel: Channel): string {
             `<div class="row" id="rw${k}_${j}"><div class="rv ra${row.winner === "a" ? " won" : ""}"><bdi>${esc(unglue(row.a))}</bdi></div><div class="rl"><bdi>${esc(row.label ?? "")}</bdi></div><div class="rv rb${row.winner === "b" ? " won" : ""}"><bdi>${esc(unglue(row.b))}</bdi></div></div>`,
         )
         .join("");
-      const note = v.explain ? `<div class="note" id="nt${k}"><b><bdi>${esc(W.what)} ${esc(v.explain.term)}${arabic ? "؟" : "?"}</bdi></b><span><bdi>${esc(unglue(v.explain.meaning))}</bdi></span></div>` : "";
+      const note = v.explain ? `<div class="note" id="nt${k}"><b><bdi>${esc(W.what)} ${esc(v.explain.term)}${arabic ? "؟" : "?"}</bdi></b><span>${line(v.explain.meaning)}</span></div>` : "";
       const column = (side: "a" | "b") =>
         `<div class="col c${side}"><div class="ch"><i style="background:${name(side).color}"></i><bdi>${esc(name(side).short)}</bdi></div>${points
-          .map((point, j) => (point.side === side ? `<div class="pt ${point.good ? "good" : "bad"}" id="pt${k}_${j}"><span class="mk">${point.good ? "✓" : "✕"}</span><bdi>${esc(unglue(point.text))}</bdi></div>` : ""))
+          .map((point, j) => (point.side === side ? `<div class="pt ${point.good ? "good" : "bad"}" id="pt${k}_${j}"><span class="mk">${point.good ? "✓" : "✕"}</span>${line(point.text)}</div>` : ""))
           .join("")}</div>`;
       const winner = v.verdict === "a" || v.verdict === "b" ? `🏆 <bdi>${esc(name(v.verdict).short)}</bdi> ${esc(W.wins)}` : `🤝 ${esc(W.tie)}`;
       const bare = !rows && !note;
@@ -206,7 +227,7 @@ export function buildProsCons(project: Project, channel: Channel): string {
 
     if (kind === "verdict") {
       const buyer = (s: "a" | "b") =>
-        `<div class="buy b${s}" id="by${s}${k}" style="border-color:${name(s).color}">${name(s).image ? `<img src="${name(s).image}" />` : ""}<div class="bt">${esc(W.buy)} <bdi style="color:${name(s).color}">${esc(name(s).short)}</bdi> ${esc(W.ifYou)}…</div><div class="bw"><bdi>${esc(unglue(v.buyers?.[s] ?? ""))}</bdi></div></div>`;
+        `<div class="buy b${s}" id="by${s}${k}" style="border-color:${name(s).color}">${name(s).image ? `<img src="${name(s).image}" />` : ""}<div class="bt">${esc(W.buy)} <bdi style="color:${name(s).color}">${esc(name(s).short)}</bdi> ${esc(W.ifYou)}…</div><div class="bw">${line(v.buyers?.[s] ?? "")}</div></div>`;
       blocks.push(`<div class="verdict" id="vd${k}">${v.buyers ? buyer("a") + buyer("b") : ""}</div>`);
     }
 

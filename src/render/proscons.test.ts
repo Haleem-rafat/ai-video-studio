@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import type { Project, Scene } from "../types.ts";
-import { buildProsCons, chapterTimes, pointsOf, tallyOf } from "./proscons.ts";
+import { arabicLine, buildProsCons, chapterTimes, pointsOf, tallyOf } from "./proscons.ts";
 import { prosConsScenes } from "../script/proscons.ts";
 import { loadChannels } from "../config.ts";
 
@@ -90,4 +90,11 @@ test("footage and photos are taken two clips to a photo, and a clip never shows 
   assert.ok(plan.at(-1)!.at + plan.at(-1)!.len >= 20.4);
   assert.ok(backdropPlan(6, 0, pool, true).every((step) => step.len <= 1.1));
   assert.deepEqual(backdropPlan(5, 0, [], false), []);
+});
+
+test("Arabic points keep each English or number run whole, left to right, inside a right-to-left line", () => {
+  assert.equal(arabicLine("A20 Pro بـ 2nm، شريحة أحدث"), '<bdi dir="rtl"><bdi dir="ltr">A20 Pro</bdi> بـ <bdi dir="ltr">2nm</bdi>، شريحة أحدث</bdi>');
+  assert.equal(arabicLine("أرخص بـ $50 في كل فئة"), '<bdi dir="rtl">أرخص بـ <bdi dir="ltr">$50</bdi> في كل فئة</bdi>');
+  assert.equal(arabicLine("مفيش مقاومة للمية"), '<bdi dir="rtl">مفيش مقاومة للمية</bdi>');
+  assert.equal(arabicLine("Tom's > كده"), '<bdi dir="rtl"><bdi dir="ltr">Tom&#39;s</bdi> &gt; كده</bdi>');
 });
