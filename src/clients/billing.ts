@@ -1,7 +1,8 @@
-import { listProjects } from "../project.ts";
+import { listProjects, projectDir } from "../project.ts";
+import { readUsage } from "../usage.ts";
 import type { Project } from "../types.ts";
 import { CURRENCIES, listInvoices, newInvoice, saveInvoice, type Currency, type Invoice, type InvoiceItem, type PieceKind } from "./invoices.ts";
-import { listPosts, loadClient, loadIdeas } from "./store.ts";
+import { listPosts, loadClient, loadIdeas, postDir } from "./store.ts";
 import type { Client, Post } from "./types.ts";
 
 /**
@@ -13,12 +14,17 @@ import type { Client, Post } from "./types.ts";
  * cancelled. An invoice that was sent or has a payment is never touched.
  */
 
-/** A client's price per piece; unset prices bill 0 until set. */
-export type Rates = { currency: Currency } & Record<PieceKind, number>;
+/**
+ * A client's price per piece; unset prices bill 0 until set. `fromCost`: each
+ * piece is billed at its recorded AI/API cost (in USD) plus `markup` percent,
+ * instead of the fixed prices.
+ */
+export type Rates = { currency: Currency; fromCost?: boolean; markup?: number } & Record<PieceKind, number>;
 export const PIECE_KINDS: PieceKind[] = ["reel", "carousel", "single", "video"];
 export const DEFAULT_CURRENCY: Currency = "USD";
 
-export type Piece = { kind: PieceKind; id: string; title: string; date: string; at: string; detail: string };
+/** `cost`: the AI/API cost recorded for making it, in USD; unset when none was recorded. */
+export type Piece = { kind: PieceKind; id: string; title: string; date: string; at: string; detail: string; cost?: number };
 
 const LABEL: Record<PieceKind, string> = { reel: "Reel", carousel: "Carousel", single: "Post", video: "Video" };
 const DIALECT: Record<string, string> = { egyptian: "Egyptian Arabic", gulf: "Gulf Arabic" };
@@ -90,7 +96,12 @@ export function piecesOf(client: Pick<Client, "name" | "url">, posts: Post[], pr
 
 /** The invoice line for a piece, priced from the client's price list. */
 export function itemFor(piece: Piece, rates: Rates | undefined): InvoiceItem {
-  return { description: `${LABEL[piece.kind]}: ${piece.title}`, detail: piece.detail, quantity: 1, price: rates?.[piece.kind] ?? 0, source: { kind: piece.kind, id: piece.id }, rated: true };
+  const cents = (n: number) => Math.round(n * 100) / 100;
+  const byCost = Boolean(rates?.fromCost);
+  const price = byCost ? cents((piece.cost ?? 0) * (1 + (rates?.markup ?? 0) / 100)) : (rates?.[piece.kind] ?? 0);
+  // The cost is shown only when it is the price; a fixed price never shows the client what the work cost.
+  const detail = byCost ? `${piece.detail} · ${piece.cost === undefined ? "API cost not recorded" : `API cost $${cents(piece.cost).toFixed(2)}`}` : piece.detail;
+  return { description: `${LABEL[piece.kind]}: ${piece.title}`, detail, quantity: 1, price, source: { kind: piece.kind, id: piece.id }, rated: true };
 }
 
 /** A draft brought up to date with its piece and the price list, or null when it must stay as it is (sent, paid, cancelled, or nothing changed). */
@@ -118,8 +129,16 @@ async function sync(clientId: string): Promise<{ created: number; updated: numbe
   const titles: Record<string, string> = {};
   for (const day of ideaDays) for (const idea of (await loadIdeas(client.id, day))?.ideas ?? []) titles[idea.id] = idea.hook;
   const pieces = piecesOf(client, posts, (await listProjects()) as ProjectLike[], titles);
+  // What each piece cost to make: a post's own usage, plus its reel's video project's.
+  for (const piece of pieces) {
+    const post = posts.find((entry) => entry.id === piece.id);
+    const dirs = piece.kind === "video" ? [projectDir(piece.id)] : [postDir(client.id, piece.id), ...(post?.projectId ? [projectDir(post.projectId)] : [])];
+    const entries = (await Promise.all(dirs.map((dir) => readUsage(dir)))).flat();
+    if (entries.length) piece.cost = entries.reduce((sum, entry) => sum + entry.cost, 0);
+  }
   const rates = client.rates;
-  const currency = rates?.currency ?? DEFAULT_CURRENCY;
+  // API costs are in USD, so a price list billing them is too.
+  const currency = rates?.fromCost ? "USD" : (rates?.currency ?? DEFAULT_CURRENCY);
 
   const invoices = await listInvoices(client.id);
   const bySource = new Map(invoices.filter((invoice) => invoice.source).map((invoice) => [keyOf(invoice.source!), invoice]));
@@ -168,5 +187,8 @@ export function readRates(raw: Record<string, unknown>): { rates?: Rates; errors
       return [kind, Math.round(value * 100) / 100];
     }),
   ) as Record<PieceKind, number>;
-  return errors.length ? { errors } : { rates: { currency, ...prices }, errors };
+  const fromCost = raw.fromCost === true;
+  const markup = Number(raw.markup ?? 0);
+  if (!(Number.isFinite(markup) && markup >= 0 && markup <= 1000)) errors.push("The markup must be between 0 and 1000%.");
+  return errors.length ? { errors } : { rates: { currency: fromCost ? "USD" : currency, ...prices, fromCost, markup: Math.round(markup * 100) / 100 }, errors };
 }

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Confirm, Field } from "./shared.tsx";
 import { when } from "./PostAt.tsx";
@@ -181,7 +182,7 @@ export function InvoicesPanel({ client }: { client: Client }) {
   );
 }
 
-const PIECES: { kind: keyof Omit<Rates, "currency">; label: string }[] = [
+const PIECES: { kind: "reel" | "carousel" | "single" | "video"; label: string }[] = [
   { kind: "reel", label: "Reel" },
   { kind: "carousel", label: "Carousel" },
   { kind: "single", label: "Single post" },
@@ -204,34 +205,52 @@ function PriceList({ clientId, rates, onChange, onSaved }: { clientId: string; r
   };
   return (
     <div className="grid gap-3 rounded-xl border p-3">
-      <div className="grid gap-0.5">
-        <span className="text-sm font-medium">Price per piece</span>
-        <span className="text-xs text-muted-foreground">Draft invoices follow these prices. Sent or paid invoices never change, and a price typed on a line stays.</span>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid gap-0.5">
+          <span className="text-sm font-medium">Price per piece</span>
+          <span className="text-xs text-muted-foreground">Draft invoices follow these prices. Sent or paid invoices never change, and a price typed on a line stays.</span>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <Switch checked={Boolean(rates.fromCost)} onCheckedChange={(fromCost) => onChange({ ...rates, fromCost, ...(fromCost ? { currency: "USD" as Currency } : {}) })} />
+          Price = API cost
+        </label>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(4,1fr)_7rem_auto] sm:items-end">
-        {PIECES.map(({ kind, label }) => (
-          <Field key={kind} label={label}>
-            <Input type="number" min={0} step="any" value={rates[kind]} onChange={(event) => onChange({ ...rates, [kind]: event.target.value === "" ? 0 : Number(event.target.value) })} />
+      {rates.fromCost ? (
+        <div className="grid gap-2 sm:grid-cols-[12rem_auto] sm:items-end">
+          <Field label="Markup %" detail="0 bills the exact cost">
+            <Input type="number" min={0} step="any" value={rates.markup ?? 0} onChange={(event) => onChange({ ...rates, markup: event.target.value === "" ? 0 : Number(event.target.value) })} />
           </Field>
-        ))}
-        <Field label="Currency">
-          <Select value={rates.currency} onValueChange={(currency) => onChange({ ...rates, currency: currency as Currency })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CURRENCIES.map((currency) => (
-                <SelectItem key={currency} value={currency}>
-                  {currency}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Button onClick={save} disabled={busy}>
-          Save prices
-        </Button>
-      </div>
+          <Button onClick={save} disabled={busy} className="w-fit">
+            Save prices
+          </Button>
+          <span className="col-span-full text-xs text-muted-foreground">Each piece is billed at the AI/API cost recorded while making it (script, voice, pictures), in USD, shown on its line.</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(4,1fr)_7rem_auto] sm:items-end">
+          {PIECES.map(({ kind, label }) => (
+            <Field key={kind} label={label}>
+              <Input type="number" min={0} step="any" value={rates[kind]} onChange={(event) => onChange({ ...rates, [kind]: event.target.value === "" ? 0 : Number(event.target.value) })} />
+            </Field>
+          ))}
+          <Field label="Currency">
+            <Select value={rates.currency} onValueChange={(currency) => onChange({ ...rates, currency: currency as Currency })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CURRENCIES.map((currency) => (
+                  <SelectItem key={currency} value={currency}>
+                    {currency}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Button onClick={save} disabled={busy}>
+            Save prices
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

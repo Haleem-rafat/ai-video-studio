@@ -51,3 +51,17 @@ test("a draft follows its piece and the price list; a price typed by hand or a s
   assert.equal(refreshed(draft({ payments: [{ id: "p", date: "2026-10-21", amount: 5, method: "cash" }] }), item, "USD"), null);
   assert.equal(refreshed(refreshed(draft(), item, "USD")!, item, "USD"), null, "nothing to change the second time");
 });
+
+test("priced at API cost: the piece's recorded AI cost, plus the markup, shown on the line", () => {
+  const piece = { kind: "reel", id: "r1", title: "T", date: "2026-10-26", at: "", detail: "Instagram reel", cost: 0.9912 } as Piece;
+  const rates = { currency: "USD", reel: 150, carousel: 0, single: 0, video: 0, fromCost: true, markup: 0 } as const;
+  const item = itemFor(piece, rates);
+  assert.equal(item.price, 0.99);
+  assert.match(item.detail!, /Instagram reel · API cost \$0\.99$/);
+  assert.equal(itemFor(piece, { ...rates, markup: 50 }).price, 1.49);
+  const unknown = itemFor({ ...piece, cost: undefined }, rates);
+  assert.equal(unknown.price, 0);
+  assert.match(unknown.detail!, /API cost not recorded/);
+  assert.equal(itemFor(piece, { ...rates, fromCost: false }).price, 150, "a fixed price list ignores the cost");
+  assert.doesNotMatch(itemFor(piece, { ...rates, fromCost: false }).detail!, /API cost/, "and never shows it to the client");
+});
