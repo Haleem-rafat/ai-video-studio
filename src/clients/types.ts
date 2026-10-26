@@ -1,3 +1,4 @@
+import type { Rates } from "./billing.ts";
 import type { ContentDirection, Dialect } from "./direction.ts";
 import type { MarketingBrief, SiteBrand } from "../types.ts";
 import type { Knowledge } from "./knowledge.ts";
@@ -39,6 +40,8 @@ export type Client = {
   design?: DesignChoice;
   /** What the content is for (promo, value or a mix), the owner's brief, topics and dialects; unset means promo. */
   direction?: ContentDirection;
+  /** The price per piece its invoices are made with (see billing.ts). */
+  rates?: Rates;
   createdAt: string;
   updatedAt: string;
 };

@@ -21,7 +21,14 @@ export const PAYMENT_METHODS = ["bank", "instapay", "vodafone-cash", "cash", "ca
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export const METHOD_LABELS: Record<PaymentMethod, string> = { bank: "Bank transfer", instapay: "InstaPay", "vodafone-cash": "Vodafone Cash", cash: "Cash", card: "Card", paypal: "PayPal", other: "Other" };
 
-export type InvoiceItem = { description: string; quantity: number; price: number };
+/** A piece of work an invoice line bills for: a post, or a video made for the client outside the posts. */
+export type PieceKind = "reel" | "carousel" | "single" | "video";
+/**
+ * `detail`: what exactly was delivered (format, length, slides, dialect, date).
+ * `source`: the piece the line bills for, so it stays up to date by itself.
+ * `rated`: the price comes from the client's price list (a price typed on the line clears it).
+ */
+export type InvoiceItem = { description: string; quantity: number; price: number; detail?: string; source?: { kind: PieceKind; id: string }; rated?: boolean };
 export type Payment = { id: string; date: string; amount: number; method: PaymentMethod; reference?: string; note?: string };
 export type Invoice = {
   id: string;
@@ -42,6 +49,8 @@ export type Invoice = {
   /** Draft until it's sent; paid and overdue are worked out from the payments and the due date. */
   status: "draft" | "sent" | "cancelled";
   payments: Payment[];
+  /** The one piece this invoice bills for, when it was made for it automatically. */
+  source?: { kind: PieceKind; id: string };
   createdAt: string;
   updatedAt: string;
 };
@@ -104,7 +113,12 @@ export function readInvoice(raw: Record<string, unknown>, base: Invoice): { invo
     if (!description) errors.push(`Line ${i + 1} needs a description.`);
     if (!(quantity > 0)) errors.push(`Line ${i + 1}: the quantity must be more than 0.`);
     if (!(price >= 0)) errors.push(`Line ${i + 1}: the price must be 0 or more.`);
-    return { description, quantity, price };
+    // A line made for a piece keeps its piece and details; a price typed by hand stops following the price list.
+    const source = item.source as InvoiceItem["source"];
+    const known = source && base.items.find((line) => line.source?.kind === source.kind && line.source.id === source.id);
+    if (!known) return { description, quantity, price };
+    const detail = text(item.detail, 600) || known.detail;
+    return { description, quantity, price, ...(detail ? { detail } : {}), source: known.source, rated: Boolean(known.rated && price === known.price) };
   });
   if (!items.length) errors.push("Add at least one line.");
   const pick = <T>(key: string, check: (value: unknown) => boolean, fallback: T): T => (key in raw ? (check(raw[key]) ? (raw[key] as T) : (errors.push(`${key} is not valid.`), fallback)) : fallback);
@@ -217,7 +231,7 @@ const fmt = (n: number, currency: string) => `${n.toLocaleString("en-US", { mini
 export function invoiceHtml(invoice: Invoice, client: Client): string {
   const t = totals(invoice);
   const state = stateOf(invoice);
-  const rows = invoice.items.map((item) => `<tr><td dir="auto">${esc(item.description)}</td><td class="n">${item.quantity}</td><td class="n">${fmt(item.price, invoice.currency)}</td><td class="n">${fmt(item.quantity * item.price, invoice.currency)}</td></tr>`).join("");
+  const rows = invoice.items.map((item) => `<tr><td dir="auto">${esc(item.description)}${item.detail ? `<div class="detail">${esc(item.detail)}</div>` : ""}</td><td class="n">${item.quantity}</td><td class="n">${fmt(item.price, invoice.currency)}</td><td class="n">${fmt(item.quantity * item.price, invoice.currency)}</td></tr>`).join("");
   const payments = invoice.payments.length
     ? `<h3>Payments received</h3><table><tr><th>Date</th><th>Method</th><th>Reference</th><th class="n">Amount</th></tr>${invoice.payments.map((p) => `<tr><td>${p.date}</td><td>${METHOD_LABELS[p.method]}</td><td dir="auto">${esc(p.reference ?? "")}</td><td class="n">${fmt(p.amount, invoice.currency)}</td></tr>`).join("")}</table>`
     : "";
@@ -233,6 +247,7 @@ h1{font-size:28px;margin:0 0 4px}h3{margin:24px 0 8px;font-size:14px}
 table{width:100%;border-collapse:collapse}th{text-align:start;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b6b76;border-bottom:1px solid #ddd;padding:6px 4px}
 td{padding:8px 4px;border-bottom:1px solid #eee;vertical-align:top}.n{text-align:end;white-space:nowrap}
 .totals{width:300px;margin-inline-start:auto;margin-top:12px}.totals td{border:none;padding:3px 4px}.totals .strong td{font-weight:700;font-size:15px;border-top:1px solid #ccc;padding-top:8px}
+.detail{color:#6b6b76;font-size:11.5px;margin-top:2px}
 .box{white-space:pre-wrap;background:#f6f6f8;border-radius:8px;padding:12px}
 </style></head><body>
 <header><div><h1>Invoice</h1><div class="muted">${esc(invoice.number)}</div></div><div style="text-align:end"><span class="state ${state.replace(" ", "-")}">${state}</span><div class="muted" style="margin-top:6px">Issued ${invoice.issueDate}<br>Due ${invoice.dueDate}</div></div></header>

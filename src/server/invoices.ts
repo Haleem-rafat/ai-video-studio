@@ -1,5 +1,6 @@
 import { deleteInvoice, invoicePdf, listInvoices, loadInvoice, newInvoice, readInvoice, readPayment, saveInvoice, summaryOf, viewOf } from "../clients/invoices.ts";
-import { loadClient } from "../clients/store.ts";
+import { DEFAULT_CURRENCY, PIECE_KINDS, readRates, syncInvoices } from "../clients/billing.ts";
+import { loadClient, saveClient } from "../clients/store.ts";
 import type { Ctx } from "./clients.ts";
 
 /**
@@ -15,10 +16,25 @@ export async function handleInvoices(ctx: Ctx): Promise<boolean> {
     throw fail(404, `No client "${clientId}"`);
   });
 
+  // The price list every piece's invoice is made with; saving it brings the drafts up to date.
+  if (invoiceId === "rates" && !action) {
+    if (method !== "PUT") return false;
+    const { rates, errors } = readRates(await body<Record<string, unknown>>(request));
+    if (!rates) throw fail(400, errors.join(" "));
+    const fresh = await loadClient(clientId);
+    await saveClient({ ...fresh, rates });
+    const done = await syncInvoices(clientId);
+    json(response, 200, { rates, ...done });
+    return true;
+  }
+
   if (!invoiceId) {
     if (method === "GET") {
+      // Every piece made since the last look gets its invoice before the list is shown.
+      await syncInvoices(clientId);
       const invoices = await listInvoices(clientId);
-      json(response, 200, { invoices: invoices.map((invoice) => viewOf(invoice)), summary: summaryOf(invoices) });
+      const rates = (await loadClient(clientId)).rates ?? { currency: DEFAULT_CURRENCY, ...Object.fromEntries(PIECE_KINDS.map((kind) => [kind, 0])) };
+      json(response, 200, { invoices: invoices.map((invoice) => viewOf(invoice)), summary: summaryOf(invoices), rates });
       return true;
     }
     if (method === "POST") {

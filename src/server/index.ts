@@ -1,3 +1,5 @@
+import { syncInvoices } from "../clients/billing.ts";
+import { listClients } from "../clients/store.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readFile, rename, stat } from "node:fs/promises";
@@ -456,7 +458,16 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
       action === "build" || action === "preview"
         ? enqueue("Voice, pictures and preview", () => build(id, { images: options.images ?? true, render: false }), id)
         : action === "render"
-          ? enqueue(`Render video (${options.quality ?? "standard"})`, () => render(id, options.quality ?? "standard"), id)
+          ? enqueue(
+              `Render video (${options.quality ?? "standard"})`,
+              async (log) => {
+                const done = await render(id, options.quality ?? "standard", log);
+                // A video made for a client gets its invoice once it exists.
+                if (done.marketing) for (const client of await listClients()) await syncInvoices(client.id).catch(() => undefined);
+                return done;
+              },
+              id,
+            )
           : enqueue("Fact-check script", () => factCheck(id), id);
     return json(response, 202, job);
   }

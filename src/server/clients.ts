@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { makeIdeas } from "../clients/ideas.ts";
+import { syncInvoices } from "../clients/billing.ts";
 import { claimIdea, compareVariant, deletePost, ideaFromProject, makePost, recoverInterrupted, rerenderPost } from "../clients/make.ts";
 import { hostOf, loadLibrary } from "../clients/library.ts";
 import { draftKnowledge, foldAnswer, type Knowledge } from "../clients/knowledge.ts";
@@ -85,6 +86,8 @@ function queueMake(client: Client, idea: Idea, options: { artStyle?: string; pic
         ...(isFormat(options.format) ? { format: options.format } : {}),
         ...(isReelStyle(options.reelStyle) ? { reelStyle: options.reelStyle } : {}),
       });
+      // The new piece gets its invoice at once.
+      await syncInvoices(clientId).catch((error) => log(`invoices: not updated (${error instanceof Error ? error.message : error})`));
       return post.projectId ?? post.id;
     },
     undefined,

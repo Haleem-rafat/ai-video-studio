@@ -19,6 +19,8 @@ import type { ContentDirection, Dialect, DirectionMode } from "../src/clients/di
 export type { ContentDirection, Dialect, DirectionMode };
 import type { Currency, Invoice, InvoiceItem, InvoiceState, InvoiceView, Payment, PaymentMethod } from "../src/clients/invoices.ts";
 export type { Currency, Invoice, InvoiceItem, InvoiceState, InvoiceView, Payment, PaymentMethod };
+import type { Rates } from "../src/clients/billing.ts";
+export type { Rates };
 
 export type { Knowledge, Promo, PromoOptions };
 export type { AnswerError, ChatPreview, ProfileView, Purpose, Value };
@@ -190,7 +192,8 @@ export const api = {
     if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? `${response.status}`);
     return response.text();
   },
-  invoices: (id: string) => call<{ invoices: InvoiceView[]; summary: Record<string, { invoiced: number; paid: number; outstanding: number; overdue: number }> }>("GET", `/api/clients/${id}/invoices`),
+  invoices: (id: string) => call<{ invoices: InvoiceView[]; summary: Record<string, { invoiced: number; paid: number; outstanding: number; overdue: number }>; rates: Rates }>("GET", `/api/clients/${id}/invoices`),
+  saveRates: (id: string, rates: Rates) => call<{ rates: Rates; created: number; updated: number; cancelled: number }>("PUT", `/api/clients/${id}/invoices/rates`, rates),
   createInvoice: (id: string, input: Partial<Invoice> = {}) => call<InvoiceView>("POST", `/api/clients/${id}/invoices`, input),
   saveInvoice: (id: string, invoiceId: string, input: Partial<Invoice>) => call<InvoiceView>("PUT", `/api/clients/${id}/invoices/${invoiceId}`, input),
   deleteInvoice: (id: string, invoiceId: string) => call<{ ok: true }>("DELETE", `/api/clients/${id}/invoices/${invoiceId}`),

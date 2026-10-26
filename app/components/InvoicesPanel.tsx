@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { BanknoteIcon, FileDownIcon, PencilIcon, PlusIcon, ReceiptIcon, Trash2Icon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, invoicePdfUrl, type Client, type Currency, type Invoice, type InvoiceState, type InvoiceView, type PaymentMethod } from "../api.ts";
+import { api, invoicePdfUrl, type Client, type Currency, type Invoice, type InvoiceState, type InvoiceView, type PaymentMethod, type Rates } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,13 +31,15 @@ export function InvoicesPanel({ client }: { client: Client }) {
   const [summary, setSummary] = useState<Summary>({});
   const [editing, setEditing] = useState<InvoiceView | null>(null);
   const [paying, setPaying] = useState<InvoiceView | null>(null);
+  const [rates, setRates] = useState<Rates | null>(null);
 
   const refresh = () =>
     api
       .invoices(client.id)
-      .then(({ invoices, summary }) => {
+      .then(({ invoices, summary, rates }) => {
         setInvoices(invoices);
         setSummary(summary);
+        setRates((current) => current ?? rates);
       })
       .catch((error: Error) => toast.error(error.message));
   useEffect(() => void refresh(), [client.id]);
@@ -57,8 +59,10 @@ export function InvoicesPanel({ client }: { client: Client }) {
         <Button onClick={create}>
           <PlusIcon /> New invoice
         </Button>
-        <span className="text-xs text-muted-foreground">Numbered across all clients; paid and overdue are worked out from the payments and due dates.</span>
+        <span className="text-xs text-muted-foreground">Every reel, carousel, post and video gets its own invoice automatically. Numbered across all clients; paid and overdue are worked out from the payments and due dates.</span>
       </div>
+
+      {rates && <PriceList clientId={client.id} rates={rates} onChange={setRates} onSaved={refresh} />}
 
       {Object.entries(summary).map(([currency, row]) => (
         <div key={currency} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -94,6 +98,14 @@ export function InvoicesPanel({ client }: { client: Client }) {
                 Issued {when(`${invoice.issueDate}T12:00`, false)} · due {when(`${invoice.dueDate}T12:00`, false)}
               </span>
             </div>
+            {invoice.source && (
+              <div className="grid min-w-0 flex-1 basis-60">
+                <span className="truncate text-sm" dir="auto">
+                  {invoice.items[0]?.description}
+                </span>
+                <span className="truncate text-xs text-muted-foreground">{invoice.items[0]?.detail}</span>
+              </div>
+            )}
             <Badge variant={STATE_TONE[invoice.state]} className="capitalize">
               {invoice.state}
             </Badge>
@@ -165,6 +177,61 @@ export function InvoicesPanel({ client }: { client: Client }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+const PIECES: { kind: keyof Omit<Rates, "currency">; label: string }[] = [
+  { kind: "reel", label: "Reel" },
+  { kind: "carousel", label: "Carousel" },
+  { kind: "single", label: "Single post" },
+  { kind: "video", label: "Video" },
+];
+
+/** The client's price per piece: every piece's invoice is priced from it, and saving it updates the drafts. */
+function PriceList({ clientId, rates, onChange, onSaved }: { clientId: string; rates: Rates; onChange: (rates: Rates) => void; onSaved: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const save = () => {
+    setBusy(true);
+    api
+      .saveRates(clientId, rates)
+      .then(({ updated, created }) => {
+        toast.success(`Prices saved${updated || created ? ` · ${updated} draft(s) updated${created ? `, ${created} new` : ""}` : ""}`);
+        onSaved();
+      })
+      .catch((error: Error) => toast.error(error.message))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="grid gap-3 rounded-xl border p-3">
+      <div className="grid gap-0.5">
+        <span className="text-sm font-medium">Price per piece</span>
+        <span className="text-xs text-muted-foreground">Draft invoices follow these prices. Sent or paid invoices never change, and a price typed on a line stays.</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(4,1fr)_7rem_auto] sm:items-end">
+        {PIECES.map(({ kind, label }) => (
+          <Field key={kind} label={label}>
+            <Input type="number" min={0} step="any" value={rates[kind]} onChange={(event) => onChange({ ...rates, [kind]: event.target.value === "" ? 0 : Number(event.target.value) })} />
+          </Field>
+        ))}
+        <Field label="Currency">
+          <Select value={rates.currency} onValueChange={(currency) => onChange({ ...rates, currency: currency as Currency })}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCIES.map((currency) => (
+                <SelectItem key={currency} value={currency}>
+                  {currency}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Button onClick={save} disabled={busy}>
+          Save prices
+        </Button>
+      </div>
     </div>
   );
 }
@@ -263,7 +330,15 @@ function InvoiceDialog({ clientId, invoice, onClose, onSaved, onPay }: { clientI
             <span className="text-sm font-medium">Lines</span>
             {draft.items.map((item, i) => (
               <div key={i} className="grid grid-cols-[1fr_5rem_7rem_auto] items-center gap-2">
-                <Input value={item.description} dir="auto" placeholder="What was done" onChange={(event) => setItem(i, { description: event.target.value })} />
+                <div className="grid gap-1">
+                  <Input value={item.description} dir="auto" placeholder="What was done" onChange={(event) => setItem(i, { description: event.target.value })} />
+                  {(item.detail || item.rated) && (
+                    <span className="px-1 text-xs text-muted-foreground">
+                      {item.detail}
+                      {item.rated && <> · price from the price list</>}
+                    </span>
+                  )}
+                </div>
                 <Input type="number" min={0} step="any" value={item.quantity} aria-label="Quantity" onChange={(event) => setItem(i, { quantity: event.target.value === "" ? 0 : Number(event.target.value) })} />
                 <Input type="number" min={0} step="any" value={item.price} aria-label="Price" onChange={(event) => setItem(i, { price: event.target.value === "" ? 0 : Number(event.target.value) })} />
                 <Button size="icon" variant="ghost" aria-label="Remove line" disabled={draft.items.length === 1} onClick={() => set({ items: draft.items.filter((_, n) => n !== i) })}>
