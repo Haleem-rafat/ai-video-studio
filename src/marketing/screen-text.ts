@@ -37,9 +37,10 @@ export function screenTextPrompt(scenes: MarketingScene[], language: string): st
 Language: ${language}. Every on-screen word in it.
 
 Rules:
-- The headline, tags (words) and cards (items) are short phrases taken from the voice-over's own words, so a viewer reads what they hear. Never words the voice doesn't say.
-- Keep the same number of tags and cards, the same kind of text in each place, and about the same length: the layout is fixed.
-- Where the old text still matches the new voice-over, keep it exactly.
+- Change only what the new voice-over contradicts or no longer says. Text that still fits stays exactly as it is.
+- What you change uses the voice-over's own words, so a viewer reads what they hear: the headline and tags (words) are short phrases from it.
+- Cards (items) keep their job in the beat: split cards are a before (label: the messy way) → after (value: the clean way) pair, and may name the before in plain words even when the voice only says the after; notify cards are a notification's title and detail; path and chaos cards are short stations or pieces; stat's one card is the number and its meaning.
+- Keep the same number of tags and cards and about the same length: the layout is fixed.
 - Numbers in digits, as the voice-over writes them.
 
 ${scenes
