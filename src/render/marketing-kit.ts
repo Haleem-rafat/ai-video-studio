@@ -82,9 +82,10 @@ export function boxFor(project: Project, captions: boolean, arabic: boolean): Bo
   const dir = arabic ? -1 : 1;
   if (project.format === "short") {
     // Shorts and Reels cover the bottom ~380px with buttons and the caption.
-    return { W, H, short: true, headTop: 190, stageTop: 300, stageH: 960, chipsTop: captions ? 1285 : 1330, capTop: 1410, dir };
+    // With captions the tags sit higher: the big captions and the camera's slow push-in would otherwise meet them.
+    return { W, H, short: true, headTop: 190, stageTop: 300, stageH: 960, chipsTop: captions ? 1250 : 1330, capTop: 1410, dir };
   }
-  return { W, H, short: false, headTop: 64, stageTop: 150, stageH: 730, chipsTop: captions ? 892 : 925, capTop: 975, dir };
+  return { W, H, short: false, headTop: 64, stageTop: 150, stageH: 730, chipsTop: captions ? 880 : 925, capTop: 975, dir };
 }
 
 export const ICONS = {
