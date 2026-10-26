@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -13,10 +13,13 @@ import { requireEnv, type Channel } from "../config.ts";
 import type { Scene, Word } from "../types.ts";
 import { recordElevenLabs } from "../usage.ts";
 import { reportProgress } from "../progress.ts";
-import { spokenOf } from "./spoken.ts";
+import { misheard, spokenOf } from "./spoken.ts";
 
 const run = promisify(execFile);
 const MODEL_ID = "eleven_multilingual_v2";
+/** Gemini takes tried per scene at most, and the share of misheard words a take may have and still be kept at once. */
+const TAKES = 3;
+const CLEAR_TAKE = 0.12;
 
 type Alignment = {
   characters: string[];
@@ -112,36 +115,52 @@ export function narratorKey(channel: Channel): string {
 export async function voiceSceneGemini(projectDir: string, scene: Scene, channel: Channel): Promise<void> {
   const narrator = channel.narrator!;
   const spoken = spokenOf(scene);
-  const { audio } = await generateSpeech({
-    model: "google/gemini-3.8-flash-tts",
-    voice: narrator.voice,
-    text: spoken,
-    instructions: narrator.style ?? `Read naturally in ${channel.dialect ?? (channel.language === "ar" ? "Arabic" : "English")}: ${channel.tone}`,
-  });
   const key = narratorKey(channel);
   const take = createHash("sha1").update(`${key}:${spoken}`).digest("hex").slice(0, 8);
   const path = `audio/${scene.id}-${take}.mp3`;
-  const raw = join(projectDir, `audio/${scene.id}-${take}.raw`);
-
   await mkdir(join(projectDir, "audio"), { recursive: true });
-  await writeFile(raw, audio.uint8Array);
-  // Trims the silence Gemini leaves at both ends, then speeds the take up if asked (atempo keeps the pitch).
-  const tempo = narrator.speed && narrator.speed !== 1 ? `,atempo=${narrator.speed}` : "";
-  await run("ffmpeg", ["-v", "error", "-y", "-i", raw, "-af", `silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse${tempo}`, "-ar", "44100", "-b:a", "160k", join(projectDir, path)]);
-  await run("rm", ["-f", raw]);
 
-  const heard = await transcribe({
-    model: "openai/whisper-1",
-    audio: await readFile(join(projectDir, path)),
-    providerOptions: { openai: { language: channel.language ?? "en", timestampGranularities: ["word"] } },
-  });
+  // Gemini misreads some takes (Arabic most: «السعر» as «السارة»), differently each time, so
+  // each take is listened back and a misread one is spoken again; the clearest take is kept.
+  let best: { file: string; wrong: number; words: Word[] } | undefined;
+  for (let attempt = 1; attempt <= TAKES; attempt++) {
+    const file = `audio/${scene.id}-${take}.take${attempt}.mp3`;
+    const { audio } = await generateSpeech({
+      model: "google/gemini-3.8-flash-tts",
+      voice: narrator.voice,
+      text: spoken,
+      instructions: narrator.style ?? `Read naturally in ${channel.dialect ?? (channel.language === "ar" ? "Arabic" : "English")}: ${channel.tone}`,
+    });
+    const raw = join(projectDir, `${file}.raw`);
+    await writeFile(raw, audio.uint8Array);
+    // Trims the silence Gemini leaves at both ends, then speeds the take up if asked (atempo keeps the pitch).
+    const tempo = narrator.speed && narrator.speed !== 1 ? `,atempo=${narrator.speed}` : "";
+    await run("ffmpeg", ["-v", "error", "-y", "-i", raw, "-af", `silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse${tempo}`, "-ar", "44100", "-b:a", "160k", join(projectDir, file)]);
+    await run("rm", ["-f", raw]);
 
+    const heard = await transcribe({
+      model: "openai/whisper-1",
+      audio: await readFile(join(projectDir, file)),
+      providerOptions: { openai: { language: channel.language ?? "en", timestampGranularities: ["word"] } },
+    });
+    const words = heard.segments.map((word) => ({ text: word.text, start: word.startSecond, end: word.endSecond }));
+    const wrong = misheard(spoken, words.map((word) => word.text).join(" "));
+    if (!best || wrong < best.wrong) {
+      if (best) await run("rm", ["-f", join(projectDir, best.file)]);
+      best = { file, wrong, words };
+    } else {
+      await run("rm", ["-f", join(projectDir, file)]);
+    }
+    if (best.wrong <= CLEAR_TAKE) break;
+  }
+
+  await rename(join(projectDir, best!.file), join(projectDir, path));
   scene.audio = {
     path,
     text: spoken,
     voiceId: key,
     seconds: await audioSeconds(join(projectDir, path)),
-    words: heard.segments.map((word) => ({ text: word.text, start: word.startSecond, end: word.endSecond })),
+    words: best!.words,
   };
 }
 

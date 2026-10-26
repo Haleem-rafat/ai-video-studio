@@ -19,7 +19,7 @@ const readFile = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-const SOURCES: Record<NonNullable<Photo["source"]>, string> = { commons: "Wikimedia Commons", upload: "Your photo", ai: "AI picture" };
+const SOURCES: Record<NonNullable<Photo["source"]>, string> = { commons: "Wikimedia Commons", upload: "Your photo", ai: "AI picture", press: "Official press photo" };
 
 /** Where a photo came from, with its credit as the tooltip. */
 export function PhotoSource({ photo }: { photo?: Photo }) {

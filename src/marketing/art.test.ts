@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { artPlanPrompt, artRepeats } from "./art.ts";
+import { artPeople, artPlanPrompt, artRepeats } from "./art.ts";
 import type { Project } from "../types.ts";
 
 const project = {
@@ -27,4 +27,17 @@ test("a plan that reuses a style or a picture is caught", () => {
   const repeats = artRepeats({ style: "soft 3D clay render with rounded shapes and studio lighting", subjects: ["a coach answering messages late at night at her desk", "a lighthouse at dawn"] }, avoid);
   assert.equal(repeats.length, 2);
   assert.deepEqual(artRepeats({ style: "risograph print, grainy two-colour", subjects: ["a lighthouse at dawn"] }, avoid), []);
+});
+
+test("an Arabic video's people look like its audience: Egyptian by default, Gulf for a Gulf reel", () => {
+  const arabic = { ...project, marketing: { ...project.marketing!, language: "ar" } } as Project;
+  assert.match(artPlanPrompt(arabic), /Egyptian/);
+  assert.match(artPeople(arabic.marketing!), /Arab/);
+  const gulf = { ...project, marketing: { ...project.marketing!, language: "ar", dialect: "gulf" } } as Project;
+  assert.match(artPeople(gulf.marketing!), /Gulf|Saudi|Emirati/);
+  assert.doesNotMatch(artPeople(gulf.marketing!), /Egyptian/);
+});
+
+test("an English video's people aren't steered", () => {
+  assert.equal(artPeople({ ...project.marketing!, language: "en" }), "");
 });

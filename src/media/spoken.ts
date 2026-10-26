@@ -76,3 +76,41 @@ export function sameLetters(plain: string, marked: string): boolean {
 export function spokenOf(scene: { narration: string; speech?: { for: string; text: string } }): string {
   return scene.speech && scene.speech.for === scene.narration ? scene.speech.text : scene.narration;
 }
+
+/** Arabic as a listener writes it: no vowel marks or tatweel, one alef, ه for ة, ي for ى, no punctuation. */
+const plainWords = (text: string) =>
+  toLatinDigits(text)
+    .replace(/[ً-ْٰـ]/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+
+// Number words in either dialect: a listener may write any number as digits or words, so numbers aren't scored.
+const NUMBER_WORDS = new Set(
+  [...ONES, ...COUNTING, ...TEENS, ...TENS, ...HUNDREDS, "اثنين", "اثنان", "ثلاثه", "ثلاث", "ثمانيه", "ثماني", "الاول", "الاولي", "الثاني", "الثانيه", "الثالث", "الثالثه", "التالت", "التالته", "الرابع", "الرابعه"]
+    .filter(Boolean)
+    .flatMap((word) => plainWords(word)),
+);
+const scored = (text: string) => plainWords(text).filter((word) => !/\d/.test(word) && !NUMBER_WORDS.has(word.replace(/^و(?=..)/, "")));
+
+/**
+ * How much of a take the listener heard wrong: word edits between the script
+ * and what Whisper heard, over the script's words (0 = said exactly). Marks,
+ * punctuation, alef and ta marbuta spellings and numbers don't count.
+ */
+export function misheard(script: string, heard: string): number {
+  const a = scored(script);
+  const b = scored(heard);
+  if (!a.length) return 0;
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length] / a.length;
+}

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { egyptianNumbers, pronounce, sameLetters, spokenOf, spokenText } from "./spoken.ts";
+import { egyptianNumbers, misheard, pronounce, sameLetters, spokenOf, spokenText } from "./spoken.ts";
 
 test("numbers before a noun use the Egyptian counting form", () => {
   assert.equal(egyptianNumbers("غلطتك في 3 حاجات"), "غلطتك في تلات حاجات");
@@ -47,4 +47,19 @@ test("English words in Arabic narration are found, and longer names are said bef
   assert.equal(pronounce("املا الـ Google Form من Google", COMMON_WORDS), "املا الـ جوجل فورم من جوجل");
   assert.equal(pronounce("شوف الـ bio واللينك في الـ Bio", COMMON_WORDS), "شوف الـ بايو واللينك في الـ بايو");
   assert.equal(pronounce("Risero على instagram", { ...COMMON_WORDS, Risero: "رايزرو" }), "رايزرو على إنستجرام");
+});
+
+test("misheard: a take that says the script scores 0, whatever its marks, punctuation or spelling of alef and ta marbuta", () => {
+  assert.equal(misheard("السِّعر كام؟ مش سُؤال عن الرَّقم.. ده سُؤال عن الثِّقة.", "السعر كام، مش سؤال عن الرقم ده سؤال عن الثقه"), 0);
+  assert.equal(misheard("أكتر غلطة؟ ترد برقم", "اكتر غلطه ترد برقم"), 0);
+});
+
+test("misheard: numbers count as said however the listener writes them", () => {
+  assert.equal(misheard("الخُطوة اِتنين: وضّح السعر", "الخطوة 2 وضح السعر"), 0);
+});
+
+test("misheard: words the voice got wrong count against the take", () => {
+  // The take read «السعر» as «السارة» and «قصيرة» as «أو سيارة».
+  const score = misheard("السعر كام؟ تحب نحدد مكالمة قصيرة", "السارة كم تحب نحدد مكالمة أو سيارة");
+  assert.ok(score > 0.4, `scored ${score}`);
 });

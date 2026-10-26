@@ -9,7 +9,7 @@ import { cutout } from "../media/products.ts";
 import { inBatches } from "../media/voice.ts";
 import { reportProgress } from "../progress.ts";
 import { recordImage } from "../usage.ts";
-import type { Photo, Project, Scene } from "../types.ts";
+import type { MarketingSetup, Photo, Project, Scene } from "../types.ts";
 import { PICTURE_REPEAT_AT, pictureRepeats, similarity } from "../clients/history.ts";
 
 const ART_MODEL = "anthropic/claude-sonnet-5.5";
@@ -35,6 +35,18 @@ const PLAN = z.object({
  * pictures that stand in for social posts. Nothing is taken from the
  * website, so no frame repeats its screenshots or its owner's photo.
  */
+/**
+ * Who the people in an Arabic video's pictures are: its audience. Image models
+ * default to Western, East Asian and other faces and rooms, which an Egyptian
+ * or Gulf viewer doesn't see as themselves. Empty for other languages.
+ */
+export function artPeople(m: Pick<MarketingSetup, "language" | "dialect">): string {
+  if (m.language !== "ar") return "";
+  return m.dialect === "gulf"
+    ? "Every person shown is a Gulf Arab (Saudi, Emirati, Kuwaiti look; men may wear a thobe and ghutra, women an abaya and shayla or modern modest clothes), in a modern Gulf setting (Riyadh, Dubai)"
+    : "Every person shown is an Egyptian Arab (Middle Eastern features, modern Cairo clothes; some women with a hijab), in a modern Egyptian setting (Cairo flat, office, café, street)";
+}
+
 /** What the art director is asked; a client's earlier styles and pictures are added when the video knows them. */
 export function artPlanPrompt(project: Project): string {
   const m = project.marketing!;
@@ -49,7 +61,7 @@ Rules:
 - One consistent art style across the whole video, lit and coloured in the brand's palette (deep ${c.background} shadows, ${c.accent} and ${c.cta} light).
 - Every scene's backdrop is a different picture that tells that scene's idea. Never repeat a subject.
 - Pictures never contain text, letters, numbers, logos, user interfaces or screenshots.
-- People are welcome (the audience: coaches, consultants, service providers), shown naturally.
+- People are welcome (the audience: coaches, consultants, service providers), shown naturally.${artPeople(m) ? `\n- ${artPeople(m)}. Write that into every picture that shows a person.` : ""}
 - Give a floating object only to the scenes whose beat is turn, kinetic or stat (they are words alone); leave it empty everywhere else.
 
 The scenes (beat: narration):
@@ -81,7 +93,8 @@ export async function directArt(project: Project, log: (message: string) => void
     ({ output } = await plan(`\n\nYOUR FIRST PLAN REPEATED EARLIER VIDEOS:\n${repeats.map((note) => `- ${note}`).join("\n")}\nPlan again without them.`));
   }
 
-  const look = (prompt: string) => `${prompt}. ${output.style}. Colour palette: deep ${c.background}, ${c.accent} and ${c.cta} highlights. No text, no letters, no logos, no user interface`;
+  const people = artPeople(m);
+  const look = (prompt: string) => `${prompt}. ${output.style}.${people ? ` ${people}.` : ""} Colour palette: deep ${c.background}, ${c.accent} and ${c.cta} highlights. No text, no letters, no logos, no user interface`;
   project.scenes.forEach((scene, i) => {
     const plan = output.scenes[i];
     if (!plan || scene.visual.type !== "marketing") return;
