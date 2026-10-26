@@ -33,6 +33,7 @@ import { loadSession, saveSession, sessionDir } from "./marketing/session.ts";
 import { writeMarketing } from "./marketing/write.ts";
 import { directArt, drawArt } from "./marketing/art.ts";
 import { reportProgress } from "./progress.ts";
+import { stillMoments } from "./media/motion.ts";
 import { prepareProjectSpeech } from "./clients/speech.ts";
 import { appendUsage, readUsage, recordLocal } from "./usage.ts";
 import type { FormatId, Project, StyleId, VersusLook } from "./types.ts";
@@ -401,7 +402,12 @@ export async function render(id: string, quality: "draft" | "standard" | "high" 
   }
 
   const seconds = await audioSeconds(join(dir, "video.mp4"));
-  project.render = { path: "video.mp4", seconds, renderedAt: new Date().toISOString() };
+  // Moments where nothing moves lose viewers: they are found and named, never block the render.
+  const stills = await stillMoments(join(dir, "video.mp4")).catch(() => []);
+  const clock = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  if (stills.length) log(`motion: ${stills.length} still moment(s), nothing moves at ${stills.map((still) => `${clock(still.from)}–${clock(still.to)}`).join(", ")}`);
+  else log("motion: no still moments");
+  project.render = { path: "video.mp4", seconds, renderedAt: new Date().toISOString(), ...(stills.length ? { stills } : {}) };
   recordLocal("render", `HyperFrames (${quality}, this Mac)`, Date.now() - started, { audioSeconds: seconds });
   await saveProject(project);
   log(`render: ${seconds.toFixed(1)}s video in ${Math.round((Date.now() - started) / 1000)}s`);

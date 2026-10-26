@@ -197,7 +197,8 @@ export type Project = {
   scenes: Scene[];
   createdAt: string;
   updatedAt: string;
-  render?: { path: string; seconds: number; renderedAt: string };
+  /** `stills`: stretches of 2.5s or more where the picture holds still, found after the render (seconds). */
+  render?: { path: string; seconds: number; renderedAt: string; stills?: { from: number; to: number }[] };
   /** Set once uploaded; `scheduledFor` means it is private until YouTube publishes it then. */
   youtube?: { videoId: string; url: string; privacy: "private" | "unlisted" | "public"; youtubeChannel: string; uploadedAt: string; scheduledFor?: string };
 };

@@ -182,7 +182,8 @@ Rules:
 ${
     value
       ? `- The last scene is the cta beat used as the sign-off: its headline is the closing question or "save this" line (not a button to buy or book), its narration asks the viewer to comment or save; the brand's name may appear there only.
-- Never use the page, booking, traffic or dashboard beats: they show the product.`
+- Never use the page, booking, traffic or dashboard beats: they show the product.
+- Show, don't only tell: put the advice on the screens the viewer lives in. pain is a chat where a customer asks (e.g. «السعر كام؟»), notify is the phone's notifications, conflict is their calendar, links is a chat where they send links, split is before → after. Use at least 3 of these; kinetic (words alone) at most twice.`
       : `- The last scene is the cta: its headline is the button text, its narration says where the link is${format === "short" ? " (in the bio or below the post)" : " (below the video)"}.
 - Use a beat only if the brand really does it (no booking beat without bookings, no dashboard without analytics).`
   }`;

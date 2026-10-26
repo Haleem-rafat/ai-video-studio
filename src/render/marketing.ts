@@ -2,6 +2,7 @@ import { alignWords } from "./align.ts";
 import { postPictures, seeded, bdi, boxFor, esc, ICONS, iconFor, itemTimes, nextDays, phraseTimes, placeMarketing, r, saidAt, socialBadge, type Beat, type Ctx } from "./marketing-kit.ts";
 import { ARABIC, karaoke } from "./arena.ts";
 import { FULL_FRAME, MOTION, motionCss } from "./marketing-motion.ts";
+import { cameraCuts, stepsOf } from "./marketing-pace.ts";
 import type { MarketingItem, MarketingSetup, Project, Scene, SiteBrand } from "../types.ts";
 
 /**
@@ -344,6 +345,16 @@ function fontsLink(brand: SiteBrand, arabic: boolean): string {
   return `https://fonts.googleapis.com/css2?${families.join("&")}&display=block`;
 }
 
+/**
+ * One caption word as HTML. An English word or number runs left to right with
+ * its punctuation kept outside, so «2:» in an Arabic line reads «2:», not «:2».
+ */
+export function captionWord(word: string): string {
+  if (ARABIC.test(word)) return esc(word);
+  const [, core, mark] = word.match(/^(.*?)([.,،:؛؟?!…]*)$/)!;
+  return `<bdi dir="ltr">${esc(core)}</bdi>${esc(mark)}`;
+}
+
 /** Beats whose picture is a device or the real page: no photo behind them, the screen is the picture. */
 const DEVICE_BEATS = ["journey", "page", "booking", "traffic", "dashboard"];
 
@@ -356,7 +367,8 @@ export function buildMarketing(project: Project): string {
   if (!m) throw new Error("This project has no brand to market");
   const brand = m.brand;
   const arabic = m.language === "ar";
-  const locale = arabic ? "ar-EG" : "en-US";
+  // Western digits on screen in Arabic too, the same as the captions and the script, never "1" beside "٩:٤١".
+  const locale = arabic ? "ar-EG-u-nu-latn" : "en-US";
   const B = boxFor(project, m.captions, arabic);
   const { scenes, outro, total } = placeMarketing(project);
   const c = brand.colors;
@@ -368,7 +380,9 @@ export function buildMarketing(project: Project): string {
   const blocks: string[] = [];
   const scripts: string[] = [];
   const captions: string[] = [];
-  const timeline: { start: number; dur: number; next: number | null; chips: number[]; lines: number[][] }[] = [];
+  const timeline: { start: number; dur: number; next: number | null; chips: number[]; lines: number[][]; cuts: number[]; step: number | null }[] = [];
+  const steps = stepsOf(scenes);
+  const stepTotal = steps.find(Boolean)?.total ?? 0;
   scenes.forEach((s, k) => {
     const next = scenes[k + 1]?.start ?? null;
     // The website is shown once: a later page scene tells its words over the scene's own art instead.
@@ -381,17 +395,19 @@ export function buildMarketing(project: Project): string {
     const photo = s.visual.backdrop?.path ?? null;
     // Objects float only beside scenes that are words alone, so they never cover a device or a card.
     const object = ["turn", "kinetic", "stat"].includes(shown) ? (s.visual.object?.path ?? null) : null;
-    blocks.push(`<section class="sc b-${shown}" id="sc${k}">
+    blocks.push(`<section class="sc b-${shown}" id="sc${k}"><div class="cam" id="cm${k}">
       ${photo ? `<div class="scbg${DEVICE_BEATS.includes(shown) ? " faint" : ""}"><img src="${photo}" /></div>` : ""}
       ${object ? `<img class="obj" id="ob${k}" src="${object}" />` : ""}
       ${own ? "" : `<h2 class="hd">${bdi(s.visual.headline)}</h2>`}
       <div class="stage">${html}</div>
       ${chips.length && !wordless(shown) ? `<div class="chips">${chips.map((word, j) => `<span class="chip" id="w${k}_${j}">${bdi(word)}</span>`).join("")}</div>` : ""}
-    </section>`);
+    </div></section>`);
     scripts.push(js);
-    const lines = m.captions ? karaoke(s, B.short ? 5 : 8) : [];
-    lines.forEach((line, j) => captions.push(`<div class="cap" id="cp${k}_${j}"><div>${line.words.map((word) => `<span class="w"${ARABIC.test(word) ? "" : ' dir="ltr"'}>${esc(word)}</span>`).join(" ")}</div></div>`));
-    timeline.push({ start: s.start, dur: r(s.seconds), next, chips: wordless(shown) ? [] : phraseTimes(s).slice(0, chips.length), lines: lines.map((line) => line.at) });
+    // Captions of 2-4 words, the word being said lit up; the camera moves on every phrase.
+    const spoken = karaoke(s, B.short ? 3 : 5);
+    const lines = m.captions ? spoken : [];
+    lines.forEach((line, j) => captions.push(`<div class="cap" id="cp${k}_${j}"><div>${line.words.map((word) => `<span class="w">${captionWord(word)}</span>`).join(" ")}</div></div>`));
+    timeline.push({ start: s.start, dur: r(s.seconds), next, chips: wordless(shown) ? [] : phraseTimes(s).slice(0, chips.length), lines: lines.map((line) => line.at), cuts: cameraCuts(spoken.map((line) => line.at[0]), s.seconds), step: steps[k]?.n ?? null });
   });
 
   const prnd = seeded(41);
@@ -594,9 +610,18 @@ export function buildMarketing(project: Project): string {
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
 
   /* subtitles */
-  .cap { position: absolute; top: ${B.capTop}px; left: 50px; right: 50px; z-index: 30; text-align: center; opacity: 0; }
-  .cap > div { display: inline-block; font: 700 ${B.short ? 50 : 40}px/1.35 var(--body); padding: 10px 26px; border-radius: 18px; background: #000a; direction: ${arabic ? "rtl" : "ltr"}; }
-  .cap .w { color: #fff9; } .cap .w.on { color: #fff; }
+  .cap { position: absolute; top: ${B.capTop - (B.short ? 20 : 10)}px; left: 40px; right: 40px; z-index: 30; text-align: center; opacity: 0; }
+  .cap > div { display: inline-block; font: 800 ${B.short ? 64 : 54}px/1.3 var(--head); direction: ${arabic ? "rtl" : "ltr"}; text-shadow: 0 6px 24px #000d, 0 0 3px #000; -webkit-text-stroke: ${B.short ? 2 : 1.5}px #0009; paint-order: stroke fill; }
+  .cap .w { display: inline-block; color: #fff; margin: 0 .13em; } .cap .w.on { color: var(--accent); transform: scale(1.12); }
+
+  /* The camera inside each scene moves on every phrase. */
+  .cam { position: absolute; inset: 0; transform-origin: 50% 45%; }
+
+  /* Numbered steps: how far along the video is. */
+  #steps { position: absolute; z-index: 45; top: ${B.short ? 92 : 22}px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; opacity: 0; direction: ltr; }
+  #steps i { display: block; width: ${B.short ? 84 : 70}px; height: 10px; border-radius: 5px; background: #ffffff26; }
+  #steps i.on { background: var(--accent); box-shadow: 0 0 16px var(--accent); }
+  #steps b { margin-left: 8px; font: 700 ${B.short ? 30 : 26}px var(--body); color: var(--text); }
 </style>
 </head>
 <body>
@@ -605,6 +630,7 @@ export function buildMarketing(project: Project): string {
  <div id="dim"></div>
  ${m?.value ? "" : `<div id="brandbar">${brand.logo ? `<img src="${brand.logo}" />` : ""}<span>${esc(brand.name)}</span></div>`}
  ${blocks.join("\n")}
+ ${stepTotal ? `<div id="steps">${Array.from({ length: stepTotal }, (_, i) => `<i id="st${i + 1}"></i>`).join("")}<b><span id="stn">1</span>/${stepTotal}</b></div>` : ""}
  ${captions.join("\n")}
  <div id="particles">${particles}</div>
  <div id="leak"></div><div id="grain"></div>
@@ -673,8 +699,25 @@ D_.forEach((s, k) => {
     const id = '#cp' + k + '_' + j, end = j + 1 < s.lines.length ? s.start + s.lines[j + 1][0] - .05 : s.start + s.dur + .2;
     tl.fromTo(id, { opacity: 0 }, { opacity: 1, duration: .12, immediateRender: false }, s.start + at[0] - .08);
     tl.set(id, { opacity: 0 }, end);
-    document.querySelectorAll(id + ' .w').forEach((w, i) => tl.set(w, { className: 'w on' }, s.start + at[i]));
+    tl.fromTo(id + ' > div', { scale: .85 }, { scale: 1, duration: .25, ease: 'back.out(2.5)', immediateRender: false }, s.start + at[0] - .08);
+    // Only the word being said is lit.
+    document.querySelectorAll(id + ' .w').forEach((w, i) => {
+      tl.set(w, { className: 'w on' }, s.start + at[i]);
+      if (i + 1 < at.length) tl.set(w, { className: 'w' }, s.start + at[i + 1]);
+    });
   });
+  // The camera moves on every phrase: in, across, up, back; never still for long.
+  s.cuts.forEach((at, i) => {
+    const move = [{ scale: 1.07, x: 0, y: 0 }, { scale: 1.02, x: -24 * DIR, y: 0 }, { scale: 1.05, x: 0, y: -18 }, { scale: 1, x: 24 * DIR, y: 0 }][i % 4];
+    tl.to('#cm' + k, { ...move, duration: .32, ease: 'power3.out' }, s.start + at);
+  });
+  if (s.step) {
+    if (!document.querySelector('#steps').dataset.shown) { document.querySelector('#steps').dataset.shown = 1; tl.fromTo('#steps', { opacity: 0, y: -16 }, { opacity: 1, y: 0, duration: .4, immediateRender: false }, s.start); }
+    tl.set('#st' + s.step, { className: 'on' }, s.start + .1);
+    tl.fromTo('#st' + s.step, { scaleX: .2 }, { scaleX: 1, duration: .45, ease: 'power3.out', immediateRender: false }, s.start + .1);
+    tl.set('#stn', { textContent: s.step }, s.start + .1);
+    if (s.step === ${stepTotal}) tl.to('#steps', { opacity: 0, duration: .3 }, (s.next ?? TOTAL) - .3);
+  }
 });
 
 ${scripts.join("\n")}

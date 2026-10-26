@@ -555,7 +555,7 @@ export function motionCss(B: Box, arabic: boolean): string {
   .sp.after { background: var(--panel); box-shadow: inset 0 0 0 2px var(--accent); clip-path: inset(0 100% 0 0); }
   .sph { font: 800 ${B.short ? 34 : 30}px var(--head); text-transform: uppercase; letter-spacing: 2px; opacity: .8; }
   .sp.after .sph { color: var(--accent); }
-  .spr { display: flex; align-items: center; gap: 16px; font: 600 ${B.short ? 36 : 32}px var(--body); }
+  .spr { display: flex; align-items: center; gap: 16px; font: 600 ${B.short ? 44 : 34}px var(--body); }
   .sp.before .spr { opacity: 0; }
   .spi { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--muted) 25%, transparent); }
   .sp.after .spi { background: var(--accent); color: var(--bg); transform: scale(0); }
@@ -574,8 +574,8 @@ export function motionCss(B: Box, arabic: boolean): string {
   .note { position: absolute; left: 22px; right: 22px; opacity: 0; display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-radius: 26px; background: color-mix(in srgb, var(--text) 10%, var(--panel)); backdrop-filter: blur(10px); box-shadow: 0 16px 40px #0006; }
   .napp { flex: none; width: 62px; height: 62px; border-radius: 16px; overflow: hidden; display: grid; place-items: center; background: var(--bg); color: var(--accent); }
   .napp img { width: 100%; height: 100%; object-fit: contain; } .napp svg { width: 34px; height: 34px; }
-  .ntext { min-width: 0; flex: 1; } .nrow { display: flex; justify-content: space-between; font: 600 ${B.short ? 22 : 18}px var(--body); color: var(--muted); }
-  .ntitle { font: 700 ${B.short ? 30 : 25}px var(--body); } .ndetail { font: 400 ${B.short ? 25 : 21}px var(--body); color: var(--muted); }
+  .ntext { min-width: 0; flex: 1; } .nrow { display: flex; justify-content: space-between; font: 600 ${B.short ? 26 : 20}px var(--body); color: var(--muted); }
+  .ntitle { font: 700 ${B.short ? 38 : 28}px var(--body); } .ndetail { font: 400 ${B.short ? 32 : 24}px var(--body); color: var(--muted); }
 
   /* orbit */
   .orb { position: absolute; width: 0; height: 0; }
@@ -608,17 +608,17 @@ export function motionCss(B: Box, arabic: boolean): string {
   .licon { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--accent); color: var(--bg); } .licon svg { width: 26px; height: 26px; }
   .lcard { position: absolute; width: ${B.short ? 320 : 380}px; opacity: 0; border-radius: 20px; overflow: hidden; background: var(--panel); box-shadow: 0 24px 60px #000a; border: 1.5px solid color-mix(in srgb, var(--muted) 30%, transparent); }
   .lpic { height: ${B.short ? 190 : 230}px; background: center top / cover; }
-  .lcap { padding: 12px 16px; font: 600 ${B.short ? 26 : 22}px var(--body); }
+  .lcap { padding: 12px 16px; font: 600 ${B.short ? 30 : 24}px var(--body); }
 
   /* conflict */
   .week { position: absolute; opacity: 0; border-radius: 30px; padding: 28px 40px; background: var(--panel); border: 1.5px solid color-mix(in srgb, var(--muted) 25%, transparent); box-shadow: 0 40px 100px #000a; }
   .whead { display: flex; align-items: center; gap: 14px; height: 60px; font: 700 ${B.short ? 40 : 34}px var(--head); } .whead svg { width: 40px; height: 40px; color: var(--accent); }
   .wbad { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 999px; background: var(--cta); color: var(--bg); font: 700 ${B.short ? 28 : 24}px var(--body); opacity: 0; } .wbad svg { width: 24px; height: 24px; stroke-width: 3; }
   .wgrid { display: grid; margin-top: 10px; direction: ${arabic ? "rtl" : "ltr"}; }
-  .wday { text-align: center; font: 600 ${B.short ? 24 : 26}px var(--body); color: var(--muted); }
-  .whour { font: 500 ${B.short ? 22 : 22}px var(--body); color: var(--muted); padding-top: 4px; }
+  .wday { text-align: center; font: 600 ${B.short ? 28 : 26}px var(--body); color: var(--muted); }
+  .whour { font: 500 ${B.short ? 26 : 22}px var(--body); color: var(--muted); padding-top: 4px; }
   .wcell { border-top: 1.5px solid color-mix(in srgb, var(--muted) 20%, transparent); }
-  .wev { position: absolute; opacity: 0; transform-origin: top; border-radius: 12px; padding: 8px 12px; font: 600 ${B.short ? 24 : 26}px var(--body); background: color-mix(in srgb, var(--accent) 35%, var(--panel)); border: 1.5px solid var(--accent); overflow: hidden; }
+  .wev { position: absolute; opacity: 0; transform-origin: top; border-radius: 12px; padding: 8px 12px; font: 600 ${B.short ? 28 : 26}px var(--body); background: color-mix(in srgb, var(--accent) 35%, var(--panel)); border: 1.5px solid var(--accent); overflow: hidden; }
   .wev.clash { background: color-mix(in srgb, var(--cta) 35%, var(--panel)); border-color: var(--cta); }
 
   /* the page as an infographic */
