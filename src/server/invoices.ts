@@ -1,4 +1,4 @@
-import { deleteInvoice, invoicePdf, listInvoices, loadInvoice, newInvoice, readInvoice, readPayment, saveInvoice, summaryOf, viewOf } from "../clients/invoices.ts";
+import { allocatePayment, CURRENCIES, deleteInvoice, invoicePdf, listInvoices, loadInvoice, newInvoice, readInvoice, readPayment, saveInvoice, statementPdf, summaryOf, viewOf, type Currency } from "../clients/invoices.ts";
 import { DEFAULT_CURRENCY, PIECE_KINDS, readRates, syncInvoices } from "../clients/billing.ts";
 import { loadClient, saveClient } from "../clients/store.ts";
 import type { Ctx } from "./clients.ts";
@@ -25,6 +25,37 @@ export async function handleInvoices(ctx: Ctx): Promise<boolean> {
     await saveClient({ ...fresh, rates });
     const done = await syncInvoices(clientId);
     json(response, 200, { rates, ...done });
+    return true;
+  }
+
+  // One sheet with everything owed in a currency, to pay at once.
+  if (invoiceId === "statement" && action === "pdf" && method === "GET") {
+    const currency = (CURRENCIES as readonly string[]).includes(ctx.url.searchParams.get("currency") ?? "") ? (ctx.url.searchParams.get("currency") as Currency) : (client.rates?.fromCost ? "USD" : (client.rates?.currency ?? "USD"));
+    await syncInvoices(clientId);
+    const pdf = await statementPdf(await listInvoices(clientId), client, currency);
+    response.writeHead(200, { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${client.id}-statement-${currency}.pdf"` });
+    response.end(pdf);
+    return true;
+  }
+
+  // One payment for everything owed: spread over the open invoices, oldest first.
+  if (invoiceId === "pay-all" && !action && method === "POST") {
+    const raw = await body<Record<string, unknown>>(request);
+    const currency = raw.currency as Currency;
+    if (!(CURRENCIES as readonly unknown[]).includes(currency)) throw fail(400, "Which currency was it paid in?");
+    const { payment, errors } = readPayment(raw);
+    if (!payment) throw fail(400, errors.join(" "));
+    const invoices = await listInvoices(clientId);
+    const { shares, left } = allocatePayment(invoices, payment.amount, currency);
+    if (!shares.length) throw fail(400, `Nothing is owed in ${currency}.`);
+    if (left > 0) throw fail(400, `That is ${left} ${currency} more than everything owed in ${currency}; record the exact total.`);
+    const note = [`Part of one payment of ${payment.amount} ${currency} over ${shares.length} invoice(s)`, payment.note].filter(Boolean).join(" · ");
+    for (const [n, share] of shares.entries()) {
+      const invoice = invoices.find((entry) => entry.id === share.id)!;
+      const part = { ...payment, id: `${payment.id}${n.toString(36)}`, amount: share.amount, note };
+      await saveInvoice({ ...invoice, payments: [...invoice.payments, part].sort((a, b) => a.date.localeCompare(b.date)), status: invoice.status === "draft" ? "sent" : invoice.status });
+    }
+    json(response, 201, { invoices: shares.length, amount: payment.amount, currency });
     return true;
   }
 

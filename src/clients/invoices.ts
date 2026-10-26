@@ -22,7 +22,8 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export const METHOD_LABELS: Record<PaymentMethod, string> = { bank: "Bank transfer", instapay: "InstaPay", "vodafone-cash": "Vodafone Cash", cash: "Cash", card: "Card", paypal: "PayPal", other: "Other" };
 
 /** A piece of work an invoice line bills for: a post, or a video made for the client outside the posts. */
-export type PieceKind = "reel" | "carousel" | "single" | "video";
+/** "planning": a day's ideas and research for the client, billed at its API cost. */
+export type PieceKind = "reel" | "carousel" | "single" | "video" | "planning";
 /**
  * `detail`: what exactly was delivered (format, length, slides, dialect, date).
  * `source`: the piece the line bills for, so it stays up to date by itself.
@@ -82,6 +83,26 @@ export function stateOf(invoice: Invoice, today = localDate()): InvoiceState {
 }
 
 export const viewOf = (invoice: Invoice, today = localDate()): InvoiceView => ({ ...invoice, totals: totals(invoice), state: stateOf(invoice, today) });
+
+/**
+ * One payment spread over a client's open invoices in its currency, oldest
+ * first, each getting at most what it still owes. `left`: what was more than
+ * everything owed.
+ */
+export function allocatePayment(invoices: Invoice[], amount: number, currency: Currency): { shares: { id: string; amount: number }[]; left: number } {
+  const open = invoices
+    .filter((invoice) => invoice.currency === currency && invoice.status !== "cancelled" && totals(invoice).balance > 0)
+    .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || a.number.localeCompare(b.number));
+  const shares: { id: string; amount: number }[] = [];
+  let left = money(amount);
+  for (const invoice of open) {
+    if (left <= 0) break;
+    const share = money(Math.min(left, totals(invoice).balance));
+    shares.push({ id: invoice.id, amount: share });
+    left = money(left - share);
+  }
+  return { shares, left };
+}
 
 /** What a client owes and paid, per currency (invoices in different currencies are never added together). */
 export function summaryOf(invoices: Invoice[], today = localDate()) {
@@ -258,6 +279,54 @@ ${payments}
 ${invoice.paymentInfo ? `<h3>How to pay</h3><div class="box" dir="auto">${esc(invoice.paymentInfo)}</div>` : ""}
 ${invoice.notes ? `<h3>Notes</h3><div class="box" dir="auto">${esc(invoice.notes)}</div>` : ""}
 </body></html>`;
+}
+
+/**
+ * One sheet for everything a client still owes in one currency: each open
+ * invoice with what it was for, and one total, so the client pays once.
+ */
+export function statementHtml(invoices: Invoice[], client: Client, currency: Currency, today = localDate()): string {
+  const open = invoices
+    .filter((invoice) => invoice.currency === currency && invoice.status !== "cancelled" && totals(invoice).balance > 0)
+    .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || a.number.localeCompare(b.number));
+  const sum = (pick: (t: Totals) => number) => money(open.reduce((all, invoice) => all + pick(totals(invoice)), 0));
+  const rows = open
+    .map((invoice) => {
+      const t = totals(invoice);
+      const what = invoice.items.map((item) => `<div dir="auto">${esc(item.description)}</div>${item.detail ? `<div class="detail">${esc(item.detail)}</div>` : ""}`).join("");
+      return `<tr><td class="nowrap">${esc(invoice.number)}<div class="detail">${invoice.issueDate}</div></td><td>${what}</td><td class="n">${fmt(t.total, currency)}</td><td class="n">${t.paid ? fmt(t.paid, currency) : "—"}</td><td class="n">${fmt(t.balance, currency)}</td></tr>`;
+    })
+    .join("");
+  const latest = [...invoices].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).find((invoice) => invoice.paymentInfo)?.paymentInfo ?? "";
+  const billTo = open[0]?.billTo ?? { name: client.name };
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+@page{size:A4;margin:16mm}
+*{box-sizing:border-box}body{font:12px/1.45 -apple-system,"SF Pro Text","Geeza Pro",sans-serif;color:#1b1b1f;margin:0}
+header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px}
+h1{font-size:26px;margin:0 0 4px}h3{margin:22px 0 8px;font-size:13px}.muted{color:#6b6b76}
+table{width:100%;border-collapse:collapse}th{text-align:start;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#6b6b76;border-bottom:1px solid #ddd;padding:6px 4px}
+td{padding:7px 4px;border-bottom:1px solid #eee;vertical-align:top}.n,.nowrap{white-space:nowrap}.n{text-align:end}
+.detail{color:#6b6b76;font-size:10.5px;margin-top:1px}
+.due{margin:16px 0 0 auto;width:320px;border-top:2px solid #1b1b1f;padding-top:10px;display:flex;justify-content:space-between;font-size:17px;font-weight:700}
+.box{white-space:pre-wrap;background:#f6f6f8;border-radius:8px;padding:12px}
+</style></head><body>
+<header><div><h1>Statement</h1><div class="muted">Everything owed, to pay at once · ${today}</div></div><div style="text-align:end"><div class="muted">Billed to</div><strong dir="auto">${esc(billTo.name)}</strong><div class="muted">${esc(client.url)}</div></div></header>
+<table><tr><th>Invoice</th><th>For</th><th class="n">Total</th><th class="n">Paid</th><th class="n">Owed</th></tr>${rows || `<tr><td colspan="5" class="muted">Nothing is owed.</td></tr>`}</table>
+<div class="due"><span>Total to pay · ${open.length} invoice${open.length === 1 ? "" : "s"}</span><span>${fmt(sum((t) => t.balance), currency)}</span></div>
+${latest ? `<h3>How to pay</h3><div class="box" dir="auto">${esc(latest)}</div>` : ""}
+<p class="muted" style="margin-top:18px">One payment of the total settles every invoice above; it is applied to the oldest first.</p>
+</body></html>`;
+}
+
+export async function statementPdf(invoices: Invoice[], client: Client, currency: Currency): Promise<Uint8Array> {
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(statementHtml(invoices, client, currency), { waitUntil: "load" });
+    return await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true });
+  } finally {
+    await browser.close();
+  }
 }
 
 export async function invoicePdf(invoice: Invoice, client: Client): Promise<Uint8Array> {

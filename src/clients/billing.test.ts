@@ -65,3 +65,17 @@ test("priced at API cost: the piece's recorded AI cost, plus the markup, shown o
   assert.equal(itemFor(piece, { ...rates, fromCost: false }).price, 150, "a fixed price list ignores the cost");
   assert.doesNotMatch(itemFor(piece, { ...rates, fromCost: false }).detail!, /API cost/, "and never shows it to the client");
 });
+
+test("a day's ideas and research is one piece, at the API cost recorded that day", async () => {
+  const { planningPieces } = await import("./billing.ts");
+  const entries = [
+    { at: "2026-10-20T09:00:00", cost: 0.25, step: "ideas" },
+    { at: "2026-10-20T15:00:00", cost: 0.151, step: "knowledge" },
+    { at: "2026-10-22T10:00:00", cost: 0.869, step: "ideas" },
+  ] as never[];
+  const pieces = planningPieces(entries);
+  assert.deepEqual(pieces.map((p) => [p.kind, p.id, p.date, Math.round(p.cost! * 1000) / 1000]), [["planning", "2026-10-20", "2026-10-20", 0.401], ["planning", "2026-10-22", "2026-10-22", 0.869]]);
+  assert.match(pieces[0].title, /Ideas & research/);
+  assert.match(pieces[0].detail, /2 AI calls/);
+  assert.equal(itemFor(pieces[0], { currency: "USD", reel: 1, carousel: 1, single: 1, video: 1, planning: 0 }).description.startsWith("Planning: "), true);
+});

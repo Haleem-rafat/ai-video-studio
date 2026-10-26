@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Client } from "./types.ts";
+import type { Invoice } from "./invoices.ts";
 
 process.env.CLIENTS_DIR = mkdtempSync(join(tmpdir(), "invoices-"));
 const { invoiceHtml, listInvoices, newInvoice, nextNumber, readInvoice, readPayment, saveInvoice, stateOf, summaryOf, totals } = await import("./invoices.ts");
@@ -74,4 +75,34 @@ test("the printed invoice escapes what was typed and shows the balance", async (
   assert.match(html, /Balance due/);
   assert.match(html, /60\.00 EGP/);
   assert.match(html, /risero@instapay/);
+});
+
+test("one payment is spread over the open invoices, oldest first, never more than each owes", async () => {
+  const { allocatePayment } = await import("./invoices.ts");
+  const make = (id: string, issueDate: string, price: number, over: Partial<Invoice> = {}) =>
+    ({ id, number: id, issueDate, dueDate: issueDate, currency: "USD", items: [{ description: "x", quantity: 1, price }], discount: 0, taxRate: 0, payments: [], status: "draft", ...over }) as Invoice;
+  const invoices = [
+    make("c", "2026-10-22", 1.0),
+    make("a", "2026-10-18", 0.9),
+    make("b", "2026-10-20", 0.5, { payments: [{ id: "p", date: "2026-10-21", amount: 0.2, method: "cash" }] }),
+    make("x", "2026-10-19", 9, { status: "cancelled" }),
+    make("z", "2026-10-17", 0),
+  ];
+  assert.deepEqual(allocatePayment(invoices, 1.5, "USD"), { shares: [{ id: "a", amount: 0.9 }, { id: "b", amount: 0.3 }, { id: "c", amount: 0.3 }], left: 0 });
+  assert.deepEqual(allocatePayment(invoices, 5, "USD").left, 2.8, "more than everything owed leaves the rest unallocated");
+  assert.deepEqual(allocatePayment(invoices, 1, "EGP"), { shares: [], left: 1 }, "only invoices in the payment's currency");
+});
+
+test("one sheet lists every open invoice with its details and one total to pay", async () => {
+  const { statementHtml } = await import("./invoices.ts");
+  const make = (id: string, price: number, over: Partial<Invoice> = {}) =>
+    ({ id, number: id.toUpperCase(), issueDate: "2026-10-20", dueDate: "2026-11-03", currency: "USD", items: [{ description: `Reel ${id}`, detail: `detail ${id}`, quantity: 1, price }], discount: 0, taxRate: 0, payments: [], status: "draft", billTo: { name: "Risero" }, paymentInfo: "InstaPay: x@instapay", createdAt: "2026-10-20T10:00:00Z", updatedAt: "2026-10-20T10:00:00Z", ...over }) as Invoice;
+  const html = statementHtml([make("inv-1", 0.99), make("inv-2", 0.5, { payments: [{ id: "p", date: "2026-10-21", amount: 0.2, method: "cash" }] }), make("inv-3", 9, { status: "cancelled" }), make("inv-4", 2, { currency: "EGP" })], { name: "Risero", url: "https://risero.io" } as Client, "USD", "2026-10-26");
+  assert.match(html, /INV-1/);
+  assert.match(html, /detail inv-1/);
+  assert.match(html, /INV-2/);
+  assert.doesNotMatch(html, /INV-3/, "cancelled invoices are left off");
+  assert.doesNotMatch(html, /INV-4/, "other currencies are left off");
+  assert.match(html, /1\.29 USD/, "the total due is 0.99 + 0.30");
+  assert.match(html, /InstaPay: x@instapay/);
 });

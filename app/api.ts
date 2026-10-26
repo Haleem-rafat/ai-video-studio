@@ -197,11 +197,13 @@ export const api = {
   createInvoice: (id: string, input: Partial<Invoice> = {}) => call<InvoiceView>("POST", `/api/clients/${id}/invoices`, input),
   saveInvoice: (id: string, invoiceId: string, input: Partial<Invoice>) => call<InvoiceView>("PUT", `/api/clients/${id}/invoices/${invoiceId}`, input),
   deleteInvoice: (id: string, invoiceId: string) => call<{ ok: true }>("DELETE", `/api/clients/${id}/invoices/${invoiceId}`),
+  payAll: (id: string, payment: Omit<Payment, "id"> & { currency: Currency }) => call<{ invoices: number; amount: number; currency: Currency }>("POST", `/api/clients/${id}/invoices/pay-all`, payment),
   addPayment: (id: string, invoiceId: string, payment: Omit<Payment, "id">) => call<InvoiceView>("POST", `/api/clients/${id}/invoices/${invoiceId}/payments`, payment),
   deletePayment: (id: string, invoiceId: string, paymentId: string) => call<InvoiceView>("DELETE", `/api/clients/${id}/invoices/${invoiceId}/payments/${paymentId}`),
 };
 
 export const invoicePdfUrl = (id: string, invoiceId: string) => `/api/clients/${id}/invoices/${invoiceId}/pdf`;
+export const statementPdfUrl = (id: string, currency: string) => `/api/clients/${id}/invoices/statement/pdf?currency=${currency}`;
 
 /** A picture of a marketing chat (a website screenshot or logo), before it has a project. */
 export const sessionUrl = (session: string, file: string) => `/marketing-files/${session}/${file}`;

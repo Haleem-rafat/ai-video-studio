@@ -1,8 +1,8 @@
 import { listProjects, projectDir } from "../project.ts";
-import { readUsage } from "../usage.ts";
+import { readUsage, type UsageEntry } from "../usage.ts";
 import type { Project } from "../types.ts";
 import { CURRENCIES, listInvoices, newInvoice, saveInvoice, type Currency, type Invoice, type InvoiceItem, type PieceKind } from "./invoices.ts";
-import { listPosts, loadClient, loadIdeas, postDir } from "./store.ts";
+import { clientDir, listPosts, loadClient, loadIdeas, localDate, postDir } from "./store.ts";
 import type { Client, Post } from "./types.ts";
 
 /**
@@ -19,14 +19,14 @@ import type { Client, Post } from "./types.ts";
  * piece is billed at its recorded AI/API cost (in USD) plus `markup` percent,
  * instead of the fixed prices.
  */
-export type Rates = { currency: Currency; fromCost?: boolean; markup?: number } & Record<PieceKind, number>;
-export const PIECE_KINDS: PieceKind[] = ["reel", "carousel", "single", "video"];
+export type Rates = { currency: Currency; fromCost?: boolean; markup?: number; planning?: number } & Record<Exclude<PieceKind, "planning">, number>;
+export const PIECE_KINDS: PieceKind[] = ["reel", "carousel", "single", "video", "planning"];
 export const DEFAULT_CURRENCY: Currency = "USD";
 
 /** `cost`: the AI/API cost recorded for making it, in USD; unset when none was recorded. */
 export type Piece = { kind: PieceKind; id: string; title: string; date: string; at: string; detail: string; cost?: number };
 
-const LABEL: Record<PieceKind, string> = { reel: "Reel", carousel: "Carousel", single: "Post", video: "Video" };
+const LABEL: Record<PieceKind, string> = { reel: "Reel", carousel: "Carousel", single: "Post", video: "Video", planning: "Planning" };
 const DIALECT: Record<string, string> = { egyptian: "Egyptian Arabic", gulf: "Gulf Arabic" };
 
 const clock = (seconds: number) => {
@@ -94,6 +94,25 @@ export function piecesOf(client: Pick<Client, "name" | "url">, posts: Post[], pr
   return pieces.sort((a, b) => a.at.localeCompare(b.at));
 }
 
+/**
+ * The client's own AI work that no single piece carries (daily ideas, research,
+ * knowledge, design previews), one piece per day at the cost recorded that day.
+ */
+export function planningPieces(entries: UsageEntry[]): Piece[] {
+  const days = new Map<string, { cost: number; calls: number }>();
+  for (const entry of entries) {
+    const date = localDate(new Date(entry.at));
+    const day = days.get(date) ?? { cost: 0, calls: 0 };
+    day.cost += entry.cost;
+    day.calls++;
+    days.set(date, day);
+  }
+  return [...days.entries()]
+    .filter(([, day]) => day.cost > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, day]) => ({ kind: "planning", id: date, title: `Ideas & research · ${date}`, date, at: `${date}T23:59:59`, detail: `${day.calls} AI calls: daily ideas, research and planning · ${date}`, cost: day.cost }));
+}
+
 /** The invoice line for a piece, priced from the client's price list. */
 export function itemFor(piece: Piece, rates: Rates | undefined): InvoiceItem {
   const cents = (n: number) => Math.round(n * 100) / 100;
@@ -136,6 +155,9 @@ async function sync(clientId: string): Promise<{ created: number; updated: numbe
     const entries = (await Promise.all(dirs.map((dir) => readUsage(dir)))).flat();
     if (entries.length) piece.cost = entries.reduce((sum, entry) => sum + entry.cost, 0);
   }
+  // The client's own AI work (ideas, research) is billed by the day, at its cost.
+  pieces.push(...planningPieces(await readUsage(clientDir(client.id))));
+  pieces.sort((a, b) => a.at.localeCompare(b.at));
   const rates = client.rates;
   // API costs are in USD, so a price list billing them is too.
   const currency = rates?.fromCost ? "USD" : (rates?.currency ?? DEFAULT_CURRENCY);
@@ -186,7 +208,7 @@ export function readRates(raw: Record<string, unknown>): { rates?: Rates; errors
       if (!(Number.isFinite(value) && value >= 0)) errors.push(`The ${kind} price must be 0 or more.`);
       return [kind, Math.round(value * 100) / 100];
     }),
-  ) as Record<PieceKind, number>;
+  ) as Record<Exclude<PieceKind, "planning">, number> & { planning: number };
   const fromCost = raw.fromCost === true;
   const markup = Number(raw.markup ?? 0);
   if (!(Number.isFinite(markup) && markup >= 0 && markup <= 1000)) errors.push("The markup must be between 0 and 1000%.");

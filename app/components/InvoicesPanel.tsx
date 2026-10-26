@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { BanknoteIcon, FileDownIcon, PencilIcon, PlusIcon, ReceiptIcon, Trash2Icon, XIcon } from "lucide-react";
+import { BanknoteIcon, FileDownIcon, FileTextIcon, PencilIcon, PlusIcon, ReceiptIcon, Trash2Icon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, invoicePdfUrl, type Client, type Currency, type Invoice, type InvoiceState, type InvoiceView, type PaymentMethod, type Rates } from "../api.ts";
+import { api, invoicePdfUrl, statementPdfUrl, type Client, type Currency, type Invoice, type InvoiceState, type InvoiceView, type PaymentMethod, type Rates } from "../api.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,6 +33,15 @@ export function InvoicesPanel({ client }: { client: Client }) {
   const [editing, setEditing] = useState<InvoiceView | null>(null);
   const [paying, setPaying] = useState<InvoiceView | null>(null);
   const [rates, setRates] = useState<Rates | null>(null);
+  const [payingAll, setPayingAll] = useState<Currency | null>(null);
+  // Everything still owed, per currency, drafts included: what one sheet and one payment cover.
+  const owed: Record<string, { amount: number; count: number }> = {};
+  for (const invoice of invoices ?? []) {
+    if (invoice.state === "cancelled" || invoice.totals.balance <= 0) continue;
+    const row = (owed[invoice.currency] ??= { amount: 0, count: 0 });
+    row.amount = Math.round((row.amount + invoice.totals.balance) * 100) / 100;
+    row.count++;
+  }
 
   const refresh = () =>
     api
@@ -62,6 +71,25 @@ export function InvoicesPanel({ client }: { client: Client }) {
         </Button>
         <span className="text-xs text-muted-foreground">Every reel, carousel, post and video gets its own invoice automatically. Numbered across all clients; paid and overdue are worked out from the payments and due dates.</span>
       </div>
+
+      {Object.entries(owed).map(([currency, row]) => (
+        <div key={currency} className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/40 p-3">
+          <div className="grid">
+            <span className="text-xs text-muted-foreground">Owed on {row.count} invoice{row.count === 1 ? "" : "s"}</span>
+            <span className="font-mono text-lg font-medium">{money(row.amount, currency)}</span>
+          </div>
+          <div className="ms-auto flex flex-wrap gap-1.5">
+            <Button size="sm" variant="outline" asChild>
+              <a href={statementPdfUrl(client.id, currency)}>
+                <FileTextIcon /> One sheet (PDF)
+              </a>
+            </Button>
+            <Button size="sm" onClick={() => setPayingAll(currency as Currency)}>
+              <BanknoteIcon /> Pay all at once
+            </Button>
+          </div>
+        </div>
+      ))}
 
       {rates && <PriceList clientId={client.id} rates={rates} onChange={setRates} onSaved={refresh} />}
 
@@ -164,6 +192,18 @@ export function InvoicesPanel({ client }: { client: Client }) {
             void refresh();
           }}
           onPay={() => setPaying(editing)}
+        />
+      )}
+      {payingAll && owed[payingAll] && (
+        <PayAllDialog
+          clientId={client.id}
+          currency={payingAll}
+          owed={owed[payingAll]}
+          onClose={() => setPayingAll(null)}
+          onSaved={() => {
+            setPayingAll(null);
+            void refresh();
+          }}
         />
       )}
       {paying && (
@@ -537,6 +577,83 @@ function PaymentDialog({ clientId, invoice, onClose, onSaved }: { clientId: stri
             }}
           >
             Record {value > 0 ? money(value, invoice.currency) : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** One payment for everything owed in a currency: the studio spreads it over the invoices, oldest first. */
+function PayAllDialog({ clientId, currency, owed, onClose, onSaved }: { clientId: string; currency: Currency; owed: { amount: number; count: number }; onClose: () => void; onSaved: () => void }) {
+  const [amount, setAmount] = useState(String(owed.amount));
+  const [date, setDate] = useState(today());
+  const [method, setMethod] = useState<PaymentMethod>("instapay");
+  const [reference, setReference] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const value = Number(amount);
+  const over = value > owed.amount + 0.001;
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Pay all at once</DialogTitle>
+          <DialogDescription>
+            {money(owed.amount, currency)} owed on {owed.count} invoice{owed.count === 1 ? "" : "s"}. One payment is applied to the oldest first; a smaller amount leaves the newest partly paid.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={`Amount (${currency})`}>
+              <Input type="number" min={0} step="any" value={amount} onChange={(event) => setAmount(event.target.value)} />
+            </Field>
+            <Field label="Paid on">
+              <Input type="date" value={date} max={today()} onChange={(event) => setDate(event.target.value)} />
+            </Field>
+          </div>
+          <Field label="Method">
+            <Select value={method} onValueChange={(next) => setMethod(next as PaymentMethod)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(METHODS) as PaymentMethod[]).map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {METHODS[id]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Reference" detail="transfer number, receipt…">
+            <Input value={reference} dir="ltr" onChange={(event) => setReference(event.target.value)} />
+          </Field>
+          <Field label="Note">
+            <Input value={note} dir="auto" onChange={(event) => setNote(event.target.value)} />
+          </Field>
+          {over && <p className="text-xs text-destructive">That's more than everything owed; record the exact total.</p>}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={busy || !(value > 0) || over || !date}
+            onClick={() => {
+              setBusy(true);
+              api
+                .payAll(clientId, { currency, amount: value, date, method, ...(reference.trim() ? { reference } : {}), ...(note.trim() ? { note } : {}) })
+                .then(({ invoices }) => {
+                  toast.success(`${money(value, currency)} recorded over ${invoices} invoice${invoices === 1 ? "" : "s"}`);
+                  onSaved();
+                })
+                .catch((error: Error) => toast.error(error.message))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Record {value > 0 ? money(value, currency) : ""}
           </Button>
         </DialogFooter>
       </DialogContent>
