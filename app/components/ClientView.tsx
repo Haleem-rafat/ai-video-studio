@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, PencilRulerIcon, Trash2Icon, MonitorSmartphoneIcon, SparklesIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, ExternalLinkIcon, PencilRulerIcon, RefreshCwIcon, Trash2Icon, MonitorSmartphoneIcon, SparklesIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, clientFileUrl, formatCost, jobLink, promoFileUrl, type ArtStyleChoice, type ArtStyleInfo, type PictureAmount, type Client, type Idea, type IdeaDay, type Job, type Library, type LibraryItem, type Post, type DesignId, type DesignInfo, type PostFormatId, type FormatInfo, type ReelStyleId, type ReelStyleInfo } from "../api.ts";
@@ -660,6 +660,24 @@ function PostCard({ client, post, cost, designs, onOpenProject, onSaved }: { cli
               <DownloadIcon /> Download zip
             </a>
           </Button>
+        )}
+        {post.status === "done" && post.ideaId && (
+          <Confirm
+            trigger={
+              <Button size="sm" variant="outline">
+                <RefreshCwIcon /> Make again
+              </Button>
+            }
+            title="Make this post again?"
+            description={`A fresh version is made from the same idea with today's rules, next to this one, so you can compare. ${post.kind === "reel" ? "A reel costs about $1." : "A carousel costs about $0.30."}`}
+            action="Make again"
+            onConfirm={() =>
+              api
+                .makeAgain(client.id, post.id)
+                .then(() => (toast.success("Making it again…"), onSaved()))
+                .catch((error: Error) => toast.error(error.message))
+            }
+          />
         )}
         {(post.status === "done" || post.status === "failed") && (
           <Confirm

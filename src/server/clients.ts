@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { makeIdeas } from "../clients/ideas.ts";
 import { syncInvoices } from "../clients/billing.ts";
-import { claimIdea, compareVariant, deletePost, ideaFromProject, makePost, recoverInterrupted, rerenderPost } from "../clients/make.ts";
+import { claimIdea, compareVariant, deletePost, ideaFromProject, makePost, postIdFor, recoverInterrupted, rerenderPost } from "../clients/make.ts";
 import { hostOf, loadLibrary } from "../clients/library.ts";
 import { draftKnowledge, foldAnswer, type Knowledge } from "../clients/knowledge.ts";
 import { drawPreviews, previewPath, previewsMade } from "../clients/previews.ts";
@@ -304,6 +304,50 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
     await saveIdeas(client.id, { ...day, ideas: [...day.ideas, { ...idea, status: "making" }] });
     const job = queueMake(client, idea, { ...input, format: input.postFormat });
     json(response, 202, { job, clientId: client.id, ideaId: idea.id });
+    return true;
+  }
+
+  // Make again: a fresh version of a finished post's idea beside it, with the same settings and today's rules, to compare.
+  if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/posts\/([a-z0-9-]+)\/again$/)) && method === "POST") {
+    const [, clientId, postId] = match;
+    const client = await find(clientId);
+    const post = await loadPost(clientId, postId).catch(() => {
+      throw fail(404, `No post ${postId}`);
+    });
+    if (post.status !== "done") throw fail(409, "Make it again once it's finished.");
+    if (!post.ideaId) throw fail(400, "This post has no idea to make again.");
+    const date = post.ideaId.slice(0, 10);
+    const day = await loadIdeas(clientId, date);
+    const idea = day?.ideas.find((i) => i.id === post.ideaId);
+    if (!day || !idea) throw fail(404, `No idea ${post.ideaId}`);
+    if (idea.status === "making") throw fail(409, "This idea is being made.");
+    const taken = new Set([idea.postId, ...(idea.variants ?? [])]);
+    let n = 2;
+    while (taken.has(postIdFor(idea, `again${n}`))) n++;
+    idea.status = "making";
+    await saveIdeas(clientId, day);
+    const options = {
+      ...(post.artStyle ? { artStyle: post.artStyle } : {}),
+      ...(post.pictures ? { pictures: post.pictures } : {}),
+      ...(post.design ? { design: post.design } : {}),
+      ...(post.postFormat ? { format: post.postFormat } : {}),
+      ...(post.reelStyle ? { reelStyle: post.reelStyle } : {}),
+      variant: `again${n}`,
+    };
+    const job = Object.assign(
+      enqueue(
+        `Make again (${n}): ${client.name}: ${idea.hook.slice(0, 40)}`,
+        async (log) => {
+          const made = await compareVariant(clientId, idea.id, options, true, log);
+          await syncInvoices(clientId).catch((error) => log(`invoices: not updated (${error instanceof Error ? error.message : error})`));
+          return made?.projectId ?? made?.id;
+        },
+        undefined,
+        (result) => (typeof result !== "string" ? null : /^\d{12}-/.test(result) ? projectDir(result) : postDir(clientId, result)),
+      ),
+      { link: clientPage(clientId) },
+    );
+    json(response, 202, job);
     return true;
   }
 

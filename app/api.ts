@@ -186,6 +186,7 @@ export const api = {
   editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[]; design?: DesignId }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
   post: (id: string, postId: string) => call<Post>("GET", `/api/clients/${id}/posts/${postId}`),
   deletePost: (id: string, postId: string) => call<{ ok: true }>("DELETE", `/api/clients/${id}/posts/${postId}`),
+  makeAgain: (id: string, postId: string) => call<Job>("POST", `/api/clients/${id}/posts/${postId}/again`),
   setPostAt: (id: string, postId: string, postAt: string) => call<Post>("PATCH", `/api/clients/${id}/posts/${postId}`, { postAt }),
   setIdeaPostAt: (id: string, ideaId: string, postAt: string) => call<Idea>("PATCH", `/api/clients/${id}/ideas/${ideaId}`, { postAt }),
   /** One slide as the carousel editor's live preview (HTML, $0). */
