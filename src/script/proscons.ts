@@ -18,7 +18,7 @@ const KINDS = ["intro", "chapter", "problems", "score", "verdict"] as const sati
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const PRODUCT = z.object({
-  name: z.string().describe("Full product name in Latin script, e.g. iPhone 18 Pro"),
+  name: z.string().describe("The product name exactly as written in the topic"),
   short: z.string().describe("A 1-2 word label, e.g. 18 Pro"),
   color: hex.describe("A signature colour of this product (a launch colour), readable on a dark background"),
 });
@@ -165,7 +165,8 @@ ${research.text}`,
     title: output.title,
     description: `${output.description.trim()}\n\n${hashtags}`.trim(),
     tags: output.tags,
-    versus: { a: output.a, b: output.b, hook: output.hook, thumbnail: output.thumbnail },
+    // The products keep the topic's names: the press media is found by them (apple.com/ipad-mini/, not …/ipad-mini-a20-pro/).
+    versus: { a: { ...output.a, name: a }, b: { ...output.b, name: b }, hook: output.hook, thumbnail: output.thumbnail },
     scenes,
     research: research.text,
   };
