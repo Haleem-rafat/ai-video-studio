@@ -35,6 +35,7 @@ import { directArt, drawArt } from "./marketing/art.ts";
 import { reportProgress } from "./progress.ts";
 import { stillMoments } from "./media/motion.ts";
 import { prepareProjectSpeech } from "./clients/speech.ts";
+import { syncScreenText } from "./marketing/screen-text.ts";
 import { appendUsage, readUsage, recordLocal } from "./usage.ts";
 import type { FormatId, Project, StyleId, VersusLook } from "./types.ts";
 
@@ -250,6 +251,8 @@ export async function prepareMedia(id: string, options: { images?: boolean } = {
   const channel = channelOf(project);
   const dir = projectDir(id);
 
+  // Words on screen follow edited words spoken: a scene whose narration changed gets its headline, tags and cards rewritten to match.
+  if (project.marketing) await syncScreenText(project, log);
   // Arabic narration is spoken from its prepared text (English words in Arabic letters, numbers in words, vowel marks), never raw.
   await prepareProjectSpeech(project, log);
   const voiced = await voiceProject(dir, project.scenes, channel);

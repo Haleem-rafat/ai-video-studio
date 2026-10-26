@@ -63,7 +63,8 @@ export type Visual =
    * (the problems as bubbles, the days of a calendar, the traffic sources of
    * a dashboard); `shot` names one of the website's screenshots.
    */
-  | { type: "marketing"; beat: MarketingBeat; headline: string; words: string[]; items: MarketingItem[]; shot?: string; backdrop?: Photo; object?: Photo };
+  /** `textFor`: the narration its headline, words and items were written for; when the narration changes, they're rewritten to match. */
+  | { type: "marketing"; beat: MarketingBeat; headline: string; words: string[]; items: MarketingItem[]; shot?: string; backdrop?: Photo; object?: Photo; textFor?: string };
 
 /**
  * What a marketing scene animates. journey: a phone scrolls the brand's

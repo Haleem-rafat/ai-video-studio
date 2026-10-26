@@ -221,6 +221,7 @@ ${
         headline: scene.headline.trim(),
         words: scene.words.map((word) => word.trim()).filter(Boolean),
         items: scene.items.map((item) => ({ label: item.label.trim(), ...(item.value.trim() ? { value: item.value.trim() } : {}) })).filter((item) => item.label),
+        textFor: scene.narration.trim(),
       },
       imagePrompt: "",
     })),
