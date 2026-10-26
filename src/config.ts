@@ -47,7 +47,7 @@ export type Channel = {
    * a Gemini voice name, `style` the reading direction. A cloned ElevenLabs
    * voice replaces it by clearing this and setting voiceId.
    */
-  narrator?: { provider: "gemini"; voice: string; style?: string; speed?: number };
+  narrator?: { provider: "gemini"; voice: string; style?: string; speed?: number; names?: string[] };
   brand?: Brand;
   audience: string;
   tone: string;

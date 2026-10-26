@@ -13,7 +13,7 @@ import { requireEnv, type Channel } from "../config.ts";
 import type { Scene, Word } from "../types.ts";
 import { recordElevenLabs } from "../usage.ts";
 import { reportProgress } from "../progress.ts";
-import { misheard, spokenOf } from "./spoken.ts";
+import { misheard, namesHeard, spokenOf } from "./spoken.ts";
 
 const run = promisify(execFile);
 const MODEL_ID = "eleven_multilingual_v2";
@@ -122,7 +122,8 @@ export async function voiceSceneGemini(projectDir: string, scene: Scene, channel
 
   // Gemini misreads some takes (Arabic most: «السعر» as «السارة»), differently each time, so
   // each take is listened back and a misread one is spoken again; the clearest take is kept.
-  let best: { file: string; wrong: number; words: Word[] } | undefined;
+  // A brand name said wrong spoils a take however few words it is, so a take that drops one is never kept over one that says it.
+  let best: { file: string; wrong: number; named: boolean; words: Word[] } | undefined;
   for (let attempt = 1; attempt <= TAKES; attempt++) {
     const file = `audio/${scene.id}-${take}.take${attempt}.mp3`;
     const { audio } = await generateSpeech({
@@ -144,14 +145,16 @@ export async function voiceSceneGemini(projectDir: string, scene: Scene, channel
       providerOptions: { openai: { language: channel.language ?? "en", timestampGranularities: ["word"] } },
     });
     const words = heard.segments.map((word) => ({ text: word.text, start: word.startSecond, end: word.endSecond }));
-    const wrong = misheard(spoken, words.map((word) => word.text).join(" "));
-    if (!best || wrong < best.wrong) {
+    const heardText = words.map((word) => word.text).join(" ");
+    const wrong = misheard(spoken, heardText);
+    const named = namesHeard(narrator.names ?? [], spoken, heardText);
+    if (!best || (named && !best.named) || (named === best.named && wrong < best.wrong)) {
       if (best) await run("rm", ["-f", join(projectDir, best.file)]);
-      best = { file, wrong, words };
+      best = { file, wrong, named, words };
     } else {
       await run("rm", ["-f", join(projectDir, file)]);
     }
-    if (best.wrong <= CLEAR_TAKE) break;
+    if (best.wrong <= CLEAR_TAKE && best.named) break;
   }
 
   await rename(join(projectDir, best!.file), join(projectDir, path));

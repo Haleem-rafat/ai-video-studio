@@ -145,7 +145,7 @@ export async function createReel(
       creativity,
       language: client.language,
       // A Gulf reel is read in a Gulf accent.
-      narrator: { voice, style: dialect === "gulf" ? GULF_STYLE : MARKETING_STYLE[client.language] },
+      narrator: { voice, style: dialect === "gulf" ? GULF_STYLE : MARKETING_STYLE[client.language], ...(client.pronounce && Object.keys(client.pronounce).length ? { names: Object.values(client.pronounce) } : {}) },
       // Prompted mode's subtitles answer, when given, decides; else the brief.
       captions: subtitles !== undefined ? subtitles === "yes" : (style?.captions ?? Boolean(brief.captions)),
       ...(style && style.id !== "classic" ? { reelStyle: style.id } : {}),

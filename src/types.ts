@@ -252,7 +252,8 @@ export type MarketingSetup = {
   brief: MarketingBrief;
   language: "en" | "ar";
   /** Gemini voice and how it reads; `speed` speeds the take up (1.15 = 15% faster) without changing the voice's pitch. */
-  narrator: { voice: string; style: string; speed?: number };
+  /** `names`: brand names as the voice spells them; a take that doesn't say them whole is spoken again. */
+  narrator: { voice: string; style: string; speed?: number; names?: string[] };
   captions: boolean;
   /** The social post text written with the script. */
   post?: { caption: string; hashtags: string[] };

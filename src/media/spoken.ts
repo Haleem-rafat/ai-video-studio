@@ -24,7 +24,9 @@ const toLatinDigits = (text: string) => text.replace(/[٠-٩]/g, (d) => String("
 
 /** Numbers up to 999 as Egyptian words; a percentage becomes "… في المية". Longer numbers (years, phone numbers) stay digits. */
 export function egyptianNumbers(text: string): string {
-  return toLatinDigits(text).replace(/(?<![\d.:])(\d{1,3})(?!\d)(?![.:]\d)(%?)/g, (_match, digits: string, percent: string, offset: number, whole: string) => {
+  // "1 ساعة" is said "ساعة واحدة" (and "1 ساعة واحدة" just "ساعة واحدة"), never "واحد ساعة".
+  const one = toLatinDigits(text).replace(/(?<![\d.:])1\s+([ء-ي]{2,})(?:\s+(واحدة|واحد)(?![ء-ي]))?/g, (_match, noun: string, said?: string) => `${noun} ${said ?? (noun.endsWith("ة") ? "واحدة" : "واحد")}`);
+  return one.replace(/(?<![\d.:])(\d{1,3})(?!\d)(?![.:]\d)(%?)/g, (_match, digits: string, percent: string, offset: number, whole: string) => {
     const n = Number(digits);
     if (percent) return `${sayNumber(n, false)} في المية`;
     const after = whole.slice(offset + digits.length);
@@ -113,4 +115,13 @@ export function misheard(script: string, heard: string): number {
     row = next;
   }
   return row[b.length] / a.length;
+}
+
+const squeezed = (text: string) => plainWords(text).join("");
+
+/** Whether every name the script says (brand names as the voice spells them) is heard whole in the take. */
+export function namesHeard(names: string[], script: string, heard: string): boolean {
+  const said = squeezed(script);
+  const got = squeezed(heard);
+  return names.map(squeezed).filter((name) => name && said.includes(name)).every((name) => got.includes(name));
 }

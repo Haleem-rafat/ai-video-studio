@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { egyptianNumbers, misheard, pronounce, sameLetters, spokenOf, spokenText } from "./spoken.ts";
+import { egyptianNumbers, misheard, namesHeard, pronounce, sameLetters, spokenOf, spokenText } from "./spoken.ts";
 
 test("numbers before a noun use the Egyptian counting form", () => {
   assert.equal(egyptianNumbers("غلطتك في 3 حاجات"), "غلطتك في تلات حاجات");
@@ -62,4 +62,18 @@ test("misheard: words the voice got wrong count against the take", () => {
   // The take read «السعر» as «السارة» and «قصيرة» as «أو سيارة».
   const score = misheard("السعر كام؟ تحب نحدد مكالمة قصيرة", "السارة كم تحب نحدد مكالمة أو سيارة");
   assert.ok(score > 0.4, `scored ${score}`);
+});
+
+test("a 1 before a noun isn't read as «واحد»: «1 ساعة واحدة» is «ساعة واحدة», «1 ساعة» is «ساعة واحدة»", () => {
+  assert.equal(egyptianNumbers("التلات يوم الرد. 1 ساعة واحدة تجاوب فيها"), "التلات يوم الرد. ساعة واحدة تجاوب فيها");
+  assert.equal(egyptianNumbers("خد 1 ساعة بس"), "خد ساعة واحدة بس");
+  assert.equal(egyptianNumbers("كل 1 يوم"), "كل يوم واحد");
+  assert.equal(egyptianNumbers("الخطوة 1: اسأله"), "الخطوة واحد: اسأله");
+});
+
+test("a brand name must be heard whole: «رايزر» for «رايزرو» is a bad take", () => {
+  assert.equal(namesHeard(["رايزرو"], "اكتب في الكومنت أكتر عميل سكت عليك. رَايزرو", "اكتب في الكومنت اكتر عميل سكت عليك رايزرو"), true);
+  assert.equal(namesHeard(["رايزرو"], "سكت عليك. رَايزرو", "سكت عليك رايزر"), false);
+  assert.equal(namesHeard(["رايزرو"], "سكت عليك.", "سكت عليك"), true, "a name the scene doesn't say isn't asked for");
+  assert.equal(namesHeard(["رايز رو"], "شكرًا رايز رو", "شكرا رايزرو"), true, "spaces don't matter");
 });

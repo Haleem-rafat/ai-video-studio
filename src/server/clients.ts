@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { exportIndex, postsToExport, type ExportKind } from "../clients/export.ts";
 import { makeIdeas } from "../clients/ideas.ts";
 import { syncInvoices } from "../clients/billing.ts";
 import { claimIdea, compareVariant, deletePost, ideaFromProject, makePost, postIdFor, recoverInterrupted, rerenderPost } from "../clients/make.ts";
@@ -414,6 +417,37 @@ export async function handleClients(ctx: Ctx): Promise<boolean> {
   if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/library$/)) && method === "GET") {
     await find(match[1]);
     json(response, 200, await loadLibrary(match[1]));
+    return true;
+  }
+
+  // Everything at once: a folder per finished post of a kind (slides, caption, art, data) and an index.csv, in one zip.
+  if ((match = path.match(/^\/api\/clients\/([a-z0-9-]+)\/posts\/zip$/)) && method === "GET") {
+    const clientId = match[1];
+    const client = await find(clientId);
+    const asked = url.searchParams.get("kind") ?? "all";
+    const kind: ExportKind = asked === "carousel" || asked === "single" || asked === "reel" ? asked : "all";
+    const posts = postsToExport(await listPosts(clientId), kind);
+    if (!posts.length) throw fail(404, `No finished ${kind === "all" ? "posts" : `${kind}s`} to export.`);
+    const titles: Record<string, string> = {};
+    for (const day of new Set(posts.map((post) => post.ideaId?.slice(0, 10)).filter((day): day is string => Boolean(day)))) for (const idea of (await loadIdeas(clientId, day))?.ideas ?? []) titles[idea.id] = idea.hook;
+    const work = await mkdtemp(join(tmpdir(), "export-"));
+    try {
+      await writeFile(join(work, "index.csv"), exportIndex(posts, titles));
+      const out = join(work, "export.zip");
+      const zip = (args: string[], cwd: string) =>
+        new Promise<void>((resolve, reject) => {
+          const child = spawn("zip", args, { cwd });
+          child.on("error", reject);
+          child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`zip stopped (${code})`))));
+        });
+      await zip(["-q", "-r", out, ...posts.map((post) => post.id), "-x", "*/usage.json"], join(clientDir(clientId), "posts"));
+      await zip(["-q", "-j", out, join(work, "index.csv")], work);
+      const name = `${client.id}-${kind === "all" ? "posts" : `${kind}s`}-${localDate()}.zip`;
+      response.writeHead(200, { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${name}"` });
+      response.end(await readFile(out));
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
     return true;
   }
 

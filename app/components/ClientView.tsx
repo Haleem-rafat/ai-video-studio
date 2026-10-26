@@ -242,6 +242,13 @@ export function ClientView({ id, jobs, onOpenProject, onOpenPromo, onChanged }: 
                 {option.label} <span className="font-mono text-xs opacity-70">{library?.items.filter(option.match).length ?? 0}</span>
               </Button>
             ))}
+            {filter !== "videos" && (library?.items.filter(FILTERS.find((option) => option.id === filter)!.match).length ?? 0) > 0 && (
+              <Button size="sm" variant="outline" className="ms-auto" asChild>
+                <a href={`/api/clients/${client.id}/posts/zip?kind=${filter === "carousels" ? "carousel" : filter === "images" ? "single" : "all"}`} title="A folder per post (slides, caption, pictures, data) and an index.csv of them all">
+                  <DownloadIcon /> Export all (zip)
+                </a>
+              </Button>
+            )}
           </div>
           {!library?.items.length && <p className="text-sm text-muted-foreground">Make an idea to see its post here.</p>}
           <div className="grid gap-4 lg:grid-cols-2">
