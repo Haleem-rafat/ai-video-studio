@@ -547,7 +547,10 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   }
 
   if ((match = path.match(/^\/api\/projects\/([a-z0-9-]+)\/compose$/)) && method === "POST") {
-    await compose(match[1]);
+    // "quick" follows the editor: only the preview page, and never under a running job on this project.
+    const quick = url.searchParams.has("quick");
+    if (quick && recentJobs().some((job) => job.projectId === match![1] && (job.status === "running" || job.status === "queued"))) return json(response, 409, { error: "A job is working on this video" });
+    await compose(match[1], console.log, { quick });
     return json(response, 200, { ok: true });
   }
 

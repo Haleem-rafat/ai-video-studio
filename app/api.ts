@@ -107,6 +107,8 @@ export const api = {
   save: (id: string, edits: Partial<Project>) => call<ProjectState>("PUT", `/api/projects/${id}`, edits),
   remove: (id: string) => call("DELETE", `/api/projects/${id}`),
   build: (id: string, images: boolean) => call<Job>("POST", `/api/projects/${id}/build`, { images }),
+  /** Rebuilds only the preview page from the saved project ($0): edited words show at once. */
+  composePreview: (id: string) => call<{ ok: boolean }>("POST", `/api/projects/${id}/compose?quick`),
   scenePhoto: (id: string, target: string, data: string) => call<ProjectState>("POST", `/api/projects/${id}/photo/${target}`, { data }),
   productPhoto: (id: string, side: "a" | "b", data: string) => call<ProjectState>("POST", `/api/projects/${id}/product/${side}`, { data }),
   render: (id: string, quality: "draft" | "standard" | "high") => call<Job>("POST", `/api/projects/${id}/render`, { quality }),

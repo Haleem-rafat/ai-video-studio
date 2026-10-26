@@ -39,11 +39,18 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
   const [width, height] = format === "short" ? [1080, 1920] : [1920, 1080];
 
   const send = (message: object) => frame.current?.contentWindow?.postMessage(message, "*");
+  // A rebuilt page reloads at the moment that was showing, so an edit is seen where it was made.
+  const shown = useRef(0);
+  const resumeAt = useRef(0);
+  useEffect(() => {
+    resumeAt.current = shown.current;
+  }, [nonce]);
 
   useEffect(() => {
     const listen = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || event.data?.type !== "preview-time") return;
       setTime(event.data.time);
+      shown.current = event.data.time;
       setDuration(event.data.duration);
       setPlaying(event.data.playing);
       onTime(event.data.time);
@@ -110,6 +117,7 @@ export function Preview({ projectId, format, nonce, available, seekTo, onTime }:
             key={nonce}
             title="preview"
             src={`/files/${projectId}/index.html?preview&v=${nonce}`}
+            onLoad={() => resumeAt.current > 0 && setTimeout(() => send({ type: "seek", time: resumeAt.current }), 300)}
             className="origin-top-left border-0"
             style={{ width, height, transform: `scale(${scale})` }}
           />

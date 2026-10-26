@@ -302,7 +302,8 @@ export async function prepareMedia(id: string, options: { images?: boolean } = {
 }
 
 /** Step 4: writes index.html (the HyperFrames composition) and youtube.txt. */
-export async function compose(id: string, log: Log = console.log): Promise<Project> {
+/** `quick`: only the preview page, never the project file or thumbnail, so it can follow edits while they're still being typed. */
+export async function compose(id: string, log: Log = console.log, { quick = false } = {}): Promise<Project> {
   const project = await loadProject(id);
   const channel = channelOf(project);
   const dir = projectDir(id);
@@ -315,6 +316,7 @@ export async function compose(id: string, log: Log = console.log): Promise<Proje
   } else if (project.style === "versus" || project.style === "deepdive") {
     const html = project.style === "deepdive" ? buildDeepDive(project, channel) : project.versus?.look === "arena" ? buildArena(project, channel) : project.versus?.look === "proscons" ? buildProsCons(project, channel) : buildVersus(project, channel);
     await writeFile(join(dir, "index.html"), html);
+    if (quick) return project;
     project.description = withChapters(project, channel.language === "ar");
     await saveProject(project);
     await renderThumbnail(project, channel, dir).then(

@@ -108,6 +108,12 @@ export function ProjectView({ id, version, channels, projects, jobs, llmReady, o
         latest.current = saved;
       }
       setError("");
+      // The preview page follows the edit for free; the voice waits for "Update preview".
+      if (saved.hasComposition)
+        api.composePreview(id).then(
+          () => setNonce((value) => value + 1),
+          () => undefined,
+        );
     } catch (failure) {
       setError(`Not saved: ${failure instanceof Error ? failure.message : failure}`);
     } finally {

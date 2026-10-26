@@ -14,7 +14,7 @@ import { createReel } from "./reel.ts";
 import { captionText, cleanHashtags } from "./rules.ts";
 import { clientDir, listPosts, loadClient, loadIdeas, loadPost, postDir, saveIdeas, savePost } from "./store.ts";
 import { suggestPostAt } from "./schedule.ts";
-import { maySell, modeOf, nextDialect } from "./direction.ts";
+import { dialectFor, maySell, modeOf } from "./direction.ts";
 import { autoFormat, chooseDesign, loadHistory } from "./history.ts";
 import { pickRotation, type ArtStyleChoice, type PictureAmount } from "./styles.ts";
 import type { Idea, Post, Slide } from "./types.ts";
@@ -120,7 +120,7 @@ export async function makePost(clientId: string, ideaId: string, log: (message: 
   // The content direction decides whether this piece sells; Arabic dialects take turns.
   const mode = modeOf(client);
   const sell = mode === "promo" || (mode === "mix" && idea.goal === "offer" && maySell(client, history));
-  const dialect = nextDialect(client, history);
+  const dialect = dialectFor(idea.format, client, history);
   const post: Post = { id: postIdFor(idea, options.variant), clientId, ideaId, kind: idea.format, postAt: idea.postAt ?? suggestPostAt(idea.id), ...(idea.topic ? { topic: idea.topic } : {}), ...(dialect ? { dialect } : {}), promo: sell, caption: "", hashtags: [], artStyle, pictures, ...(design && idea.format !== "reel" ? { design } : {}), status: "writing", createdAt: now, updatedAt: now };
   await savePost(post);
   try {

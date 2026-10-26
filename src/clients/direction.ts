@@ -64,21 +64,41 @@ export function nextDialect(client: Pick<Client, "direction" | "language">, hist
   return list[(index + 1) % list.length];
 }
 
+/**
+ * The dialect a piece is written in: carousels and single posts are always
+ * Egyptian (the owner's choice for written posts); reels take turns among the
+ * client's dialects, counting earlier reels only.
+ */
+export function dialectFor(kind: "reel" | "carousel" | "single", client: Pick<Client, "direction" | "language">, history: Pick<Made, "dialect" | "kind">[]): Dialect | undefined {
+  if (client.language !== "ar") return undefined;
+  if (kind !== "reel") return "egyptian";
+  return nextDialect(client, history.filter((made) => made.kind === "reel"));
+}
+
 /** The writer's language line for Arabic in a dialect. */
 export const dialectLanguage = (dialect: Dialect | undefined) =>
   dialect === "gulf"
     ? `${DIALECT_WORDS.gulf}. EVERY word in Gulf dialect, even where the idea, outline, knowledge or examples are written in Egyptian: rewrite them (إزاي → كيف، عايز → أبي/أبغى، دلوقتي → الحين، مش → مو/ما، ليه → ليش، فين → وين، كده → كذا، بتاع → حق، إيه → إيش/وش، معندكش → ما عندك، بيدخل → يدخل)`
-    : DIALECT_WORDS.egyptian;
+    : `${DIALECT_WORDS.egyptian}. EVERY word in Egyptian dialect, even where the brief, idea or examples mention the Gulf or are written in Gulf or Saudi Arabic: rewrite them (وش/إيش → إيه، أبي/أبغى → عايز، الحين → دلوقتي، مو → مش، ليش → ليه، وين → فين، كذا → كده، زين → كويس)`;
 
 // Words only Egyptian Arabic uses; several in a Gulf text mean it wasn't rewritten.
 const EGYPTIAN = ["مش", "إزاي", "ازاي", "دلوقتي", "عايز", "عاوز", "عايزين", "بتاع", "بتاعك", "بتاعة", "كده", "فين", "ليه", "إيه", "ايه", "ده", "دي", "دول", "معندكش", "مفيش", "خالص", "أوي", "اوي", "بقى"];
 
-/** Egyptian words in a text that should be Gulf Arabic, as instructions to fix it. */
+// Words only Gulf and Saudi Arabic use; several in an Egyptian text mean it slipped.
+const GULF = ["وش", "إيش", "ايش", "أبي", "ابي", "أبغى", "ابغى", "تبي", "تبغى", "يبي", "يبغى", "نبي", "الحين", "مو", "ليش", "وين", "زين", "وايد", "يالله"];
+
+/** Words of the other dialect in a text that should be in `dialect`, as instructions to fix it. */
 export function dialectProblems(texts: string[], dialect: Dialect | undefined): string[] {
-  if (dialect !== "gulf") return [];
-  const found = new Set<string>();
-  for (const text of texts) for (const word of text.split(/[^\p{L}]+/u)) if (EGYPTIAN.includes(word) || /^(ما)?(بي|بت|بن)\p{L}{2,}ش$/u.test(word)) found.add(word);
-  return found.size >= 3 ? [`This must be in Gulf (Khaleeji) Arabic, but it uses Egyptian words: ${[...found].slice(0, 8).join("، ")}. Rewrite every text in Gulf dialect.`] : [];
+  const words = texts.flatMap((text) => text.split(/[^\p{L}]+/u));
+  if (dialect === "gulf") {
+    const found = new Set(words.filter((word) => EGYPTIAN.includes(word) || /^(ما)?(بي|بت|بن)\p{L}{2,}ش$/u.test(word)));
+    return found.size >= 3 ? [`This must be in Gulf (Khaleeji) Arabic, but it uses Egyptian words: ${[...found].slice(0, 8).join("، ")}. Rewrite every text in Gulf dialect.`] : [];
+  }
+  if (dialect === "egyptian") {
+    const found = new Set(words.filter((word) => GULF.includes(word)));
+    return found.size >= 2 ? [`This must be in Egyptian Arabic, but it uses Gulf/Saudi words: ${[...found].slice(0, 8).join("، ")}. Rewrite every text in Egyptian dialect.`] : [];
+  }
+  return [];
 }
 
 /** Whether this piece may sell: never in value mode; in mix, one in five. */

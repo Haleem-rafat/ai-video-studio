@@ -68,3 +68,22 @@ test("Gulf text full of Egyptian words is sent back; real Gulf text and Egyptian
   assert.deepEqual(dialectProblems(egyptian, "egyptian"), []);
   assert.deepEqual(dialectProblems(["العميل يدخل البايو ويطلع بدون ما يراسلك؟", "كلام صح، بس ما يقول شي", "ما عندك رأي؟ مو مشكلة"], "gulf"), []);
 });
+
+test("carousels and single posts are always Egyptian; reels take turns among reels only", async () => {
+  const { dialectFor } = await import("./direction.ts");
+  const client = { language: "ar", direction: { dialects: ["egyptian", "gulf"] } } as never;
+  const history = [{ kind: "carousel", dialect: "egyptian" }, { kind: "reel", dialect: "gulf" }] as never[];
+  assert.equal(dialectFor("carousel", client, history), "egyptian");
+  assert.equal(dialectFor("single", client, history), "egyptian");
+  assert.equal(dialectFor("reel", client, history), "egyptian", "the last reel was Gulf, so this one is Egyptian");
+  assert.equal(dialectFor("reel", client, [{ kind: "reel", dialect: "egyptian" }, ...history] as never[]), "gulf");
+  assert.equal(dialectFor("carousel", { language: "en" } as never, history), undefined);
+});
+
+test("Egyptian text with Gulf words is caught, and the Egyptian instruction is as firm as the Gulf one", async () => {
+  const { dialectLanguage, dialectProblems } = await import("./direction.ts");
+  assert.equal(dialectProblems(["وش تبي الحين؟ ليش ما ترد؟"], "egyptian").length, 1);
+  assert.deepEqual(dialectProblems(["عايز تعرف إزاي ترد دلوقتي؟"], "egyptian"), []);
+  assert.match(dialectLanguage("egyptian"), /EVERY word in Egyptian/);
+  assert.match(dialectLanguage(undefined), /Egyptian/);
+});
