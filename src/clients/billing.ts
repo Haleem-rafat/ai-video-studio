@@ -1,17 +1,18 @@
 import { listProjects, projectDir } from "../project.ts";
 import { readUsage, type UsageEntry } from "../usage.ts";
 import type { Project } from "../types.ts";
-import { CURRENCIES, listInvoices, newInvoice, saveInvoice, type Currency, type Invoice, type InvoiceItem, type PieceKind } from "./invoices.ts";
+import { CURRENCIES, deleteInvoice, listInvoices, newInvoice, saveInvoice, type Currency, type Invoice, type InvoiceItem, type PieceKind } from "./invoices.ts";
 import { clientDir, listPosts, loadClient, loadIdeas, localDate, postDir } from "./store.ts";
 import type { Client, Post } from "./types.ts";
 
 /**
- * Billing by the piece: every reel, carousel and single post made for a
- * client, and every video made for it outside the posts, gets its own invoice
- * with a line that says exactly what was delivered. The invoices keep up with
- * the work by themselves: a new piece gets its draft, a draft follows its
- * piece's title and the client's price list, a deleted piece's draft is
- * cancelled. An invoice that was sent or has a payment is never touched.
+ * Billing by the piece, on one invoice: every reel, carousel and single post
+ * made for a client, every video made for it outside the posts and each day
+ * of its ideas and research is a line that says exactly what was delivered,
+ * on the client's one open invoice. It keeps up with the work by itself: new
+ * pieces join it, lines follow their piece and the price list, a deleted
+ * piece's line leaves. An invoice that was sent or has a payment is never
+ * touched; the next piece starts a new open invoice.
  */
 
 /**
@@ -123,25 +124,42 @@ export function itemFor(piece: Piece, rates: Rates | undefined): InvoiceItem {
   return { description: `${LABEL[piece.kind]}: ${piece.title}`, detail, quantity: 1, price, source: { kind: piece.kind, id: piece.id }, rated: true };
 }
 
-/** A draft brought up to date with its piece and the price list, or null when it must stay as it is (sent, paid, cancelled, or nothing changed). */
-export function refreshed(invoice: Invoice, item: InvoiceItem, currency: Currency): Invoice | null {
-  if (invoice.status !== "draft" || invoice.payments.length) return null;
-  const items = invoice.items.map((line) =>
-    line.source?.kind === item.source!.kind && line.source.id === item.source!.id ? { ...line, description: item.description, detail: item.detail, ...(line.rated ? { price: item.price } : {}) } : line,
-  );
-  const allRated = items.every((line) => line.rated);
-  const next = { ...invoice, items, currency: allRated ? currency : invoice.currency };
-  return JSON.stringify(next) === JSON.stringify(invoice) ? null : next;
-}
-
 const keyOf = (source: { kind: string; id: string }) => `${source.kind}:${source.id}`;
 
 /**
- * Brings a client's invoices in line with its work: a draft invoice for each
- * new piece (issued the day it was made), drafts refreshed, drafts of deleted
- * pieces cancelled. Returns what it did.
+ * All the client's work on one invoice: the open one (a draft with no
+ * payments) holds a line for every piece no sent or paid invoice bills yet.
+ * Older one-piece drafts merge into it, lines follow the price list (a typed
+ * price stays), a deleted piece's line leaves, and lines typed by hand stay.
+ * `wanted`: every piece's line, oldest first. `fresh`: a new draft, used only
+ * when there is no open invoice. Returns the invoices to save and the ids of
+ * the drafts merged away.
  */
-async function sync(clientId: string): Promise<{ created: number; updated: number; cancelled: number }> {
+export function collect(invoices: Invoice[], wanted: InvoiceItem[], currency: Currency, fresh: () => Invoice): { save: Invoice[]; remove: string[] } {
+  const editable = (invoice: Invoice) => invoice.status === "draft" && !invoice.payments.length;
+  const billed = new Set(invoices.filter((invoice) => !editable(invoice) && invoice.status !== "cancelled").flatMap((invoice) => invoice.items.filter((item) => item.source).map((item) => keyOf(item.source!))));
+  const ours = invoices.filter((invoice) => editable(invoice) && (invoice.collects || invoice.source)).sort((a, b) => Number(Boolean(b.collects)) - Number(Boolean(a.collects)) || a.issueDate.localeCompare(b.issueDate) || a.number.localeCompare(b.number));
+  const lines = new Map(ours.flatMap((invoice) => invoice.items.filter((item) => item.source).map((item) => [keyOf(item.source!), item] as const)));
+  const items = wanted
+    .filter((item) => !billed.has(keyOf(item.source!)))
+    .map((item) => {
+      const line = lines.get(keyOf(item.source!));
+      return line ? { ...line, description: item.description, detail: item.detail, ...(line.rated ? { price: item.price } : {}) } : item;
+    });
+  const base = ours[0];
+  const remove = ours.slice(1).map((invoice) => invoice.id);
+  const typed = base?.items.filter((item) => !item.source) ?? [];
+  if (!items.length && !typed.length) return { save: [], remove: base ? [...remove, base.id] : remove };
+  const { source: _piece, ...open } = base ?? fresh();
+  const next: Invoice = { ...open, collects: true, items: [...typed, ...items], currency: [...typed, ...items].every((item) => item.rated) ? currency : open.currency };
+  return { save: base && JSON.stringify(next) === JSON.stringify(base) ? [] : [next], remove };
+}
+
+/**
+ * Brings a client's open invoice in line with its work (see collect): issued
+ * today whenever its lines change. Returns what it did.
+ */
+async function sync(clientId: string): Promise<{ created: number; updated: number; merged: number }> {
   const client = await loadClient(clientId);
   const posts = await listPosts(client.id);
   const ideaDays = [...new Set(posts.map((post) => post.ideaId?.slice(0, 10)).filter((day): day is string => Boolean(day)))];
@@ -163,35 +181,17 @@ async function sync(clientId: string): Promise<{ created: number; updated: numbe
   const currency = rates?.fromCost ? "USD" : (rates?.currency ?? DEFAULT_CURRENCY);
 
   const invoices = await listInvoices(client.id);
-  const bySource = new Map(invoices.filter((invoice) => invoice.source).map((invoice) => [keyOf(invoice.source!), invoice]));
-  const done = { created: 0, updated: 0, cancelled: 0 };
-  for (const piece of pieces) {
-    const item = itemFor(piece, rates);
-    const invoice = bySource.get(keyOf(item.source!));
-    if (!invoice) {
-      const draft = await newInvoice(client, piece.date);
-      await saveInvoice({ ...draft, currency, items: [item], source: item.source });
-      done.created++;
-      continue;
-    }
-    const next = refreshed(invoice, item, currency);
-    if (next) {
-      await saveInvoice(next);
-      done.updated++;
-    }
-  }
-  const live = new Set(pieces.map((piece) => `${piece.kind}:${piece.id}`));
-  for (const invoice of invoices) {
-    if (!invoice.source || live.has(keyOf(invoice.source)) || invoice.status !== "draft" || invoice.payments.length) continue;
-    await saveInvoice({ ...invoice, status: "cancelled", notes: [invoice.notes, "Cancelled automatically: the piece it billed for was deleted."].filter(Boolean).join("\n") });
-    done.cancelled++;
-  }
-  return done;
+  const draft = await newInvoice(client);
+  let created = 0;
+  const { save, remove } = collect(invoices, pieces.map((piece) => itemFor(piece, rates)), currency, () => (created++, draft));
+  for (const id of remove) await deleteInvoice(client.id, id);
+  for (const invoice of save) await saveInvoice({ ...invoice, issueDate: draft.issueDate, dueDate: draft.dueDate });
+  return { created, updated: save.length - created, merged: remove.length };
 }
 
 // One sync per client at a time, so two at once never bill a piece twice.
 const running = new Map<string, Promise<unknown>>();
-export function syncInvoices(clientId: string): Promise<{ created: number; updated: number; cancelled: number }> {
+export function syncInvoices(clientId: string): Promise<{ created: number; updated: number; merged: number }> {
   const next = (running.get(clientId) ?? Promise.resolve()).catch(() => undefined).then(() => sync(clientId));
   running.set(clientId, next);
   return next;

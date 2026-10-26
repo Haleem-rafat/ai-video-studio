@@ -193,7 +193,7 @@ export const api = {
     return response.text();
   },
   invoices: (id: string) => call<{ invoices: InvoiceView[]; summary: Record<string, { invoiced: number; paid: number; outstanding: number; overdue: number }>; rates: Rates }>("GET", `/api/clients/${id}/invoices`),
-  saveRates: (id: string, rates: Rates) => call<{ rates: Rates; created: number; updated: number; cancelled: number }>("PUT", `/api/clients/${id}/invoices/rates`, rates),
+  saveRates: (id: string, rates: Rates) => call<{ rates: Rates; created: number; updated: number; merged: number }>("PUT", `/api/clients/${id}/invoices/rates`, rates),
   createInvoice: (id: string, input: Partial<Invoice> = {}) => call<InvoiceView>("POST", `/api/clients/${id}/invoices`, input),
   saveInvoice: (id: string, invoiceId: string, input: Partial<Invoice>) => call<InvoiceView>("PUT", `/api/clients/${id}/invoices/${invoiceId}`, input),
   deleteInvoice: (id: string, invoiceId: string) => call<{ ok: true }>("DELETE", `/api/clients/${id}/invoices/${invoiceId}`),

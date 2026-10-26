@@ -52,6 +52,8 @@ export type Invoice = {
   payments: Payment[];
   /** The one piece this invoice bills for, when it was made for it automatically. */
   source?: { kind: PieceKind; id: string };
+  /** The one open invoice every piece made for the client is added to, until it is sent or paid. */
+  collects?: boolean;
   createdAt: string;
   updatedAt: string;
 };

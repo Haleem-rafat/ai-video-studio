@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { itemFor, piecesOf, refreshed, type Piece } from "./billing.ts";
+import { itemFor, piecesOf, type Piece } from "./billing.ts";
 import type { Invoice } from "./invoices.ts";
 
 const client = { name: "Risero", url: "https://diaaeziada.risero.io/" };
@@ -37,21 +37,6 @@ test("a piece's line takes its price from the client's price list, 0 while none 
   assert.equal(itemFor(piece, undefined).price, 0);
 });
 
-const draft = (over: Partial<Invoice> = {}) =>
-  ({ status: "draft", payments: [], currency: "USD", items: [{ description: "Carousel: old", detail: "old", quantity: 1, price: 0, source: { kind: "carousel", id: "c1" }, rated: true }], ...over }) as Invoice;
-
-test("a draft follows its piece and the price list; a price typed by hand or a sent or paid invoice is never changed", () => {
-  const item = itemFor({ kind: "carousel", id: "c1", title: "new", date: "2026-10-20", detail: "new detail" } as Piece, { currency: "USD", reel: 0, carousel: 80, single: 0, video: 0 });
-  const next = refreshed(draft(), item, "USD")!;
-  assert.equal(next.items[0].price, 80);
-  assert.equal(next.items[0].description, "Carousel: new");
-  const typed = draft({ items: [{ ...draft().items[0], price: 99, rated: false }] });
-  assert.equal(refreshed(typed, item, "USD")!.items[0].price, 99);
-  assert.equal(refreshed(draft({ status: "sent" }), item, "USD"), null);
-  assert.equal(refreshed(draft({ payments: [{ id: "p", date: "2026-10-21", amount: 5, method: "cash" }] }), item, "USD"), null);
-  assert.equal(refreshed(refreshed(draft(), item, "USD")!, item, "USD"), null, "nothing to change the second time");
-});
-
 test("priced at API cost: the piece's recorded AI cost, plus the markup, shown on the line", () => {
   const piece = { kind: "reel", id: "r1", title: "T", date: "2026-10-26", at: "", detail: "Instagram reel", cost: 0.9912 } as Piece;
   const rates = { currency: "USD", reel: 150, carousel: 0, single: 0, video: 0, fromCost: true, markup: 0 } as const;
@@ -78,4 +63,27 @@ test("a day's ideas and research is one piece, at the API cost recorded that day
   assert.match(pieces[0].title, /Ideas & research/);
   assert.match(pieces[0].detail, /2 AI calls/);
   assert.equal(itemFor(pieces[0], { currency: "USD", reel: 1, carousel: 1, single: 1, video: 1, planning: 0 }).description.startsWith("Planning: "), true);
+});
+
+test("everything is collected on one open invoice: per-piece drafts merge into it, new pieces join it, deleted ones leave it", async () => {
+  const { collect } = await import("./billing.ts");
+  const line = (id: string, price: number, kind = "reel") => ({ description: `R ${id}`, detail: id, quantity: 1, price, source: { kind, id }, rated: true }) as never;
+  const inv = (id: string, items: never[], over: Partial<Invoice> = {}) => ({ id, number: id, issueDate: "2026-10-20", status: "draft", payments: [], currency: "USD", items, ...over }) as Invoice;
+  const invoices = [
+    inv("inv-1", [line("a", 1)], { source: { kind: "reel", id: "a" } }),
+    inv("inv-2", [line("b", 2)], { source: { kind: "reel", id: "b" } }),
+    inv("inv-3", [line("c", 3)], { source: { kind: "reel", id: "c" }, status: "sent" }),
+    inv("inv-4", [line("gone", 4)], { source: { kind: "reel", id: "gone" } }),
+  ];
+  const wanted = [line("a", 1.5), line("b", 2), line("c", 3), line("new", 5)];
+  const { save, remove } = collect(invoices, wanted, "USD", () => inv("inv-9", []));
+  const open = save.find((i) => i.collects)!;
+  assert.equal(open.id, "inv-1", "the oldest draft becomes the one invoice");
+  assert.deepEqual(open.items.map((i) => (i as { source: { id: string } }).source.id), ["a", "b", "new"]);
+  assert.equal(open.items[0].price, 1.5, "lines follow the price list");
+  assert.equal(open.source, undefined);
+  assert.deepEqual(remove.sort(), ["inv-2", "inv-4"], "merged and deleted pieces' drafts go; the sent invoice stays");
+  assert.equal(save.some((i) => i.id === "inv-3"), false, "a sent invoice is never touched");
+  const again = collect([open, invoices[2]], wanted, "USD", () => inv("inv-9", []));
+  assert.deepEqual([again.save.length, again.remove.length], [0, 0], "nothing to do the second time");
 });

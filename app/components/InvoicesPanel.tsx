@@ -69,7 +69,7 @@ export function InvoicesPanel({ client }: { client: Client }) {
         <Button onClick={create}>
           <PlusIcon /> New invoice
         </Button>
-        <span className="text-xs text-muted-foreground">Every reel, carousel, post and video gets its own invoice automatically. Numbered across all clients; paid and overdue are worked out from the payments and due dates.</span>
+        <span className="text-xs text-muted-foreground">Every reel, carousel, post and video is added to one open invoice automatically. Numbered across all clients; paid and overdue are worked out from the payments and due dates.</span>
       </div>
 
       {Object.entries(owed).map(([currency, row]) => (
@@ -127,6 +127,12 @@ export function InvoicesPanel({ client }: { client: Client }) {
                 Issued {when(`${invoice.issueDate}T12:00`, false)} · due {when(`${invoice.dueDate}T12:00`, false)}
               </span>
             </div>
+            {invoice.collects && (
+              <div className="grid min-w-0 flex-1 basis-60">
+                <span className="text-sm">All work on one invoice · {invoice.items.length} line{invoice.items.length === 1 ? "" : "s"}</span>
+                <span className="text-xs text-muted-foreground">New reels, carousels, posts and videos are added here until it's sent or paid.</span>
+              </div>
+            )}
             {invoice.source && (
               <div className="grid min-w-0 flex-1 basis-60">
                 <span className="truncate text-sm" dir="auto">
@@ -237,7 +243,7 @@ function PriceList({ clientId, rates, onChange, onSaved }: { clientId: string; r
     api
       .saveRates(clientId, rates)
       .then(({ updated, created }) => {
-        toast.success(`Prices saved${updated || created ? ` · ${updated} draft(s) updated${created ? `, ${created} new` : ""}` : ""}`);
+        toast.success(`Prices saved${updated || created ? " · the open invoice is updated" : ""}`);
         onSaved();
       })
       .catch((error: Error) => toast.error(error.message))
