@@ -180,7 +180,6 @@ function stat({ s, k, B, arabic }: Ctx): Beat {
   const size = B.short ? 620 : 520;
   const ring = 2 * Math.PI * 46;
   const html = `<div class="statw">
-    ${s.visual.headline ? `<div class="stitle">${bdi(s.visual.headline)}</div>` : ""}
     <div class="ringbox" style="width:${size}px;height:${size}px">
       <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" class="rtrack" /><circle cx="50" cy="50" r="46" class="rfill" id="rf${k}" style="stroke-dasharray:${r(ring)};stroke-dashoffset:${r(ring)}" /></svg>
       <div class="snum" id="sn${k}" dir="ltr">${counts ? "0" : esc(item.label)}</div>
@@ -538,10 +537,10 @@ export function motionCss(B: Box, arabic: boolean): string {
   /* stat */
   .statw { position: relative; display: flex; flex-direction: column; align-items: center; gap: 26px; }
   .stitle { font: 700 ${B.short ? 56 : 48}px var(--head); text-align: center; padding: 0 40px; }
-  .ringbox { position: relative; display: grid; place-items: center; }
+  .ringbox { position: relative; display: grid; place-items: center; border-radius: 50%; box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 0 40px color-mix(in srgb, var(--accent) 12%, transparent); }
   .ringbox svg { position: absolute; inset: 0; transform: rotate(-90deg); }
   .rtrack { fill: none; stroke: color-mix(in srgb, var(--muted) 20%, transparent); stroke-width: 5; }
-  .rfill { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent)); }
+  .rfill { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; }
   .snum { position: relative; font: 800 ${B.short ? 250 : 210}px/1 var(--head); }
   .sunit { font: 700 ${B.short ? 52 : 44}px var(--head); color: var(--accent); text-align: center; padding: 0 40px; opacity: 0; }
   .spark { position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; margin: -11px; border-radius: 50%; background: var(--cta); opacity: 0; }
@@ -648,11 +647,5 @@ export function motionCss(B: Box, arabic: boolean): string {
   .pmi { flex: none; width: ${B.short ? 40 : 46}px; height: ${B.short ? 40 : 46}px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); } .pmi svg { width: 26px; height: 26px; }
 
   /* transitions between scenes */
-  #wipe { position: absolute; top: -10%; bottom: -10%; left: -15%; width: 130%; z-index: 90; background: linear-gradient(90deg, var(--accent), var(--cta)); transform: translateX(-120%); }
-  #iris { position: absolute; inset: 0; z-index: 90; background: var(--accent); clip-path: circle(0% at 50% 50%); }
-  #slices { position: absolute; inset: 0; z-index: 91; pointer-events: none; overflow: hidden; }
-  #slices i { position: absolute; left: 0; width: 100%; height: ${100 / 6}%; transform: translateX(-110%) skewX(-20deg); }
-  #slices i:nth-child(odd) { background: var(--accent); } #slices i:nth-child(even) { background: var(--cta); }
-  ${Array.from({ length: 6 }, (_, i) => `#slices i:nth-child(${i + 1}) { top: ${((100 / 6) * i).toFixed(3)}%; }`).join(" ")}
   `;
 }

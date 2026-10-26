@@ -390,11 +390,12 @@ export function buildMarketing(project: Project): string {
     const shown = repeatPage ? "kinetic" : s.visual.beat;
     const beat = BEATS[shown] ?? turn;
     const { html, js } = beat({ s, k, B, brand, m, arabic, locale, next, example });
-    const own = ["turn", "cta", ...FULL_FRAME].includes(shown) || !s.visual.headline;
+    // Every scene's title sits in the same place at the top; only scenes whose picture is the words themselves have none.
+    const own = ["turn", "cta", ...FULL_FRAME.filter((beat) => beat !== "stat")].includes(shown) || !s.visual.headline;
     const chips = s.visual.words.slice(0, 3);
-    const photo = s.visual.backdrop?.path ?? null;
-    // Objects float only beside scenes that are words alone, so they never cover a device or a card.
-    const object = ["turn", "kinetic", "stat"].includes(shown) ? (s.visual.object?.path ?? null) : null;
+    // The video has one background (#vbg), so scenes draw none and no objects float in: it reads as one piece.
+    const photo = null;
+    const object = null;
     blocks.push(`<section class="sc b-${shown}" id="sc${k}"><div class="cam" id="cm${k}">
       ${photo ? `<div class="scbg${DEVICE_BEATS.includes(shown) ? " faint" : ""}"><img src="${photo}" /></div>` : ""}
       ${object ? `<img class="obj" id="ob${k}" src="${object}" />` : ""}
@@ -409,6 +410,9 @@ export function buildMarketing(project: Project): string {
     lines.forEach((line, j) => captions.push(`<div class="cap" id="cp${k}_${j}"><div>${line.words.map((word) => `<span class="w">${captionWord(word)}</span>`).join(" ")}</div></div>`));
     timeline.push({ start: s.start, dur: r(s.seconds), next, chips: wordless(shown) ? [] : phraseTimes(s).slice(0, chips.length), lines: lines.map((line) => line.at), cuts: cameraCuts(spoken.map((line) => line.at[0]), s.seconds), step: steps[k]?.n ?? null });
   });
+
+  // The whole video's background: the first picture drawn for it (older projects drew one per scene).
+  const videoBackdrop = scenes.find((s) => s.visual.backdrop?.path)?.visual.backdrop?.path ?? null;
 
   const prnd = seeded(41);
   const particles = Array.from({ length: 22 }, (_, i) => {
@@ -592,6 +596,9 @@ export function buildMarketing(project: Project): string {
   ${motionCss(B, arabic)}
 
   /* depth: art behind, particles, light and grain */
+  #vbg { position: absolute; inset: -6%; z-index: 1; overflow: hidden; opacity: .4; }
+  #vbg img { width: 100%; height: 100%; object-fit: cover; filter: blur(2px); }
+  #vbg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, transparent 0%, var(--bg) 80%); }
   .scbg { position: absolute; inset: -6%; overflow: hidden; opacity: .42; }
   .scbg.faint { opacity: .16; }
   .scbg img { width: 100%; height: 100%; object-fit: cover; filter: blur(1.5px); }
@@ -627,6 +634,7 @@ export function buildMarketing(project: Project): string {
 <body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="${total}" data-width="${B.W}" data-height="${B.H}">
  <div id="bg"><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i><div class="dots"></div></div>
+ ${videoBackdrop ? `<div id="vbg"><img src="${videoBackdrop}" /></div>` : ""}
  <div id="dim"></div>
  ${m?.value ? "" : `<div id="brandbar">${brand.logo ? `<img src="${brand.logo}" />` : ""}<span>${esc(brand.name)}</span></div>`}
  ${blocks.join("\n")}
@@ -634,15 +642,12 @@ export function buildMarketing(project: Project): string {
  ${captions.join("\n")}
  <div id="particles">${particles}</div>
  <div id="leak"></div><div id="grain"></div>
- <div id="wipe"></div><div id="iris"></div><div id="slices">${Array.from({ length: 6 }, () => "<i></i>").join("")}</div>
  ${audio}
 </div>
 <script>
 window.__timelines = window.__timelines || {};
 const D_ = ${JSON.stringify(timeline)};
 const TOTAL = ${total}, OUTRO = ${outro}, ACCENT = '${c.accent}', CTA = '${c.cta}', BG = '${c.background}', W = ${B.W}, H = ${B.H}, DIR = ${B.dir};
-// "faithful" cuts softly; "creative" sweeps a brand-colour bar across; "bold" alternates the bar and an iris.
-const TRANS = '${m.creativity ?? "faithful"}';
 const tl = gsap.timeline({ paused: true });
 
 // The background never stands still.
@@ -650,6 +655,7 @@ tl.to('.b1', { x: ${B.W * 0.15}, y: ${B.H * 0.08}, duration: TOTAL / 2, yoyo: tr
 tl.to('.b2', { x: -${B.W * 0.12}, y: -${B.H * 0.1}, duration: TOTAL / 3, yoyo: true, repeat: 2, ease: 'sine.inOut' }, 0);
 tl.to('.b3', { x: ${B.W * 0.1}, scale: 1.3, duration: TOTAL / 2, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 0);
 tl.to('.dots', { backgroundPosition: '0px 340px', duration: TOTAL, ease: 'none' }, 0);
+if (document.querySelector('#vbg')) tl.fromTo('#vbg', { scale: 1.12, x: 30 * DIR }, { scale: 1, x: -30 * DIR, duration: TOTAL, ease: 'none', immediateRender: false }, 0);
 ${m?.value ? "" : "tl.fromTo('#brandbar', { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: .5, immediateRender: false }, .2);"}
 // Particles drift upward through the whole video, the near ones faster; grain crawls.
 document.querySelectorAll('#particles i').forEach((p, i) => {
@@ -661,8 +667,9 @@ tl.to('#grain', { x: 60, y: -40, duration: TOTAL, ease: 'steps(' + Math.round(TO
 // Scenes come in soft and leave soft.
 D_.forEach((s, k) => {
   // Zoom-through cuts: the old scene rushes past the camera, the new one settles in.
-  if (TRANS === 'faithful' || k === 0) tl.fromTo('#sc' + k, { opacity: 0, scale: .92, filter: 'blur(10px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: .5, ease: 'power3.out', immediateRender: false }, Math.max(0, s.start - .25));
-  if (s.next !== null && TRANS === 'faithful') tl.to('#sc' + k, { opacity: 0, scale: 1.1, filter: 'blur(12px)', duration: .3, ease: 'power2.in' }, s.next - .35);
+  // One transition for the whole video: the new scene fades in drifting a little in the reading direction, the old one fades out.
+  tl.fromTo('#sc' + k, { opacity: 0, x: 60 * DIR }, { opacity: 1, x: 0, duration: .5, ease: 'power2.out', immediateRender: false }, Math.max(0, s.start - .25));
+  if (s.next !== null) tl.to('#sc' + k, { opacity: 0, x: -40 * DIR, duration: .35, ease: 'power2.in' }, s.next - .3);
   const end = (s.next ?? TOTAL) + .4, root = document.querySelector('#sc' + k);
   // The camera never stops: a slow push-in on every scene.
   tl.fromTo('#sc' + k + ' .stage', { scale: 1 }, { scale: 1.045, duration: end - s.start + .3, ease: 'none', immediateRender: false }, s.start - .3);
@@ -671,29 +678,9 @@ D_.forEach((s, k) => {
     tl.fromTo('#ob' + k, { opacity: 0, scale: .4, rotation: -20 * DIR, y: 80 }, { opacity: 1, scale: 1, rotation: 0, y: 0, duration: .8, ease: 'back.out(1.7)', immediateRender: false }, s.start + .3);
     tl.to('#ob' + k, { y: -24, rotation: 6 * DIR, duration: 2.2, yoyo: true, repeat: Math.max(1, Math.floor((end - s.start - 1.1) / 2.2)), ease: 'sine.inOut' }, s.start + 1.1);
   }
-  // A soft light sweeps across as each scene arrives.
-  if (k > 0) tl.fromTo('#leak', { opacity: 0, x: -W * .7 * DIR, y: -H * .2 }, { opacity: .55, x: W * .3 * DIR, y: H * .1, duration: 1.2, ease: 'power1.inOut', immediateRender: false }, s.start - .5);
-  if (k > 0) tl.to('#leak', { opacity: 0, duration: .5 }, s.start + .7);
+
   // Devices and cards keep floating once they have arrived.
   root.querySelectorAll('.phone, .pmap, .book, .dash, .chat, .order, .splitw, .week, .lchat, .ringbox, .cals').forEach((el, i) => tl.to(el, { y: '-=12', duration: 1.8 + i * .3, yoyo: true, repeat: Math.max(1, Math.floor((end - s.start - 1.2) / (1.8 + i * .3))), ease: 'sine.inOut' }, s.start + 1.2));
-  if (s.next !== null && TRANS !== 'faithful') {
-    // The cover lands, the scenes swap behind it, the cover leaves.
-    // Bold cuts take turns: a bar wipe, an iris, a glitch.
-    const cut = s.next - .3, kind = TRANS === 'bold' ? ['wipe', 'iris', 'glitch'][k % 3] : 'wipe', iris = kind === 'iris';
-    if (kind === 'glitch') {
-      tl.fromTo('#slices i', { xPercent: -110 * DIR }, { xPercent: 110 * DIR, duration: .42, stagger: .03, ease: 'power3.inOut', immediateRender: false }, cut - .22);
-      tl.fromTo('#root', { filter: 'drop-shadow(14px 0 0 ' + CTA + ') drop-shadow(-14px 0 0 ' + ACCENT + ')' }, { filter: 'drop-shadow(0px 0 0 ' + CTA + ') drop-shadow(0px 0 0 ' + ACCENT + ')', duration: .4, ease: 'power2.out', immediateRender: false }, cut);
-      tl.fromTo('#sc' + (k + 1), { skewX: 10 * DIR, scale: 1.08 }, { skewX: 0, scale: 1, duration: .35, ease: 'power3.out', immediateRender: false }, cut);
-    } else if (iris) {
-      tl.fromTo('#iris', { clipPath: 'circle(0% at 50% 50%)' }, { clipPath: 'circle(80% at 50% 50%)', duration: .28, ease: 'power3.in', immediateRender: false }, cut - .28);
-      tl.to('#iris', { clipPath: 'circle(0% at 50% 50%)', duration: .32, ease: 'power3.out' }, cut + .02);
-    } else {
-      tl.fromTo('#wipe', { xPercent: -120 * DIR, skewX: -14 * DIR }, { xPercent: 0, duration: .28, ease: 'power3.in', immediateRender: false }, cut - .28);
-      tl.to('#wipe', { xPercent: 120 * DIR, duration: .32, ease: 'power3.out' }, cut + .02);
-    }
-    tl.set('#sc' + k, { opacity: 0 }, cut);
-    tl.set('#sc' + (k + 1), { opacity: 1, y: 0, filter: 'blur(0px)' }, cut);
-  }
   s.chips.forEach((at, j) => tl.fromTo('#w' + k + '_' + j, { opacity: 0, scale: .6, y: 20 }, { opacity: 1, scale: 1, y: 0, duration: .4, ease: 'back.out(2.2)', immediateRender: false }, s.start + at));
   s.lines.forEach((at, j) => {
     const id = '#cp' + k + '_' + j, end = j + 1 < s.lines.length ? s.start + s.lines[j + 1][0] - .05 : s.start + s.dur + .2;
@@ -706,11 +693,8 @@ D_.forEach((s, k) => {
       if (i + 1 < at.length) tl.set(w, { className: 'w' }, s.start + at[i + 1]);
     });
   });
-  // The camera moves on every phrase: in, across, up, back; never still for long.
-  s.cuts.forEach((at, i) => {
-    const move = [{ scale: 1.07, x: 0, y: 0 }, { scale: 1.02, x: -24 * DIR, y: 0 }, { scale: 1.05, x: 0, y: -18 }, { scale: 1, x: 24 * DIR, y: 0 }][i % 4];
-    tl.to('#cm' + k, { ...move, duration: .32, ease: 'power3.out' }, s.start + at);
-  });
+  // The camera breathes with the phrases: a slow push in, then out, never a jump.
+  s.cuts.forEach((at, i) => tl.to('#cm' + k, { scale: i % 2 ? 1 : 1.035, duration: 1.6, ease: 'sine.inOut' }, s.start + at));
   if (s.step) {
     if (!document.querySelector('#steps').dataset.shown) { document.querySelector('#steps').dataset.shown = 1; tl.fromTo('#steps', { opacity: 0, y: -16 }, { opacity: 1, y: 0, duration: .4, immediateRender: false }, s.start); }
     tl.set('#st' + s.step, { className: 'on' }, s.start + .1);

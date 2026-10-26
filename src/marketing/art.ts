@@ -31,8 +31,8 @@ const PLAN = z.object({
 
 /**
  * Plans the pictures of a marketing video like an art director: one style,
- * a different backdrop for every scene, a few floating objects, and the
- * pictures that stand in for social posts. Nothing is taken from the
+ * one background behind the whole video, and the pictures that stand in for
+ * social posts. Nothing is taken from the
  * website, so no frame repeats its screenshots or its owner's photo.
  */
 /**
@@ -59,7 +59,7 @@ Brand colours: background ${c.background}, accent ${c.accent}, call to action ${
 Plan pictures made for this video; the website's screenshots are never shown, so every picture is yours to invent.${m.artDirection ? `\nTHE PRODUCER ASKS FOR THIS ART STYLE — use it as the style: ${m.artDirection}` : ""}
 Rules:
 - One consistent art style across the whole video, lit and coloured in the brand's palette (deep ${c.background} shadows, ${c.accent} and ${c.cta} light).
-- Every scene's backdrop is a different picture that tells that scene's idea. Never repeat a subject.
+- The FIRST scene's backdrop is the background of the WHOLE video, behind every scene: a calm, uncluttered setting the audience lives in that fits every scene (no close-up action, room for words over it). The other scenes' backdrops and the objects are not drawn; describe them briefly.
 - Pictures never contain text, letters, numbers, logos, user interfaces or screenshots.
 - People are welcome (the audience: coaches, consultants, service providers), shown naturally.${artPeople(m) ? `\n- ${artPeople(m)}. Write that into every picture that shows a person.` : ""}
 - Give a floating object only to the scenes whose beat is turn, kinetic or stat (they are words alone); leave it empty everywhere else.
@@ -98,12 +98,13 @@ export async function directArt(project: Project, log: (message: string) => void
   project.scenes.forEach((scene, i) => {
     const plan = output.scenes[i];
     if (!plan || scene.visual.type !== "marketing") return;
-    scene.visual.backdrop = { query: look(plan.backdrop), source: "ai" };
-    if (plan.object.trim()) scene.visual.object = { query: `${plan.object}. ${output.style}, accents in ${c.accent} and ${c.cta}. A single object centred on a plain white background, no text`, source: "ai" };
-    else delete scene.visual.object;
+    // One background for the whole video and no floating objects: a video reads as one piece, not seven.
+    if (i === 0) scene.visual.backdrop = { query: look(plan.backdrop), source: "ai" };
+    else delete scene.visual.backdrop;
+    delete scene.visual.object;
   });
   m.art = { style: output.style, cards: output.cards.map((card) => ({ query: look(card), source: "ai" as const })), subjects: subjects(output) };
-  log(`art: ${output.style} · ${output.scenes.length} backdrops, ${output.scenes.filter((plan) => plan.object.trim()).length} objects, ${output.cards.length} post pictures`);
+  log(`art: ${output.style} · 1 background for the whole video, ${output.cards.length} post pictures`);
 }
 
 /** Draws every planned picture that has no file yet; objects are cut out of their white background. */
