@@ -48,3 +48,10 @@ test("an English word or number in an Arabic caption keeps its punctuation outsi
   assert.equal(captionWord("وضّح"), "وضّح");
   assert.equal(captionWord("$50"), '<bdi dir="ltr">$50</bdi>');
 });
+
+test("screen words drop quotation marks, which flip sides on a word shown alone", async () => {
+  const { screenWord } = await import("./marketing-kit.ts");
+  assert.equal(screenWord("«القاعة"), "القاعة");
+  assert.equal(screenWord("فين؟»"), "فين؟");
+  assert.equal(screenWord("“Book”"), "Book");
+});

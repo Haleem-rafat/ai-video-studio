@@ -43,7 +43,7 @@ const DRAFT = z.object({
               "page: 3-5 parts of the page in this order: about you, services, work, reviews, booking (label: the part in 1-3 words; value: an icon word: user, star, note, heart, calendar). booking: 4-6 time slots (label: a time like 10:00 or ١٠:٠٠ ص). " +
               "traffic: 3 sources (label: Instagram/Facebook/TikTok; value: its link tag like ?from=reel-12). dashboard: 3-5 traffic sources or countries (label; value: a share as a number 0-100). " +
               "recap: the 3 parts. kinetic: 0-2 words of the headline to highlight. chaos: 4-7 scattered pieces (label: 1-3 words like 'رسالة متأخرة', 'لينك في البايو'; value: a tiny icon word: message, link, form, calendar, note, question). " +
-              "path: 3-5 stations (label 1-3 words; value: icon word: eye, heart, user, calendar, check, chart, message, link). stat: ONE item, label is the number with no unit (15), value is its unit and meaning (دقيقة مكالمة مجانية). " +
+              "path: 3-5 stations (label 1-3 words; value: icon word: eye, heart, user, calendar, check, chart, message, link). stat: ONE item, label is the number with no unit (15), value is its unit and meaning (دقيقة مكالمة مجانية); only a number that matters from the brief (a price, a count, a time), never 1 or a number made up for the scene. " +
               "split: 2-4 rows, label the before (messy), value the after (clean). notify: 2-4 notifications (label: title, value: detail). orbit: 3-6 parts or channels. sting: empty. " +
               "links: 3-5 links you send (label: what it is, like 'فيديو التعريف', 'بوست الأسعار'; value: a short link like instagram.com/p/…). conflict: 3-5 appointments (label: who or what); the last two collide. turn and cta: empty",
           ),

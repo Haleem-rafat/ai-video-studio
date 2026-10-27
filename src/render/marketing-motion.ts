@@ -1,6 +1,6 @@
 import { alignWords } from "./align.ts";
 import { ARABIC } from "./arena.ts";
-import { postPictures, socialBadge, bdi, esc, iconByWord, ICONS, itemTimes, r, saidAt, seeded, type Beat, type Box, type Ctx, type MarketingScene } from "./marketing-kit.ts";
+import { postPictures, socialBadge, screenWord, bdi, esc, iconByWord, ICONS, itemTimes, r, saidAt, seeded, type Beat, type Box, type Ctx, type MarketingScene } from "./marketing-kit.ts";
 
 /**
  * The motion-graphics beats of a marketing video: no screenshots, only the
@@ -54,7 +54,7 @@ function kinetic({ s, k, B, brand }: Ctx): Beat {
         `<div class="kin" id="kp${k}_${j}" style="font-size:${phrase.words.join(" ").length > 22 ? size * 0.8 : size}px">${phrase.words
           .map((word, i) => {
             const isHot = hot.has(clean(word));
-            return `<span class="kw${isHot ? " hot" : ""}"${ARABIC.test(word) ? "" : ' dir="ltr"'}><span class="kwi" id="kw${k}_${j}_${i}">${esc(word)}</span>${isHot ? `<i class="hl" id="hl${k}_${j}_${i}"></i>` : ""}</span>`;
+            return `<span class="kw${isHot ? " hot" : ""}"${ARABIC.test(word) ? "" : ' dir="ltr"'}><span class="kwi" id="kw${k}_${j}_${i}">${esc(screenWord(word))}</span>${isHot ? `<i class="hl" id="hl${k}_${j}_${i}"></i>` : ""}</span>`;
           })
           .join(" ")}</div>`,
     )
@@ -196,6 +196,11 @@ function stat({ s, k, B, arabic }: Ctx): Beat {
   if (N) for (let i = 1; i <= ${steps}; i++) { const v = i === ${steps} ? N : Math.round(N * (1 - Math.pow(1 - i / ${steps}, 2))); tl.set('#sn${k}', { textContent: ${arabic ? "String(v)" : "String(v)"} }, t + (end - t) * i / ${steps}); }
   tl.fromTo('#sn${k}', { scale: 1 }, { scale: 1.12, duration: .18, yoyo: true, repeat: 1, ease: 'power2.out', immediateRender: false }, end);
   tl.fromTo('#su${k}', { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: .45, immediateRender: false }, end - .2);
+  // After the count the ring keeps breathing, so the number never stands still.
+  const hold = t + D - end - .4;
+  if (hold > 1) {
+    tl.to('#sc${k} .ringbox', { scale: 1.06, duration: 1.4, yoyo: true, repeat: Math.max(1, Math.floor(hold / 1.4)), ease: 'sine.inOut' }, end + .4);
+  }
   for (let i = 0; i < 10; i++) {
     const a = i / 10 * Math.PI * 2;
     tl.fromTo('#sk${k}_' + i, { x: 0, y: 0, opacity: 1, scale: 1 }, { x: Math.cos(a) * ${size * 0.62}, y: Math.sin(a) * ${size * 0.62}, opacity: 0, scale: .3, duration: .8, ease: 'power3.out', immediateRender: false }, end);

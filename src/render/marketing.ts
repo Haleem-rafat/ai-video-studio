@@ -1,5 +1,5 @@
 import { alignWords } from "./align.ts";
-import { postPictures, seeded, bdi, boxFor, esc, ICONS, iconFor, itemTimes, nextDays, phraseTimes, placeMarketing, r, saidAt, socialBadge, type Beat, type Ctx } from "./marketing-kit.ts";
+import { postPictures, seeded, screenWord, bdi, boxFor, esc, ICONS, iconFor, itemTimes, nextDays, phraseTimes, placeMarketing, r, saidAt, socialBadge, type Beat, type Ctx } from "./marketing-kit.ts";
 import { ARABIC, karaoke } from "./arena.ts";
 import { FULL_FRAME, MOTION, motionCss } from "./marketing-motion.ts";
 import { cameraCuts, stepsOf } from "./marketing-pace.ts";
@@ -108,7 +108,7 @@ function turn({ s, k, B }: Ctx): Beat {
   });
   const hot = Math.max(0, words.length - 2);
   const html = `<div class="turn" style="font-size:${B.short ? (words.length > 9 ? 66 : 88) : words.length > 10 ? 66 : 84}px"><p>${words
-    .map((word, i) => `<span class="tw${i >= hot ? " hot" : ""}" id="tw${k}_${i}"${ARABIC.test(word) ? "" : ' dir="ltr"'}>${esc(word)}</span>`)
+    .map((word, i) => `<span class="tw${i >= hot ? " hot" : ""}" id="tw${k}_${i}"${ARABIC.test(word) ? "" : ' dir="ltr"'}>${esc(screenWord(word))}</span>`)
     .join(" ")}</p><i class="uline" id="ul${k}"></i></div>`;
   const js = `{
   const t = ${s.start}, D = ${r(s.seconds)}, T = ${JSON.stringify(at)};
@@ -314,7 +314,7 @@ function cta({ s, k, B, brand, m, arabic, next }: Ctx): Beat {
     <div class="cname" id="cnm${k}">${esc(brand.name)}</div>
     <div class="cbtn" id="cb${k}">${bdi(label)}<i class="shine" id="sh${k}"></i></div>
     ${m.value ? "" : `<div class="arrow" id="ar${k}">${ICONS.arrow}</div>
-    <div class="curl" dir="ltr" id="cu${k}">${esc(link)}</div>
+    <div class="curl" dir="ltr" id="cu${k}" style="font-size:${Math.min(B.short ? 38 : 34, Math.floor((B.W - 160) / (link.length * 0.56)))}px">${esc(link)}</div>
     <div class="where" id="wh${k}">${esc(where)}</div>`}
   </div>`;
   const until = next ?? "TOTAL";
@@ -395,7 +395,8 @@ function fontsLink(brand: SiteBrand, arabic: boolean): string {
  * One caption word as HTML. An English word or number runs left to right with
  * its punctuation kept outside, so «2:» in an Arabic line reads «2:», not «:2».
  */
-export function captionWord(word: string): string {
+export function captionWord(raw: string): string {
+  const word = screenWord(raw);
   if (ARABIC.test(word)) return esc(word);
   const [, core, mark] = word.match(/^(.*?)([.,،:؛؟?!…]*)$/)!;
   return `<bdi dir="ltr">${esc(core)}</bdi>${esc(mark)}`;
@@ -639,7 +640,7 @@ export function buildMarketing(project: Project): string {
   .cbtn { position: relative; overflow: hidden; font: 700 ${B.short ? 58 : 52}px var(--head); padding: ${B.short ? "30px 60px" : "26px 64px"}; border-radius: 999px; background: var(--cta); color: #1a0d07; box-shadow: 0 24px 70px color-mix(in srgb, var(--cta) 55%, transparent); text-align: center; max-width: ${B.W - 100}px; }
   .shine { position: absolute; top: -20%; bottom: -20%; width: 30%; left: 0; background: linear-gradient(100deg, transparent, #ffffffaa, transparent); transform: translateX(-150%) skewX(-20deg); }
   .arrow { width: 90px; height: 90px; color: var(--accent); } .arrow svg { width: 100%; height: 100%; stroke-width: 2.6; }
-  .curl { font: 600 ${B.short ? 36 : 32}px 'IBM Plex Mono', monospace; color: var(--accent); background: #0005; padding: 12px 30px; border-radius: 16px; max-width: ${B.W - 100}px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .curl { font: 600 ${B.short ? 36 : 32}px var(--body); color: var(--text); background: color-mix(in srgb, var(--panel) 90%, transparent); border: 2px solid var(--accent); padding: 12px 30px; border-radius: 16px; max-width: ${B.W - 100}px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .where { font: 500 ${B.short ? 34 : 28}px var(--body); color: var(--muted); }
 
   ${motionCss(B, arabic)}

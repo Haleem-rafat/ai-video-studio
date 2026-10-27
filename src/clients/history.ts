@@ -18,6 +18,8 @@ export type Made = {
   /** A video's scene beats, in order. */
   beats?: string[];
   voice?: string;
+  /** The brand pictures its showcase scenes framed. */
+  shots?: string[];
   creativity?: string;
   artStyle?: string;
   /** A carousel's post format, design and slide layouts in order. */
@@ -221,6 +223,7 @@ export function madeFromProject(project: Project, kind: "reel" | "video"): Made 
     lines: project.scenes.map((scene) => scene.narration),
     beats: project.scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? scene.visual.type),
     voice: project.marketing?.narrator.voice,
+    shots: project.scenes.map((scene) => (scene.visual as { shot?: string }).shot).filter((shot): shot is string => Boolean(shot)),
     creativity: project.marketing?.creativity,
     ...(project.marketing?.art?.style ? { artStyle: project.marketing.art.style } : {}),
     ...(project.marketing?.reelStyle ? { reelStyle: project.marketing.reelStyle } : {}),

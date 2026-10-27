@@ -16,6 +16,8 @@ export type MarketingScene = Scene & { start: number; seconds: number; visual: E
 export const esc = (text: unknown) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 export const r = (n: number) => Math.round(n * 1000) / 1000;
 export const unglue = (text: string) => text.replace(/(^|\s)([وب])(?=[A-Za-z0-9$])/g, "$1$2 ");
+/** A word shown on its own: quotation marks dropped, since a lone «word flips them to the wrong side. */
+export const screenWord = (word: string) => word.replace(/[«»“”"]/g, "");
 export const bdi = (text: string) => `<bdi>${esc(unglue(text))}</bdi>`;
 
 export function asMarketing(scene: Scene): MarketingScene["visual"] {

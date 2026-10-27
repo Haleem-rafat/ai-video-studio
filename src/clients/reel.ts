@@ -67,10 +67,12 @@ export function reelScript(idea: Idea): string {
 export function avoidNotes(history: Made[]): string {
   const videos = history.filter((made) => (made.kind === "reel" || made.kind === "video") && made.beats?.length).slice(0, 8);
   if (!videos.length) return "";
+  const shown = videos.flatMap((video) => video.shots ?? []);
   return [
     "EARLIER VIDEOS OF THIS CLIENT (already paid for; this reel must look and sound different):",
     ...videos.map((video) => `- "${video.title}": opens «${video.lines[0]?.slice(0, 90) ?? ""}»; scenes ${video.beats!.join(" → ")}`),
     "Use a different opening scene type, a different scene order, and no sentence from these videos.",
+    ...(shown.length ? [`Pictures these videos already showcased (show a different one): ${[...new Set(shown)].join(", ")}.`] : []),
   ].join("\n");
 }
 
