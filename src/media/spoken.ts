@@ -64,7 +64,15 @@ export function pronounce(text: string, map: Record<string, string>): string {
 }
 
 export function spokenText(text: string, map: Record<string, string> = {}): string {
-  return egyptianNumbers(pronounce(text, map));
+  return egyptianNumbers(pronounce(unsayable(text), map));
+}
+
+/** A voice spells out handles and web addresses letter by letter: handles are left unsaid, an address is «اللينك». */
+export function unsayable(text: string): string {
+  return text
+    .replace(/\s*@[\w.]+/g, "")
+    .replace(/(?:https?:\/\/)?(?:[\w-]+\.)+[a-z]{2,}(?:\/[^\s،,]*)?/gi, "اللينك")
+    .replace(/\s+([،,.؟?!])/g, "$1");
 }
 
 const MARKS = /[ً-ْٰ]/g;

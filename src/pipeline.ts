@@ -44,7 +44,7 @@ const run = promisify(execFile);
 export type Log = (message: string) => void;
 
 /** Gemini voices for a marketing video's narrator. */
-export const MARKETING_VOICES = { male: "Charon", female: "Sulafat" } as const;
+export const MARKETING_VOICES = { male: "Charon", female: "Zephyr" } as const;
 
 export const MARKETING_STYLE = {
   ar: "اقرأ باللهجة المصرية العامية، بصوت طبيعي وهادي وواثق، كأنك بتشرح فكرة لصاحب بيزنس، مش بتقرأ إعلان. إيقاع أسرع شوية في المشاكل، وأهدى عند الحل. انطق أسماء البراندات والمنصات بالإنجليزي.",

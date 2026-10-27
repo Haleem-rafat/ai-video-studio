@@ -18,6 +18,22 @@ import type { Client, Idea, ScriptReview } from "./types.ts";
 
 const GULF_STYLE = "اقرأ باللهجة الخليجية، بصوت طبيعي وهادي وواثق، كأنك تشرح فكرة لصاحب بيزنس، مو تقرأ إعلان. انطق أسماء البراندات والمنصات بالإنجليزي.";
 
+/**
+ * How the voice reads this client's reels: its own tone and audience, in one
+ * dialect only, every word whole. One shared "explaining to a business
+ * owner" read made every client sound alike, and drifted to fusha and Gulf.
+ */
+export function voiceDirection(brief: Pick<MarketingBrief, "tone" | "audience" | "voice">, dialect: Dialect = "egyptian"): string {
+  const she = brief.voice === "female";
+  if (dialect === "gulf") return `${GULF_STYLE} النبرة: ${brief.tone}.`;
+  return [
+    she ? "اتكلمي بالعامية المصرية القاهرية بس، مش فصحى ولا خليجي، زي ما بتتكلمي في البيت." : "اتكلم بالعامية المصرية القاهرية بس، مش فصحى ولا خليجي، زي ما بتتكلم في البيت.",
+    `النبرة: ${brief.tone}.`,
+    `${she ? "إنتِ بتكلمي" : "إنت بتكلم"}: ${brief.audience.split(/[،,.]/)[0].trim()}، كأنك بتحكي${she ? "ي" : ""} لحد قريب منك، مش بتقرأ إعلان.`,
+    she ? "انطقي كل كلمة كاملة وواضحة لآخر حرف، من غير ما تبلعي حروف ولا تقطّعي الكلمة." : "انطق كل كلمة كاملة وواضحة لآخر حرف، من غير ما تبلع حروف ولا تقطّع الكلمة.",
+  ].join(" ");
+}
+
 const GOAL_DIRECTION: Record<Idea["goal"], string> = {
   awareness: "reach people who don't know the brand yet; lead with their pain, mention the brand late",
   details: "show how one feature works, step by step",
@@ -87,7 +103,8 @@ export async function createReel(
   const subtitles = client.profile?.answers["creative.subtitles"]?.value as string | undefined;
   // Auto never repeats the style of the client's last two reels; a reel that doesn't sell never tours the product.
   const auto = (exclude: string[] = []) => autoReelStyle([...history, ...exclude.map((reelStyle) => ({ kind: "reel", reelStyle }))]);
-  const chosen = styleChoice === "auto" ? (sell ? autoReelStyle(history) : auto(["tour"])) : styleChoice;
+  // No choice is Auto too, as in the studio's form.
+  const chosen = !styleChoice || styleChoice === "auto" ? (sell ? autoReelStyle(history) : auto(["tour"])) : styleChoice;
   const reelStyle = !sell && chosen === "tour" ? auto(["tour"]) : chosen;
   const style = reelStyleOf(reelStyle);
   if (style && style.id !== "classic") log(`script: reel style ${style.label.en}`);
@@ -145,7 +162,7 @@ export async function createReel(
       creativity,
       language: client.language,
       // A Gulf reel is read in a Gulf accent.
-      narrator: { voice, style: dialect === "gulf" ? GULF_STYLE : MARKETING_STYLE[client.language], ...(client.pronounce && Object.keys(client.pronounce).length ? { names: Object.values(client.pronounce) } : {}) },
+      narrator: { voice, style: client.language === "ar" ? voiceDirection(brief, dialect) : MARKETING_STYLE.en, ...(client.pronounce && Object.keys(client.pronounce).length ? { names: Object.values(client.pronounce) } : {}) },
       // Prompted mode's subtitles answer, when given, decides; else the brief.
       captions: subtitles !== undefined ? subtitles === "yes" : (style?.captions ?? Boolean(brief.captions)),
       ...(style && style.id !== "classic" ? { reelStyle: style.id } : {}),

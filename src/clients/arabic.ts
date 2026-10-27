@@ -152,7 +152,7 @@ ${JSON.stringify(unknown)}`,
     model: MODEL,
     output: Output.object({ schema: LIST }),
     prompt: `These ${dialect === "gulf" ? "Gulf" : "Egyptian"}-Arabic lines will be read by a text-to-speech voice that misreads words without vowel marks (it read «آراء» as «قراءة», «ميعادين يتداخلوا» as «مع عديني الدخل», «تنسيق» as «تنصيق»).
-Add Arabic vowel marks (تشكيل) ONLY on the words a voice could misread, as ${dialect === "gulf" ? "a Gulf (Khaleeji)" : "an Egyptian"} speaker says them. Do not change, add or remove any letter, word or punctuation. Return the same number of lines in the same order.
+Add Arabic vowel marks (تشكيل) ONLY on the words a voice could misread, as ${dialect === "gulf" ? "a Gulf (Khaleeji)" : "an Egyptian"} speaker says them. Most lines need none, or one or two marked words; never mark common words, and never mark a word the formal (فصحى) way: marks the formal way make the voice sound formal, not ${dialect === "gulf" ? "Gulf" : "Egyptian"}. Do not change, add or remove any letter, word or punctuation. Return the same number of lines in the same order.
 
 ${JSON.stringify({ texts: plain })}`,
   });

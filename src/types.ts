@@ -87,11 +87,13 @@ export type Visual =
  * then are pulled in. sting: the logo built from shapes, with a light sweep.
  * links: a customer asks, and you answer with link after link, each opening
  * a different preview, piling up. conflict: a week's calendar fills up and
- * two appointments collide, with a clear conflict mark.
+ * two appointments collide, with a clear conflict mark. showcase: the
+ * brand's own real work (one of its website pictures, `shot`), framed and
+ * slowly explored, so every client's video shows what is only theirs.
  */
-export type MarketingBeat = "journey" | "pain" | "turn" | "page" | "booking" | "traffic" | "dashboard" | "recap" | "cta" | "kinetic" | "chaos" | "path" | "stat" | "split" | "notify" | "orbit" | "sting" | "links" | "conflict";
+export type MarketingBeat = "journey" | "pain" | "turn" | "page" | "booking" | "traffic" | "dashboard" | "recap" | "cta" | "kinetic" | "chaos" | "path" | "stat" | "split" | "notify" | "orbit" | "sting" | "links" | "conflict" | "showcase";
 
-export const MARKETING_BEATS = ["journey", "pain", "turn", "page", "booking", "traffic", "dashboard", "recap", "cta", "kinetic", "chaos", "path", "stat", "split", "notify", "orbit", "sting", "links", "conflict"] as const;
+export const MARKETING_BEATS = ["journey", "pain", "turn", "page", "booking", "traffic", "dashboard", "recap", "cta", "kinetic", "chaos", "path", "stat", "split", "notify", "orbit", "sting", "links", "conflict", "showcase"] as const;
 
 /**
  * How far a marketing video may go from its website. "faithful" shows the

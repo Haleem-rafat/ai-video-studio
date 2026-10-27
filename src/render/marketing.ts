@@ -337,7 +337,53 @@ ${
   return { html, js };
 }
 
-const BEATS = { journey, pain, turn, booking, traffic, dashboard, recap, cta, ...MOTION };
+/** The website pictures a showcase may frame: the sections and the top of the page, not the whole-page captures. */
+export function showcaseShot(brand: SiteBrand, id: string | undefined) {
+  const usable = brand.shots.filter((shot) => !shot.id.startsWith("page-"));
+  return (id ? usable.find((shot) => shot.id === id) : undefined) ?? usable.find((shot) => shot.id.startsWith("section-")) ?? usable[0];
+}
+
+/**
+ * The brand's own real work, framed: a phone picture in a phone that scrolls
+ * slowly down it, a desktop section on a card the camera drifts across. What
+ * only this client has, so its videos don't look like anyone else's.
+ */
+function showcase({ s, k, B, brand }: Ctx): Beat {
+  const shot = showcaseShot(brand, s.visual.shot);
+  if (!shot) return turn({ s, k, B } as Ctx);
+  const phone = shot.device === "phone";
+  const cx = B.W / 2;
+  const D = r(s.seconds);
+  if (phone) {
+    const pw = B.short ? 500 : 380;
+    const ph = Math.min(B.stageH - 30, pw * 2.05);
+    const inner = pw - 20;
+    // How far the picture can scroll inside the screen, at most one and a half screens.
+    const tall = (inner * shot.height) / 780;
+    const travel = Math.round(Math.max(0, Math.min(tall - (ph - 20), (ph - 20) * 1.5)));
+    const html = `<div class="phone show" id="sw${k}" style="left:${cx - pw / 2}px;top:${(B.stageH - ph) / 2}px;width:${pw}px;height:${ph}px"><div class="scr"><img class="shimg" id="si${k}" src="${shot.path}" style="width:100%" /></div></div>`;
+    const js = `{
+  const t = ${s.start}, D = ${D};
+  tl.fromTo('#sw${k}', { y: 120, rotation: ${B.dir * -4}, opacity: 0 }, { y: 0, rotation: 0, opacity: 1, duration: .9, ease: 'power3.out', immediateRender: false }, t - .3);
+  tl.fromTo('#si${k}', { y: 0 }, { y: -${travel}, duration: Math.max(1, D - .6), ease: 'sine.inOut', immediateRender: false }, t + .4);
+}`;
+    return { html, js };
+  }
+  const cw = B.W - (B.short ? 110 : 360);
+  const natural = (cw * shot.height) / 1440;
+  const ch = Math.round(Math.min(natural, B.stageH - 40));
+  const travel = Math.round(Math.max(0, Math.min(natural - ch, ch)));
+  const html = `<div class="showcard" id="sw${k}" style="left:${cx - cw / 2}px;top:${(B.stageH - ch) / 2}px;width:${cw}px;height:${ch}px"><img class="shimg" id="si${k}" src="${shot.path}" style="width:100%" /><i class="shine" id="ss${k}"></i></div>`;
+  const js = `{
+  const t = ${s.start}, D = ${D};
+  tl.fromTo('#sw${k}', { y: 80, scale: .94, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: .9, ease: 'power3.out', immediateRender: false }, t - .3);
+  tl.fromTo('#si${k}', { scale: 1.02, y: 0 }, { scale: 1.14, y: -${travel}, duration: Math.max(1, D - .4), ease: 'sine.inOut', immediateRender: false }, t + .3);
+  tl.fromTo('#ss${k}', { xPercent: -150 }, { xPercent: 250, duration: 1.1, ease: 'power2.inOut', immediateRender: false }, t + D * .45);
+}`;
+  return { html, js };
+}
+
+const BEATS = { journey, pain, turn, booking, traffic, dashboard, recap, cta, showcase, ...MOTION };
 
 function fontsLink(brand: SiteBrand, arabic: boolean): string {
   const wanted = [brand.fonts.heading, brand.fonts.body].filter((font, i, all) => font && all.indexOf(font) === i && brand.googleFonts.includes(font));
@@ -465,6 +511,9 @@ export function buildMarketing(project: Project): string {
   /* Devices. */
   .phone { position: absolute; border-radius: ${B.short ? 58 : 46}px; background: #0b0b12; padding: 10px; box-shadow: 0 40px 90px #000a, inset 0 0 0 2px #ffffff22; }
   .phone.sm { padding: 8px; border-radius: 40px; opacity: 0; }
+  .showcard { position: absolute; overflow: hidden; border-radius: 34px; background: var(--panel, #fff); box-shadow: 0 40px 90px #0005, 0 0 0 3px var(--accent); }
+  .showcard .shine { position: absolute; inset: 0; width: 30%; background: linear-gradient(100deg, transparent, #ffffff55, transparent); pointer-events: none; }
+  .shimg { display: block; transform-origin: 50% 0; }
   .phone .scr { position: relative; width: 100%; height: 100%; border-radius: ${B.short ? 48 : 38}px; overflow: hidden; background: var(--bg); }
   .phone.sm .scr { border-radius: 32px; }
 
@@ -680,7 +729,7 @@ D_.forEach((s, k) => {
   }
 
   // Devices and cards keep floating once they have arrived.
-  root.querySelectorAll('.phone, .pmap, .book, .dash, .chat, .order, .splitw, .week, .lchat, .ringbox, .cals').forEach((el, i) => tl.to(el, { y: '-=12', duration: 1.8 + i * .3, yoyo: true, repeat: Math.max(1, Math.floor((end - s.start - 1.2) / (1.8 + i * .3))), ease: 'sine.inOut' }, s.start + 1.2));
+  root.querySelectorAll('.phone, .showcard, .pmap, .book, .dash, .chat, .order, .splitw, .week, .lchat, .ringbox, .cals').forEach((el, i) => tl.to(el, { y: '-=12', duration: 1.8 + i * .3, yoyo: true, repeat: Math.max(1, Math.floor((end - s.start - 1.2) / (1.8 + i * .3))), ease: 'sine.inOut' }, s.start + 1.2));
   s.chips.forEach((at, j) => tl.fromTo('#w' + k + '_' + j, { opacity: 0, scale: .6, y: 20 }, { opacity: 1, scale: 1, y: 0, duration: .4, ease: 'back.out(2.2)', immediateRender: false }, s.start + at));
   s.lines.forEach((at, j) => {
     const id = '#cp' + k + '_' + j, end = j + 1 < s.lines.length ? s.start + s.lines[j + 1][0] - .05 : s.start + s.dur + .2;

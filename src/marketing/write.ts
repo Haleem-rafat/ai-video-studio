@@ -28,9 +28,11 @@ const DRAFT = z.object({
             "path: a glowing dot travels a drawn path through 3-5 stations that light up — a journey or a process. stat: one big number counting up inside a ring. " +
             "split: before and after side by side, a wipe turns the messy side into the clean one. notify: a phone lock screen collecting notifications (new booking, reminder sent). " +
             "orbit: 3-6 parts or channels circle the logo, then get pulled into it. sting: the logo built from brand shapes with a light sweep and a tagline (headline). " +
-            "links: a customer's question (headline) with a typing indicator, then you answer with link after link, each opening a different preview, piling up. conflict: a week's calendar fills with appointments and two collide, with a clear conflict mark",
+            "links: a customer's question (headline) with a typing indicator, then you answer with link after link, each opening a different preview, piling up. conflict: a week's calendar fills with appointments and two collide, with a clear conflict mark. " +
+            "showcase: the brand's own real work, one of THE BRAND'S PICTURES (set shot), framed in a phone or on a card and slowly explored, with the headline above it",
         ),
         narration: z.string().describe("What the voice says in this scene"),
+        shot: z.string().describe("showcase: the id of one of THE BRAND'S PICTURES; every other beat: empty"),
         headline: z.string().describe("turn: the sentence itself. cta: the button text. booking: the booking button text. Others: a 1-4 word title or empty"),
         words: z.array(z.string()).max(3).describe("1-3 short on-screen phrases (1-3 words each) taken from the narration, appearing as they are said; never whole sentences"),
         items: z
@@ -63,17 +65,23 @@ const MOTION_BEATS = ["kinetic", "chaos", "path", "stat", "split", "notify", "or
 /** The beats that show the real website or re-create its screens. */
 const SITE_BEATS = ["page", "journey", "traffic", "booking", "dashboard"];
 
-/** Why a draft doesn't meet its creativity level, or null when it does. */
-function missesDirection(beats: string[], creativity: Creativity): string | null {
-  if (creativity === "faithful") return null;
-  const motion = beats.filter((beat) => MOTION_BEATS.includes(beat)).length;
-  const site = beats.filter((beat) => SITE_BEATS.includes(beat)).length;
-  const share = creativity === "bold" ? 0.7 : 0.5;
+/** Why a draft doesn't meet its creativity level, or null when it does. A showcase (the brand's real work) counts for neither side. */
+export function missesDirection(all: string[], creativity: Creativity, showcases = false): string | null {
+  const beats = all.filter((beat) => beat !== "showcase");
+  const shown = all.length - beats.length;
   const problems: string[] = [];
-  if (motion < Math.ceil(beats.length * share)) problems.push(`only ${motion} of ${beats.length} scenes use the motion-graphics beats (${MOTION_BEATS.join(", ")}); at least ${Math.ceil(beats.length * share)} must`);
-  if (creativity === "bold" && site) problems.push(`a bold video never re-creates the site (${SITE_BEATS.join(", ")}), and this draft does ${site} time(s)`);
-  if (creativity === "creative" && site > 1) problems.push(`a creative video shows the site or its screens once at most, and this draft does ${site} times`);
-  if (beats.some((beat, i) => i && beat === beats[i - 1])) problems.push("two scenes in a row use the same beat");
+  // The client's own work is what makes its video its own: 1-2 scenes show it whenever there are pictures of it.
+  if (showcases && shown < 1) problems.push("no showcase scene: show this brand's own real work in 1-2 showcase scenes, from THE BRAND'S PICTURES");
+  if (shown > 2) problems.push(`${shown} showcase scenes; use 1-2`);
+  if (all.some((beat, i) => i && beat === all[i - 1])) problems.push("two scenes in a row use the same beat");
+  if (creativity !== "faithful") {
+    const motion = beats.filter((beat) => MOTION_BEATS.includes(beat)).length;
+    const site = beats.filter((beat) => SITE_BEATS.includes(beat)).length;
+    const share = creativity === "bold" ? 0.7 : 0.5;
+    if (motion < Math.ceil(beats.length * share)) problems.push(`only ${motion} of ${beats.length} scenes use the motion-graphics beats (${MOTION_BEATS.join(", ")}); at least ${Math.ceil(beats.length * share)} must`);
+    if (creativity === "bold" && site) problems.push(`a bold video never re-creates the site (${SITE_BEATS.join(", ")}), and this draft does ${site} time(s)`);
+    if (creativity === "creative" && site > 1) problems.push(`a creative video shows the site or its screens once at most, and this draft does ${site} times`);
+  }
   return problems.length ? problems.join("; ") : null;
 }
 
@@ -107,8 +115,8 @@ function missingLines(lines: string[], narration: string): string[] {
 /** What each creativity level asks of the writer. */
 const DIRECTION: Record<Creativity, string> = {
   faithful: `Tell the script's story exactly, scene by scene, explaining the product with infographics and animated diagrams in the brand's colours — never screenshots of its website. When the script has voice-over text (التعليق الصوتي / Voice), it is the client's approved copy: use it WORD FOR WORD, in order, across the scenes; only drop sentences if the length forces it. Split every script scene into 2-4 beats that follow its own animation notes, for example: a phone feed with likes, a tap on the profile and things piling up → journey; a message with a typing indicator → pain; a conversation full of links → links; a calendar with overlapping appointments → conflict; the calm sentence → turn; the page building, the template swap and what the page holds → page (once; later page moments become kinetic or orbit); booking and calendars syncing → booking; posts with their own links sending visitors → traffic; the dashboard → dashboard; the closing sentence of a scene → turn or kinetic; the montage and Your Page → Bookings → Insights → recap; the call to action → cta.`,
-  creative: `You are a senior motion designer and copywriter, not a screen recorder. The website is research: its facts, its offer and its colours, nothing more. At least HALF the scenes must be pure motion-graphics beats (kinetic, chaos, path, stat, split, notify, orbit, sting); the rest can be pain, turn, recap and the cta. Re-create the product's screens (page, journey, traffic, booking, dashboard) in ONE scene at most, where seeing it work sells. Turn each idea into a visual metaphor: scattered DMs and links become chaos → one card, the customer's journey becomes a path, a free 15-minute call becomes a stat, the before/after becomes a split, bookings arriving become notifications, all channels feeding one page become an orbit. Every scene is a fresh visual idea; never the same beat twice in a row; vary rhythm (a fast punchy scene, then a calm one). Open on a bold kinetic or sting hook. The script is the story to tell, not a shot list: keep its message, invent the visuals.`,
-  bold: `You are an award-winning motion designer with full creative freedom. Never show the website or re-create its screens (no page, journey, traffic, booking or dashboard beats). At least 70% of the scenes are pure motion graphics (kinetic, chaos, path, stat, split, notify, orbit, sting); the rest only pain, turn, recap and the cta. Open on a sting or a kinetic hook. Surprise the viewer: unexpected word plays, contrasts, a rhythm that builds. Copy can be punchier and more playful than the script, but every claim stays true to the brief.`,
+  creative: `You are a senior motion designer and copywriter, not a screen recorder. The website is research: its facts, its offer and its colours, nothing more. At least HALF the scenes must be pure motion-graphics beats (kinetic, chaos, path, stat, split, notify, orbit, sting); the rest can be pain, turn, recap and the cta. Re-create the product's screens (page, journey, traffic, booking, dashboard) in ONE scene at most, where seeing it work sells. Turn each idea into a visual metaphor from this brand's own world (scattered pieces of its customers' problem become chaos → one card, its process becomes a path, its key number becomes a stat, its before/after becomes a split), never one borrowed from another kind of business. Every scene is a fresh visual idea; never the same beat twice in a row; vary rhythm (a fast punchy scene, then a calm one). Open on a bold kinetic or sting hook. The script is the story to tell, not a shot list: keep its message, invent the visuals.`,
+  bold: `You are an award-winning motion designer with full creative freedom. Never show the website or re-create its screens (no page, journey, traffic, booking or dashboard beats); a showcase of the brand's own real work is allowed. At least 70% of the scenes are pure motion graphics (kinetic, chaos, path, stat, split, notify, orbit, sting); the rest only pain, turn, recap and the cta. Open on a sting or a kinetic hook. Surprise the viewer: unexpected word plays, contrasts, a rhythm that builds. Copy can be punchier and more playful than the script, but every claim stays true to the brief.`,
 };
 
 export async function writeMarketing(
@@ -135,12 +143,14 @@ export async function writeMarketing(
   const budget = Math.max(Math.round(brief.seconds * WORDS_PER_SECOND[language]), approvedWords);
   const seconds = Math.round(budget / WORDS_PER_SECOND[language]);
   const scenes = seconds <= 35 ? "4-5" : seconds <= 70 ? "6-7" : seconds <= 110 ? "7-9" : seconds <= 170 ? "10-13" : "12-16";
+  // The brand's own work on its website: what a showcase frames (value content shows no product).
+  const pictures = value ? [] : brand.shots.filter((shot) => !shot.id.startsWith("page-"));
   log(`script: writing a ${brief.seconds}s marketing video for ${brand.name} ...`);
   const prompt = `You write marketing videos for social media, animated in the brand's own colours and fonts.
 
 CREATIVE DIRECTION (${creativity}): ${DIRECTION[creativity]}
 
-Language: ${arabic ? `${input.arabic ?? "Egyptian colloquial Arabic"}, natural and calm, like explaining the idea to a business owner, not reading an ad. Brand and platform names in Latin script (Risero, Instagram).` : "Simple, natural English, calm, like explaining the idea to a business owner, not reading an ad."}
+Language: ${arabic ? `${input.arabic ?? "Egyptian colloquial Arabic"} only, natural and spoken, never formal Arabic (فصحى). Brand names as the brand writes them (${brand.name}).` : "Simple, natural spoken English."} Sound like this brand, not like a software ad: its tone is "${brief.tone}", and you speak to ${brief.audience}.
 Format: ${format === "short" ? "vertical 9:16" : "horizontal 16:9"} for ${brief.platforms.join(", ")}.
 Length: about ${seconds} seconds = about ${budget} spoken words in total, in ${scenes} scenes.${approved.length ? ` The script's voice-over is ${approvedWords} words of approved copy: EVERY sentence of it is spoken, word for word, in order — split long voice-over across several scenes rather than cutting it.` : ""}
 
@@ -155,6 +165,15 @@ Offer: ${brand.summary}
 Services: ${brand.services.join(" | ")}
 Page text:
 ${brand.text.slice(0, 6000)}
+
+${
+    pictures.length
+      ? `THE BRAND'S PICTURES (real screenshots of its own work, for showcase scenes; set shot to the id):
+${pictures.map((shot) => `- ${shot.id} (${shot.device}): ${shot.label}`).join("\n")}
+
+`
+      : ""
+  }THIS BRAND'S OWN LOOK: this video is for ${brand.name} only and must not look like a video for any other business. Take every visual metaphor from ${brand.name}'s own world (what it makes, who it is for, the moments its customers live), not from software marketing. Use pain, links, notify, conflict, booking, traffic or dashboard only when that scene literally happens in this business.${pictures.length ? " Show the brand's own real work in 1-2 showcase scenes (its best pictures, e.g. the designs or the work itself), where seeing it sells." : ""}
 
 THE BRIEF (from the chat with the client — it wins over the script where they differ):
 Business: ${brief.business}
@@ -199,7 +218,7 @@ ${
     if (still.length) log(`script: ${still.length} line(s) still differ from the script: ${still.map((line) => line.slice(0, 40)).join(" | ")}`);
   }
   // A draft that plays it safe at a creative level is sent back once to be redesigned.
-  const miss = missesDirection(output.scenes.map((scene) => scene.beat), creativity);
+  const miss = missesDirection(output.scenes.map((scene) => scene.beat), creativity, pictures.length > 0);
   if (miss) {
     log(`script: redesigning the scenes (${miss}) ...`);
     ({ output } = await write(`\n\nYOUR FIRST DRAFT USED THESE BEATS: ${output.scenes.map((scene) => scene.beat).join(" → ")}. It does not follow the creative direction: ${miss}. Redesign the scenes to meet it; keep the message.`));
@@ -212,7 +231,7 @@ ${
     // A bold video never shows the website, whatever the writer chose; value content never shows the product's screens either.
     scenes: output.scenes
       .map((scene) => (creativity === "bold" && (scene.beat === "page" || scene.beat === "journey") ? { ...scene, beat: "kinetic" as const } : scene))
-      .map((scene) => (value && ["page", "booking", "traffic", "dashboard", "sting"].includes(scene.beat) ? { ...scene, beat: "kinetic" as const } : scene)).map((scene, index) => ({
+      .map((scene) => (value && ["page", "booking", "traffic", "dashboard", "sting", "showcase"].includes(scene.beat) ? { ...scene, beat: "kinetic" as const } : scene)).map((scene, index) => ({
       id: `s${String(index + 1).padStart(3, "0")}`,
       narration: scene.narration.trim(),
       visual: {
@@ -222,6 +241,7 @@ ${
         words: scene.words.map((word) => word.trim()).filter(Boolean),
         items: scene.items.map((item) => ({ label: item.label.trim(), ...(item.value.trim() ? { value: item.value.trim() } : {}) })).filter((item) => item.label),
         textFor: scene.narration.trim(),
+        ...(scene.beat === "showcase" && pictures.some((shot) => shot.id === scene.shot.trim()) ? { shot: scene.shot.trim() } : {}),
       },
       imagePrompt: "",
     })),

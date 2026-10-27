@@ -77,3 +77,9 @@ test("a brand name must be heard whole: «رايزر» for «رايزرو» is a
   assert.equal(namesHeard(["رايزرو"], "سكت عليك.", "سكت عليك"), true, "a name the scene doesn't say isn't asked for");
   assert.equal(namesHeard(["رايز رو"], "شكرًا رايز رو", "شكرا رايزرو"), true, "spaces don't matter");
 });
+
+test("spokenText never reads out a handle or a web address", () => {
+  assert.equal(spokenText("ابعتيلنا على Instagram @zaffadigitalinvitation، واللينك في البايو."), "ابعتيلنا على Instagram، واللينك في البايو.");
+  assert.equal(spokenText("ادخل على https://zaffa.app/ar/designs وشوف"), "ادخل على اللينك وشوف");
+  assert.equal(spokenText("زوروا zaffa-digital-invitation.vercel.app"), "زوروا اللينك");
+});

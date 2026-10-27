@@ -22,9 +22,10 @@ type Props = {
 const VOICES = [
   { id: "Charon", label: "Charon · male, informative" },
   { id: "Orus", label: "Orus · male, firm" },
+  { id: "Zephyr", label: "Zephyr · female, bright (clearest Egyptian)" },
+  { id: "Laomedeia", label: "Laomedeia · female, upbeat" },
   { id: "Sulafat", label: "Sulafat · female, warm" },
   { id: "Kore", label: "Kore · female, firm" },
-  { id: "Aoede", label: "Aoede · female, light" },
 ];
 
 const COLOR_NAMES: Record<keyof Marketing["brand"]["colors"], string> = {

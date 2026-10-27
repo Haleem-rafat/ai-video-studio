@@ -110,7 +110,8 @@ export function reelProblems(draft: { beats: string[]; lines: string[] }, histor
   return problems;
 }
 
-const VOICES = { male: ["Charon", "Orus"], female: ["Sulafat", "Kore", "Aoede"] } as const;
+// Female voices: the two that dropped the fewest Egyptian words of 14 tried (Sulafat, Kore and Aoede dropped the most).
+const VOICES = { male: ["Charon", "Orus"], female: ["Zephyr", "Laomedeia"] } as const;
 
 /** The next narrator after the last reel's, keeping the brief's voice gender. */
 export function nextVoice(history: Made[], gender: "male" | "female" = "male"): string {

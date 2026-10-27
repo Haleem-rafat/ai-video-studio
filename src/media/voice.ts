@@ -18,7 +18,7 @@ import { misheard, namesHeard, spokenOf } from "./spoken.ts";
 const run = promisify(execFile);
 const MODEL_ID = "eleven_multilingual_v2";
 /** Gemini takes tried per scene at most, and the share of misheard words a take may have and still be kept at once. */
-const TAKES = 3;
+const TAKES = 5;
 const CLEAR_TAKE = 0.12;
 
 type Alignment = {
