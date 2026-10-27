@@ -41,6 +41,7 @@ const BEATS: Record<MarketingBeat, { label: string; items: string }> = {
   sting: { label: "Logo sting", items: "none: the headline is the tagline" },
   links: { label: "Chat full of links", items: "what it is | short link, 3–5" },
   conflict: { label: "Calendar with a clash", items: "one appointment per line, 3–5" },
+  showcase: { label: "The brand's real work (a website picture)", items: "none: pick the picture above" },
 };
 
 const LAYOUTS: Record<DeepLayout, { label: string; items: string }> = {
@@ -251,8 +252,9 @@ export function VisualEditor({ visual, onChange }: { visual: Visual; onChange: (
             </Select>
           </Field>
           {field(visual.beat === "cta" ? "Button" : visual.beat === "turn" ? "Sentence" : "Title", visual.headline, (headline) => onChange({ ...visual, headline }))}
+          {visual.beat === "showcase" && field("Picture (section-1, section-2…, hero-phone)", visual.shot ?? "", (shot) => onChange({ ...visual, shot: shot.trim() || undefined }))}
           {field("Words on screen", visual.words.join(" | "), (words) => onChange({ ...visual, words: words.split("|").map((word) => word.trim()).filter(Boolean) }), true)}
-          <Field label="Items" detail={BEATS[visual.beat].items} className="col-span-2">
+          <Field label="Items" detail={BEATS[visual.beat]?.items ?? ""} className="col-span-2">
             <Textarea
               className="text-xs"
               dir="auto"
