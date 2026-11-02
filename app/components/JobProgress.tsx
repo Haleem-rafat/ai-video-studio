@@ -21,6 +21,7 @@ const STAGE_NAMES: Record<string, string> = {
   art: "Drawing the art",
   compose: "Building the animation",
   render: "Rendering video",
+  media: "Press pictures",
   mixing: "Music and sound",
 };
 
@@ -30,6 +31,8 @@ function plannedStages(job: Job): string[] {
   if (job.label.startsWith("Write script")) return job.label.includes("marketing") ? ["script"] : ["research", "script", "check"];
   if (job.label.startsWith("Voice, pictures")) return ["voice", "compose"];
   if (job.label.startsWith("Render video")) return ["render", "mixing"];
+  if (job.label.startsWith("Write reel")) return ["research", "media", "script"];
+  if (job.label.startsWith("Render reel") || job.label.startsWith("Preview reel")) return ["voice", "render"];
   return [];
 }
 

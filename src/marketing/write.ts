@@ -1,6 +1,7 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
 
+import { draftMisses, sceneRange, storyNotes, type StoryOption } from "./story.ts";
 import { MARKETING_BEATS, type Creativity, type FormatId, type MarketingBrief, type Scene, type SiteBrand } from "../types.ts";
 
 const WRITER_MODEL = "anthropic/claude-sonnet-5.5";
@@ -113,7 +114,7 @@ function missingLines(lines: string[], narration: string): string[] {
 }
 
 /** What each creativity level asks of the writer. */
-const DIRECTION: Record<Creativity, string> = {
+export const DIRECTION: Record<Creativity, string> = {
   faithful: `Tell the script's story exactly, scene by scene, explaining the product with infographics and animated diagrams in the brand's colours — never screenshots of its website. When the script has voice-over text (التعليق الصوتي / Voice), it is the client's approved copy: use it WORD FOR WORD, in order, across the scenes; only drop sentences if the length forces it. Split every script scene into 2-4 beats that follow its own animation notes, for example: a phone feed with likes, a tap on the profile and things piling up → journey; a message with a typing indicator → pain; a conversation full of links → links; a calendar with overlapping appointments → conflict; the calm sentence → turn; the page building, the template swap and what the page holds → page (once; later page moments become kinetic or orbit); booking and calendars syncing → booking; posts with their own links sending visitors → traffic; the dashboard → dashboard; the closing sentence of a scene → turn or kinetic; the montage and Your Page → Bookings → Insights → recap; the call to action → cta.`,
   creative: `You are a senior motion designer and copywriter, not a screen recorder. The website is research: its facts, its offer and its colours, nothing more. At least HALF the scenes must be pure motion-graphics beats (kinetic, chaos, path, stat, split, notify, orbit, sting); the rest can be pain, turn, recap and the cta. Re-create the product's screens (page, journey, traffic, booking, dashboard) in ONE scene at most, where seeing it work sells. Turn each idea into a visual metaphor from this brand's own world (scattered pieces of its customers' problem become chaos → one card, its process becomes a path, its key number becomes a stat, its before/after becomes a split), never one borrowed from another kind of business. Every scene is a fresh visual idea; never the same beat twice in a row; vary rhythm (a fast punchy scene, then a calm one). Open on a bold kinetic or sting hook. The script is the story to tell, not a shot list: keep its message, invent the visuals.`,
   bold: `You are an award-winning motion designer with full creative freedom. Never show the website or re-create its screens (no page, journey, traffic, booking or dashboard beats); a showcase of the brand's own real work is allowed. At least 70% of the scenes are pure motion graphics (kinetic, chaos, path, stat, split, notify, orbit, sting); the rest only pain, turn, recap and the cta. Open on a sting or a kinetic hook. Surprise the viewer: unexpected word plays, contrasts, a rhythm that builds. Copy can be punchier and more playful than the script, but every claim stays true to the brief.`,
@@ -131,10 +132,12 @@ export async function writeMarketing(
     value?: boolean;
     /** The Arabic to write in, e.g. "Gulf (Khaleeji) colloquial Arabic"; Egyptian when unset. */
     arabic?: string;
+    /** The story the client picked (story.ts): its hook, beats and order are followed. */
+    story?: StoryOption;
   },
   log: (message: string) => void = console.log,
 ): Promise<MarketingDraft> {
-  const { brand, brief, script, language, format, value } = input;
+  const { brand, brief, script, language, format, value, story } = input;
   const creativity = input.creativity ?? "faithful";
   // Approved voice-over sets the length: every line is spoken, however long that takes.
   const approved = creativity === "faithful" ? voiceOver(script) : [];
@@ -142,19 +145,19 @@ export async function writeMarketing(
   const arabic = language === "ar";
   const budget = Math.max(Math.round(brief.seconds * WORDS_PER_SECOND[language]), approvedWords);
   const seconds = Math.round(budget / WORDS_PER_SECOND[language]);
-  const scenes = seconds <= 35 ? "4-5" : seconds <= 70 ? "6-7" : seconds <= 110 ? "7-9" : seconds <= 170 ? "10-13" : "12-16";
+  const scenes = story ? String(story.beats.length) : sceneRange(seconds).join("-");
   // The brand's own work on its website: what a showcase frames (value content shows no product).
   const pictures = value ? [] : brand.shots.filter((shot) => !shot.id.startsWith("page-"));
   log(`script: writing a ${brief.seconds}s marketing video for ${brand.name} ...`);
   const prompt = `You write marketing videos for social media, animated in the brand's own colours and fonts.
 
 CREATIVE DIRECTION (${creativity}): ${DIRECTION[creativity]}
-
+${story ? `\n${storyNotes(story)}\n` : ""}
 Language: ${arabic ? `${input.arabic ?? "Egyptian colloquial Arabic"} only, natural and spoken, never formal Arabic (فصحى). Brand names as the brand writes them (${brand.name}).` : "Simple, natural spoken English."} Sound like this brand, not like a software ad: its tone is "${brief.tone}", and you speak to ${brief.audience}.
 Format: ${format === "short" ? "vertical 9:16" : "horizontal 16:9"} for ${brief.platforms.join(", ")}.
 Length: about ${seconds} seconds = about ${budget} spoken words in total, in ${scenes} scenes.${approved.length ? ` The script's voice-over is ${approvedWords} words of approved copy: EVERY sentence of it is spoken, word for word, in order — split long voice-over across several scenes rather than cutting it.` : ""}
 
-THE SCRIPT (${creativity === "faithful" ? "structure, story, tone and animation direction to follow. Keep its story: the customer's journey and the problem first, a calm turning point, then the solution shown on the real page, booking, data, and one call to action. Shorten or merge its scenes to fit the length; for a short video keep only the strongest beats (journey or pain → turn → page → cta)" : "the story and message to tell; its animation notes are only inspiration — the creative direction above decides the visuals"}).
+THE SCRIPT (${story ? "background only: its message and tone; the approved story above decides the structure, the order and every scene" : creativity === "faithful" ? "structure, story, tone and animation direction to follow. Keep its story: the customer's journey and the problem first, a calm turning point, then the solution shown on the real page, booking, data, and one call to action. Shorten or merge its scenes to fit the length; for a short video keep only the strongest beats (journey or pain → turn → page → cta)" : "the story and message to tell; its animation notes are only inspiration — the creative direction above decides the visuals"}).
 ---
 ${script}
 ---
@@ -216,6 +219,12 @@ ${
     ({ output } = await write(`\n\nYOUR FIRST DRAFT LEFT OUT THESE APPROVED VOICE-OVER LINES:\n${dropped.map((line) => `- ${line}`).join("\n")}\nWrite the scenes again with EVERY voice-over line spoken word for word, in the script's order. Add scenes where needed (keep each scene's narration to 1-4 sentences).`));
     const still = missingLines(approved, output.scenes.map((scene) => scene.narration).join(" "));
     if (still.length) log(`script: ${still.length} line(s) still differ from the script: ${still.map((line) => line.slice(0, 40)).join(" | ")}`);
+  }
+  // The client approved a story: a draft that wanders from it is written once more.
+  const strayed = story ? draftMisses(output.scenes, story) : [];
+  if (strayed.length) {
+    log(`script: the draft left the approved story (${strayed.join("; ")}), writing it again ...`);
+    ({ output } = await write(`\n\nYOUR FIRST DRAFT LEFT THE APPROVED STORY: ${strayed.join("; ")}. Write it again: one scene per beat, in order, with the planned beat types, and scene 1 opening with the approved hook word for word.`));
   }
   // A draft that plays it safe at a creative level is sent back once to be redesigned.
   const miss = missesDirection(output.scenes.map((scene) => scene.beat), creativity, pictures.length > 0);

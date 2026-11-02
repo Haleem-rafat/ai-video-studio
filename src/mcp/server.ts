@@ -310,6 +310,187 @@ server.registerTool(
   }),
 );
 
+// ---- Code-drawn reels (reels/): a channel's or a marketing client's 9:16 reel in one look -------------
+
+type Reel = {
+  id: string;
+  title: string;
+  topic: string;
+  style: string;
+  channel: string;
+  client?: { id: string; voice: string; dialect?: string };
+  status: "writing" | "ready" | "failed";
+  error?: string;
+  lines: string[];
+  story?: { headline: { text: string; highlight: string }; scenes: ({ lines: [number, number]; kind: string } & Record<string, unknown>)[] };
+  instagram?: { caption: string; hashtags: string[] };
+  voiceCurrent: boolean;
+  stills?: { files: string[] };
+  render?: { file: string; seconds: number };
+  cost: number;
+};
+
+const REEL_LOOKS = {
+  aurora: "Aurora glass: slow colour light drifting on deep indigo, frosted glass cards; calm and premium (soft pad music)",
+  variety: "Variety captions: TV-show caption art, fat outlined words that pop in with overshoot, burst frames, boings; playful",
+  flat: "Flat vector: bold flat colour fields, a circle wipe on every cut, pieces land with squash and stretch; clear explainer",
+  sketch: "Sketch notebook: paper notes taped on a lined page, a marker circles the big thing, highlighter on the key word; honest tips",
+  diagram: "Diagram (channels only): calm charcoal explainer with press photos",
+  editorial: "Editorial (channels only): spotlight stage and grid paper, press quotes and prices",
+  "3d": "3D (channels only): products built in three.js",
+} as const;
+
+const reelFiles = (reel: Reel) => ({
+  app: `${STUDIO}/reels/${reel.id}`,
+  video: reel.render ? join(OUTPUT_DIR, ".reels", reel.id, reel.render.file) : null,
+  stills: (reel.stills?.files ?? []).map((file) => join(OUTPUT_DIR, ".reels", reel.id, file)),
+});
+
+const reelView = (reel: Reel) => ({
+  reel: reel.id,
+  title: reel.title,
+  style: reel.style,
+  for: reel.client ? `client ${reel.client.id} (voice ${reel.client.voice}${reel.client.dialect ? `, ${reel.client.dialect}` : ""})` : `channel ${reel.channel}`,
+  status: reel.status,
+  ...(reel.error ? { error: reel.error } : {}),
+  lines: reel.lines.map((line, i) => `${i + 1}. ${line}`),
+  ...(reel.story ? { headline: reel.story.headline.text, scenes: reel.story.scenes.map((scene) => `${scene.kind} (lines ${scene.lines[0] + 1}-${scene.lines[1] + 1})`) } : {}),
+  ...(reel.instagram ? { caption: reel.instagram.caption, hashtags: reel.instagram.hashtags.map((tag) => `#${tag}`).join(" ") } : {}),
+  voiceUpToDate: reel.voiceCurrent,
+  cost: `$${reel.cost.toFixed(3)}`,
+  files: reelFiles(reel),
+});
+
+server.registerTool(
+  "list_clients",
+  { title: "List marketing clients", description: "The studio's marketing clients (brand, language, content direction). A reel can be made for one of them.", inputSchema: {} },
+  safe(async () =>
+    (await call<{ id: string; name: string; url: string; language: string; niche: string; direction?: { mode: string; dialects?: string[] } }[]>("GET", "/api/clients")).map(({ id, name, url, language, niche, direction }) => ({ id, name, url, language, niche, direction: direction ? `${direction.mode}${direction.dialects?.length ? ` (${direction.dialects.join(", ")})` : ""}` : "promo" })),
+  ),
+);
+
+server.registerTool(
+  "client_ideas",
+  {
+    title: "List a client's ideas",
+    description: "Reads a marketing client's content ideas for a date (default today), including format (reel/carousel/single), hook, topic, outline and why it works.",
+    inputSchema: { client: z.string().describe("Client id from list_clients"), date: z.string().optional().describe("YYYY-MM-DD, default today") },
+  },
+  safe(async ({ client, date }: { client: string; date?: string }) =>
+    call<unknown>("GET", `/api/clients/${client}/ideas${date ? `?date=${encodeURIComponent(date)}` : ""}`),
+  ),
+);
+
+server.registerTool(
+  "generate_client_ideas",
+  {
+    title: "Generate 5 new ideas for a client",
+    description: "Writes 5 fresh content ideas (reels and carousels) tailored to a client's brief, knowledge and content direction. Returns the job and saved ideas.",
+    inputSchema: { client: z.string().describe("Client id from list_clients"), wait: WAIT },
+  },
+  safe(async ({ client, wait }: { client: string; wait?: number }) => {
+    const job = await call<Job>("POST", `/api/clients/${client}/ideas`);
+    const done = wait ? await waitFor(job.id, wait) : job;
+    return { ...jobView(done), ...(done.status === "done" ? { ideas: await call<unknown>("GET", `/api/clients/${client}/ideas`) } : {}) };
+  }),
+);
+
+server.registerTool(
+  "reel_styles",
+  { title: "Reel looks", description: "The looks a code-drawn reel can have. aurora, variety, flat and sketch work for clients and channels; the rest only for channels.", inputSchema: {} },
+  safe(async () => REEL_LOOKS),
+);
+
+server.registerTool(
+  "create_reel",
+  {
+    title: "Write a reel",
+    description:
+      "Writes a 9:16 code-drawn reel (lines, headline, scenes) in one look, for a marketing client (from its brief, knowledge and content direction, in its colours and Arabic voice) or a channel (researched tech news). Costs a little AI credit for the writing only; voice and render are separate steps. Returns a job whose result is the reel id.",
+    inputSchema: {
+      style: z.enum(["aurora", "variety", "flat", "sketch", "diagram", "editorial", "3d"]),
+      topic: z.string().describe("What the reel is about, e.g. «٣ غلطات في أول رد على العميل»"),
+      client: z.string().optional().describe("A client id from list_clients"),
+      channel: z.string().optional().describe("A channel id from list_channels, when it's not for a client"),
+      wait: WAIT,
+    },
+  },
+  safe(async ({ style, topic, client, channel, wait }: { style: string; topic: string; client?: string; channel?: string; wait?: number }) => {
+    const job = await call<Job & { reelId: string }>("POST", "/api/reels", { style, topic, ...(client ? { client } : { channel }) });
+    const done = wait ? await waitFor(job.id, wait) : job;
+    return { ...jobView(done), reel: job.reelId, ...(done.status === "done" ? { written: reelView(await call<Reel>("GET", `/api/reels/${job.reelId}`)) } : {}) };
+  }),
+);
+
+server.registerTool(
+  "get_reel",
+  { title: "Read a reel", description: "A reel's lines, scenes, caption, status, cost and file paths (video, preview stills).", inputSchema: { reel: z.string() } },
+  safe(async ({ reel }: { reel: string }) => reelView(await call<Reel>("GET", `/api/reels/${reel}`))),
+);
+
+server.registerTool(
+  "edit_reel_lines",
+  {
+    title: "Change a reel's lines",
+    description: "Replaces what the narrator says. Keep the same number of lines so the scenes stay on their lines. Changed lines are voiced again on the next preview or render.",
+    inputSchema: { reel: z.string(), lines: z.array(z.string()).min(1) },
+  },
+  safe(async ({ reel, lines }: { reel: string; lines: string[] }) => reelView(await call<Reel>("PUT", `/api/reels/${reel}`, { lines }))),
+);
+
+server.registerTool(
+  "change_reel_voice",
+  {
+    title: "Change a reel's voice and dialect",
+    description: "Changes the narrator voice (Charon, Orus, Fenrir, Puck, Zephyr, Laomedeia, Sulafat, Kore), dialect (egyptian, gulf) or speed (0.8-1.3), and optionally voices the reel immediately.",
+    inputSchema: {
+      reel: z.string(),
+      voice: z.enum(["Charon", "Orus", "Fenrir", "Puck", "Zephyr", "Laomedeia", "Sulafat", "Kore"]),
+      dialect: z.enum(["egyptian", "gulf"]).optional(),
+      speed: z.number().min(0.8).max(1.3).optional(),
+      voiceNow: z.boolean().optional().describe("Default true: immediately record the new voice"),
+      wait: WAIT,
+    },
+  },
+  safe(async ({ reel, voice, dialect, speed, voiceNow = true, wait }: { reel: string; voice: string; dialect?: "egyptian" | "gulf"; speed?: number; voiceNow?: boolean; wait?: number }) => {
+    const current = await call<Reel & { options?: Record<string, unknown> }>("GET", `/api/reels/${reel}`);
+    const options = { ...(current.options ?? {}), voice, ...(dialect ? { dialect } : {}), ...(speed !== undefined ? { speed } : {}) };
+    const saved = await call<Reel>("PUT", `/api/reels/${reel}`, { options });
+    if (!voiceNow) return reelView(saved);
+    const job = await call<Job>("POST", `/api/reels/${reel}/voice`);
+    const done = wait ? await waitFor(job.id, wait) : job;
+    return { ...jobView(done), reel: reelView(await call<Reel>("GET", `/api/reels/${reel}`)) };
+  }),
+);
+
+server.registerTool(
+  "preview_reel",
+  {
+    title: "Voice a reel and look at stills",
+    description: "Voices changed lines (Gemini voice, costs a little) and draws 6 stills to look at before rendering. Returns a job; when done, get_reel lists the still images.",
+    inputSchema: { reel: z.string(), wait: WAIT },
+  },
+  safe(async ({ reel, wait }: { reel: string; wait?: number }) => {
+    const job = await call<Job>("POST", `/api/reels/${reel}/preview`);
+    const done = wait ? await waitFor(job.id, wait) : job;
+    return { ...jobView(done), ...(done.status === "done" ? { files: reelFiles(await call<Reel>("GET", `/api/reels/${reel}`)) } : {}) };
+  }),
+);
+
+server.registerTool(
+  "render_reel",
+  {
+    title: "Render a reel",
+    description: "Voices changed lines and renders the reel's mp4 with its music and sound effects. Takes a few minutes; returns a job. Nothing is posted.",
+    inputSchema: { reel: z.string(), wait: WAIT },
+  },
+  safe(async ({ reel, wait }: { reel: string; wait?: number }) => {
+    const job = await call<Job>("POST", `/api/reels/${reel}/render`);
+    const done = wait ? await waitFor(job.id, wait) : job;
+    return { ...jobView(done), ...(done.status === "done" ? { files: reelFiles(await call<Reel>("GET", `/api/reels/${reel}`)) } : {}) };
+  }),
+);
+
 server.registerTool(
   "job_status",
   { title: "Check a job", description: "A job's status, current step, cost and latest log lines. Can wait for it to finish.", inputSchema: { job: z.string(), wait: WAIT } },

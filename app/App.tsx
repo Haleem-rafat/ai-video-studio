@@ -9,6 +9,7 @@ import { MarketingChat } from "./components/MarketingChat.tsx";
 import { NewVideo } from "./components/NewVideo.tsx";
 import { ProjectView } from "./components/ProjectView.tsx";
 import { PromosView } from "./components/PromosView.tsx";
+import { ReelsView } from "./components/ReelsView.tsx";
 import { AppSidebar } from "./components/Sidebar.tsx";
 import { EngineStatus, TopBar } from "./components/TopBar.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -32,6 +33,8 @@ export function App() {
   const openPost = route.page === "client" ? (route.post ?? null) : null;
   /** The website promos page: "all", or the open promo's id; null when another page is open. */
   const promos = route.page === "promos" ? (route.id ?? "all") : null;
+  /** The reels page: "all", or the open reel's id; null when another page is open. */
+  const reels = route.page === "reels" ? (route.id ?? "all") : null;
   const [clients, setClients] = useState<Client[]>([]);
   /** Bumped whenever a job touching the open project finishes. */
   const [projectVersion, setProjectVersion] = useState(0);
@@ -51,6 +54,8 @@ export function App() {
   const showClient = useCallback((id: string) => navigate({ page: "client", id }), [navigate]);
 
   const showPromo = useCallback((id: string | null) => navigate({ page: "promos", id }), [navigate]);
+
+  const showReel = useCallback((id: string | null) => navigate({ page: "reels", id }), [navigate]);
 
   const refreshClients = useCallback(() => api.clients().then(setClients).catch(() => {}), []);
 
@@ -112,6 +117,8 @@ export function App() {
           onOpenClient={showClient}
           promos={Boolean(promos)}
           onPromos={() => showPromo(null)}
+          reels={Boolean(reels)}
+          onReels={() => showReel(null)}
           onChannelCreated={(channel) => {
             refreshChannels();
             showChannel(channel.id);
@@ -120,13 +127,15 @@ export function App() {
         />
         <SidebarInset className="h-svh min-w-0 overflow-hidden">
           <TopBar
-            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : openClient ? ["Marketing", clients.find((client) => client.id === openClient)?.name ?? "…", ...(openPost ? ["Carousel editor"] : [])] : promos ? ["Marketing", "Website promo"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
+            crumbs={selected ? ["Projects", open?.title ?? "…"] : openChannel ? ["Channels", shownChannel?.name ?? "…"] : openClient ? ["Marketing", clients.find((client) => client.id === openClient)?.name ?? "…", ...(openPost ? ["Carousel editor"] : [])] : promos ? ["Marketing", "Website promo"] : reels ? ["Studio", "Reels"] : marketing ? ["Studio", "Marketing video"] : ["Studio", "New video"]}
             theme={theme}
             onToggleTheme={toggle}
           />
           <main className="flex min-h-0 flex-1 flex-col">
             {promos ? (
               <PromosView id={promos === "all" ? null : promos} jobs={jobs} onOpen={showPromo} />
+            ) : reels ? (
+              <ReelsView id={reels === "all" ? null : reels} jobs={jobs} channels={channels} projects={projects} onOpen={showReel} />
             ) : openClient && openPost ? (
               <CarouselEditor key={openPost} clientId={openClient} postId={openPost} jobs={jobs} onBack={() => showClient(openClient)} />
             ) : openClient ? (
@@ -159,7 +168,7 @@ export function App() {
                 }}
               />
             ) : (
-              <NewVideo channels={channels} llmReady={Boolean(status?.llm)} jobs={jobs} />
+              <NewVideo channels={channels} llmReady={Boolean(status?.llm)} jobs={jobs} onOpenReel={showReel} />
             )}
           </main>
         </SidebarInset>

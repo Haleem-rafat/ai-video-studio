@@ -1,7 +1,7 @@
-import { AppWindowIcon, CheckIcon, Columns2Icon, MicroscopeIcon, ScaleIcon, SwordsIcon, ShapesIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
+import { AppWindowIcon, BoxIcon, Rotate3dIcon, CheckIcon, HighlighterIcon, Gamepad2Icon, MousePointerClickIcon, NewspaperIcon, UserRoundIcon, Columns2Icon, MicroscopeIcon, ScaleIcon, SwordsIcon, ShapesIcon, LayersIcon, LightbulbIcon, Loader2Icon, MonitorIcon, PenLineIcon, SmartphoneIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { api, type Channel, type FormatId, type Job, type StyleId, type TopicIdea } from "../api.ts";
+import { api, type Channel, type FormatId, type Job, type ReelStyle, type StyleId, type TopicIdea } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ChannelSwatch, Field } from "./shared.tsx";
 import { JobProgress } from "./JobProgress.tsx";
+import { REEL_PRICES, REEL_STYLE_INFO } from "./ReelsView.tsx";
 
-type Props = { channels: Channel[]; llmReady: boolean; jobs: Job[] };
+type Props = { channels: Channel[]; llmReady: boolean; jobs: Job[]; onOpenReel: (id: string) => void };
 
 /** A short silent loop of a real video made in this look, so the choice shows rather than tells. */
 export function ModeClip({ mode }: { mode: string }) {
@@ -37,10 +38,16 @@ function Choice({ active, onClick, children, className }: { active: boolean; onC
   );
 }
 
-export function NewVideo({ channels, llmReady, jobs }: Props) {
+export function NewVideo({ channels, llmReady, jobs, onOpenReel }: Props) {
   const [channel, setChannel] = useState("");
   const [format, setFormat] = useState<FormatId | "both">("both");
   const [style, setStyle] = useState<StyleId>("motion");
+  /** A code-drawn reel style, picked instead of a video look; it opens on the Reels page. */
+  const [reel, setReel] = useState<ReelStyle | null>(null);
+  const pickStyle = (next: StyleId) => {
+    setReel(null);
+    setStyle(next);
+  };
   const [topic, setTopic] = useState("");
   const [focus, setFocus] = useState("");
   const [ideasJob, setIdeasJob] = useState<string | null>(null);
@@ -61,7 +68,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
   const writing = scriptJobs[0];
   const thinking = job?.status === "running" || job?.status === "queued";
 
-  const run = async (action: () => Promise<Job>) => {
+  const run = async <T extends Job>(action: () => Promise<T>) => {
     setError("");
     try {
       return await action();
@@ -122,31 +129,39 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
               </Choice>
             </div>
             <div role="radiogroup" aria-label="Look" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <Choice active={style === "motion"} onClick={() => setStyle("motion")}>
+              {(["rpg", "news", "proof", "kinetic", "diagram", "editorial", "3d"] as const).map((each) => (
+                <Choice key={each} active={reel === each} onClick={() => setReel(each)}>
+                  <ModeClip mode={each} />
+                  {each === "rpg" ? <Gamepad2Icon className="size-4 text-muted-foreground" /> : each === "news" ? <NewspaperIcon className="size-4 text-muted-foreground" /> : each === "proof" ? <UserRoundIcon className="size-4 text-muted-foreground" /> : each === "3d" ? <Rotate3dIcon className="size-4 text-muted-foreground" /> : each === "diagram" ? <BoxIcon className="size-4 text-muted-foreground" /> : each === "editorial" ? <HighlighterIcon className="size-4 text-muted-foreground" /> : <MousePointerClickIcon className="size-4 text-muted-foreground" />}
+                  <span className="text-sm font-medium">{REEL_STYLE_INFO[each].label}</span>
+                  <span className="text-xs text-muted-foreground">9:16 · {each === "rpg" || each === "news" ? "about 60 seconds. " : ""}{REEL_STYLE_INFO[each].hint}</span>
+                </Choice>
+              ))}
+              <Choice active={!reel && style === "motion"} onClick={() => pickStyle("motion")}>
                 <ModeClip mode="motion" />
                 <LayersIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Motion graphics</span>
                 <span className="text-xs text-muted-foreground">Full-frame pictures, animated numbers and captions.</span>
               </Choice>
-              <Choice active={style === "whiteboard"} onClick={() => setStyle("whiteboard")}>
+              <Choice active={!reel && style === "whiteboard"} onClick={() => pickStyle("whiteboard")}>
                 <ModeClip mode="whiteboard" />
                 <PenLineIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Whiteboard</span>
                 <span className="text-xs text-muted-foreground">A hand draws each picture and writes the key words. About $0.025 a picture.</span>
               </Choice>
-              <Choice active={style === "explainer"} onClick={() => setStyle("explainer")}>
+              <Choice active={!reel && style === "explainer"} onClick={() => pickStyle("explainer")}>
                 <ModeClip mode="explainer" />
                 <AppWindowIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Explainer</span>
                 <span className="text-xs text-muted-foreground">A {channels.find((option) => option.id === channel)?.device ?? "phone"} on cream, each scene as an app screen, with karaoke captions. No pictures to pay for.</span>
               </Choice>
-              <Choice active={style === "mixed"} onClick={() => setStyle("mixed")}>
+              <Choice active={!reel && style === "mixed"} onClick={() => pickStyle("mixed")}>
                 <ModeClip mode="mixed" />
                 <ShapesIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Mixed</span>
                 <span className="text-xs text-muted-foreground">Each scene picks its look: whiteboard for ideas, the device for code and steps, motion for numbers.</span>
               </Choice>
-              <Choice active={style === "versus"} onClick={() => setStyle("versus")}>
+              <Choice active={!reel && style === "versus"} onClick={() => pickStyle("versus")}>
                 <ModeClip mode="versus" />
                 <SwordsIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Versus</span>
@@ -155,7 +170,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                   channel's language; makes its own thumbnail and chapters. Type the topic as "A vs B".
                 </span>
               </Choice>
-              <Choice active={style === "arena"} onClick={() => setStyle("arena")}>
+              <Choice active={!reel && style === "arena"} onClick={() => pickStyle("arena")}>
                 <ModeClip mode="arena" />
                 <SwordsIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Arena</span>
@@ -164,7 +179,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                   captions and a winner reveal. Add each product's press photos on the project page. Type the topic as "A vs B".
                 </span>
               </Choice>
-              <Choice active={style === "proscons"} onClick={() => setStyle("proscons")}>
+              <Choice active={!reel && style === "proscons"} onClick={() => pickStyle("proscons")}>
                 <ModeClip mode="proscons" />
                 <ScaleIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Pros &amp; Cons</span>
@@ -173,7 +188,7 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                   "problems nobody tells you" chapter from real reviews, a pros/cons ledger, the score, and who should buy which. Never assumes the dearer one wins. Type the topic as "A vs B".
                 </span>
               </Choice>
-              <Choice active={style === "deepdive"} onClick={() => setStyle("deepdive")}>
+              <Choice active={!reel && style === "deepdive"} onClick={() => pickStyle("deepdive")}>
                 <ModeClip mode="deepdive" />
                 <MicroscopeIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Deep dive</span>
@@ -245,7 +260,9 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
 
             <div className="flex items-center justify-between gap-3 border-t pt-4">
               <p className="text-xs text-muted-foreground">
-                {style === "deepdive"
+                {reel
+                  ? `A 9:16 reel whatever the format above. Research and writing take about a minute (about $${REEL_PRICES.write.toFixed(2)}, plus about $0.02 for the voice); it opens on the Reels page to edit, preview and render.`
+                  : style === "deepdive"
                   ? "Research and writing take 2–3 minutes, through the AI Gateway."
                   : style === "versus" || style === "arena" || style === "proscons"
                   ? /\s(vs\.?|versus|ضد|ولا|مقابل)\s/i.test(topic)
@@ -257,10 +274,22 @@ export function NewVideo({ channels, llmReady, jobs }: Props) {
                     ? "A long script takes Bonsai about 30–40 minutes: outline, chapters and fact-checks."
                     : "The project opens here as soon as the script is written and fact-checked."}
               </p>
-              <Button disabled={(style !== "versus" && style !== "arena" && style !== "deepdive" && !llmReady) || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
-                {writing ? <Loader2Icon className="animate-spin" /> : <PenLineIcon />}
-                {writing ? "Writing script…" : "Write script"}
-              </Button>
+              {reel ? (
+                <Button
+                  disabled={!topic.trim() || !channel}
+                  onClick={async () => {
+                    const started = await run(() => api.createReel(channel, reel, topic.trim()));
+                    if (started) onOpenReel(started.reelId);
+                  }}
+                >
+                  <PenLineIcon /> Write reel
+                </Button>
+              ) : (
+                <Button disabled={(style !== "versus" && style !== "arena" && style !== "deepdive" && !llmReady) || !topic.trim() || Boolean(writing)} onClick={() => run(() => api.create(channel, format, topic, style))}>
+                  {writing ? <Loader2Icon className="animate-spin" /> : <PenLineIcon />}
+                  {writing ? "Writing script…" : "Write script"}
+                </Button>
+              )}
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             {scriptJobs.map((job) => (

@@ -7,10 +7,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join, normalize, sep } from "node:path";
 
 import { addAsset, cloneVoice, FONTS, importFromYouTube, makeCharacter, readStyle, removeAsset, type AssetKind } from "../brand/brand.ts";
-import { LLM_URL, OUTPUT_DIR, ROOT, brandDir, loadChannel, loadChannels, saveChannel, type Channel } from "../config.ts";
+import { LLM_URL, OUTPUT_DIR, ROOT, brandDir, loadChannel, loadChannels, loadEnv, saveChannel, type Channel } from "../config.ts";
 import { imageIsCurrent } from "../media/images.ts";
 import { narratorKey, voiceIsCurrent } from "../media/voice.ts";
-import { build, channelOf, compose, createMarketing, createProject, factCheck, MARKETING_VOICES, render } from "../pipeline.ts";
+import { build, channelOf, compose, createMarketing, createProject, factCheck, isScripted, MARKETING_VOICES, planMarketingStories, render } from "../pipeline.ts";
 import { assistantTurn, defaultScript, listSessions, loadSession, newSession, saveSession, sessionDir, type Session } from "../marketing/session.ts";
 import { readSite } from "../marketing/site.ts";
 import { placeMarketing } from "../render/marketing-kit.ts";
@@ -27,6 +27,8 @@ import { LOOKS, STYLES, VISUAL_TYPES, type Creativity, type FormatId, type Proje
 import { enqueue, getJob, recentJobs } from "./jobs.ts";
 import { handleClients, startClientSchedule } from "./clients.ts";
 import { handlePromos, startPromos } from "./promos.ts";
+import { handleReels, startReels } from "./reels.ts";
+import { listReels, reelDir } from "../reels/store.ts";
 import { usageFolders } from "../clients/library.ts";
 import { appendUsage, collectUsage, readUsage, STUDIO_LEDGER, summarize } from "../usage.ts";
 import { gateway } from "ai";
@@ -95,7 +97,8 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 let creditCache: { at: number; value: unknown } | null = null;
 
 async function elevenCredit(): Promise<unknown> {
-  if (creditCache && Date.now() - creditCache.at < 60_000) return creditCache.value;
+  loadEnv();
+  if (creditCache?.value && Date.now() - creditCache.at < 60_000) return creditCache.value;
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) return null;
 
@@ -116,7 +119,8 @@ let balanceCache: { at: number; value: number | null } = { at: 0, value: null };
 
 /** What is left on the AI Gateway, in dollars; asked at most once a minute. */
 async function gatewayBalance(): Promise<number | null> {
-  if (Date.now() - balanceCache.at < 60_000) return balanceCache.value;
+  loadEnv();
+  if (balanceCache.value !== null && Date.now() - balanceCache.at < 60_000) return balanceCache.value;
   const value = await gateway.getCredits().then((credits) => Number(credits.balance), () => null);
   balanceCache = { at: Date.now(), value };
   return value;
@@ -298,6 +302,12 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     if (handled) return;
   }
 
+  // Code-drawn reels: RPG and breaking-news styles (src/server/reels.ts).
+  if (path.startsWith("/api/reels") || path.startsWith("/reel-files/")) {
+    const handled = await handleReels({ path, method, url, request, response, json, body, sendFile, inside, fail: (status, message) => new HttpError(status, message) });
+    if (handled) return;
+  }
+
   if (path === "/api/status") {
     const [llm, credit] = await Promise.all([llmRunning(), elevenCredit()]);
     const starting = Boolean(llmProcess && llmProcess.exitCode === null && !llm);
@@ -401,7 +411,8 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   if (path === "/api/usage" && method === "GET") {
     // Every video's, chat's and channel job's costs; a chat copied into its videos counts once.
     const seen = new Set<string>();
-    const folders = [...(await listProjects()).map((project) => projectDir(project.id)), ...(await listSessions()).map((session) => sessionDir(session.id)), ...(await usageFolders()), STUDIO_LEDGER];
+    const reels = await listReels();
+    const folders = [...(await listProjects()).map((project) => projectDir(project.id)), ...(await listSessions()).map((session) => sessionDir(session.id)), ...reels.map((reel) => reelDir(reel.id)), ...(await usageFolders()), STUDIO_LEDGER];
     const entries = (await Promise.all(folders.map((folder) => readUsage(folder)))).flat().filter((entry) => {
       if (!entry.generationId) return true;
       if (seen.has(entry.generationId)) return false;
@@ -409,7 +420,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
       return true;
     });
     const month = new Date().toISOString().slice(0, 7);
-    const videos = (await listProjects()).filter((project) => project.render).length;
+    const videos = (await listProjects()).filter((project) => project.render).length + reels.filter((reel) => reel.render).length;
     const total = summarize(entries);
     return json(response, 200, { total, month: summarize(entries.filter((entry) => entry.at.startsWith(month))), videos, perVideo: videos ? total.cost / videos : 0, balance: await gatewayBalance() });
   }
@@ -560,7 +571,10 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     return json(response, 200, { script: await defaultScript(language), voices: MARKETING_VOICES });
   }
 
-  if (path === "/api/marketing" && method === "GET") return json(response, 200, await listSessions());
+  // What the page needs on top of the saved session: whether the script is the story (no story to plan).
+  const view = (session: Session): Session => ({ ...session, scripted: isScripted(session) });
+
+  if (path === "/api/marketing" && method === "GET") return json(response, 200, (await listSessions()).map(view));
 
   if (path === "/api/marketing" && method === "POST") {
     const input = await body<{ url?: string; language?: string; format?: FormatId | "both"; creativity?: Creativity; script?: string }>(request);
@@ -588,23 +602,48 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
       }
     }, undefined, () => sessionDir(session.id));
     job.link = `/marketing/${session.id}`;
-    return json(response, 202, { session, job });
+    return json(response, 202, { session: view(session), job });
   }
 
   if ((match = path.match(/^\/api\/marketing\/([a-z0-9-]+)$/))) {
     const session = await loadSession(match[1]);
-    if (method === "GET") return json(response, 200, session);
+    if (method === "GET") return json(response, 200, view(session));
     if (method === "PUT") {
       // Edits from the brief panel: the user can correct any field the chat filled.
-      const edits = await body<Partial<Pick<Session, "brief" | "script">> & { colors?: Record<string, string> }>(request);
-      if (edits.brief) session.brief = { ...session.brief, ...edits.brief, cta: { ...session.brief.cta, ...(edits.brief.cta ?? {}) } };
+      const edits = await body<Partial<Pick<Session, "brief" | "script">> & { colors?: Record<string, string>; story?: number | null; hook?: string }>(request);
+      if (edits.brief) {
+        session.brief = { ...session.brief, ...edits.brief, cta: { ...session.brief.cta, ...(edits.brief.cta ?? {}) } };
+        // Stories planned for the old brief would sell the old brief.
+        delete session.stories;
+        delete session.story;
+      }
+      if (edits.story === null) delete session.story;
+      else if (typeof edits.story === "number") {
+        if (!session.stories?.[edits.story]) throw new HttpError(400, "There is no such story option.");
+        session.story = edits.story;
+      }
+      // The picked story's opening line: one of its scored hooks, or the client's own words.
+      if (typeof edits.hook === "string" && edits.hook.trim()) {
+        const picked = session.story !== undefined ? session.stories?.[session.story] : undefined;
+        if (!picked) throw new HttpError(400, "Pick a story first.");
+        picked.hook = edits.hook.trim().slice(0, 200);
+      }
       if (typeof edits.script === "string" && edits.script.trim()) session.script = edits.script;
       if (edits.colors && session.brand) {
         for (const [key, value] of Object.entries(edits.colors)) if (key in session.brand.colors && /^#[0-9a-fA-F]{6}$/.test(value)) session.brand.colors[key as keyof typeof session.brand.colors] = value;
       }
       await saveSession(session);
-      return json(response, 200, session);
+      return json(response, 200, view(session));
     }
+  }
+
+  if ((match = path.match(/^\/api\/marketing\/([a-z0-9-]+)\/stories$/)) && method === "POST") {
+    const session = await loadSession(match[1]);
+    if (session.missing.length) throw new HttpError(400, `The brief still needs: ${session.missing.join(", ")}`);
+    if (isScripted(session)) throw new HttpError(400, "This video speaks the script's voice-over word for word, so the script is its story.");
+    const job = enqueue(`Plan story: ${session.brand?.name ?? "marketing"}`, async (log) => (await planMarketingStories(session.id, log)).id, undefined, () => sessionDir(session.id));
+    job.link = `/marketing/${session.id}`;
+    return json(response, 202, job);
   }
 
   if ((match = path.match(/^\/api\/marketing\/([a-z0-9-]+)\/messages$/)) && method === "POST") {
@@ -618,12 +657,14 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     await appendUsage(sessionDir(session.id), entries.map((entry) => ({ ...entry, step: "chat" })));
     if (error) session.messages.push({ role: "assistant", text: `⚠️ ${error instanceof Error ? error.message : String(error)}` });
     await saveSession(session);
-    return json(response, 200, session);
+    return json(response, 200, view(session));
   }
 
   if ((match = path.match(/^\/api\/marketing\/([a-z0-9-]+)\/create$/)) && method === "POST") {
     const session = await loadSession(match[1]);
     if (session.missing.length) throw new HttpError(400, `The brief still needs: ${session.missing.join(", ")}`);
+    // Nothing is written until the client has picked one of the planned stories.
+    if (session.stories?.length && session.story === undefined) throw new HttpError(400, "Pick one of the two stories first.");
     const formats: FormatId[] = session.format === "both" ? ["short", "long"] : [session.format];
     const jobs = formats.map((format) =>
       enqueue(`Write script: ${session.brand?.name ?? "marketing"} marketing video (${format === "long" ? "16:9" : "9:16"})`, async (log) => (await createMarketing(session.id, log, format)).id),
@@ -664,6 +705,7 @@ createServer((request, response) => {
   if (process.env.OPEN) spawn("open", [`http://localhost:${PORT}`]);
   startClientSchedule();
   startPromos();
+  void startReels().catch((error: unknown) => console.error(`reels: ${error instanceof Error ? error.message : error}`));
 });
 
 /**

@@ -269,6 +269,8 @@ export type MarketingSetup = {
   art?: { style: string; cards: Photo[]; subjects?: string[] };
   /** The reel style it was written in (kinetic, tour…); unset for Classic. */
   reelStyle?: string;
+  /** The story it was written from (marketing/story.ts): its shape and opening line. */
+  story?: { shape: string; hook: string };
   /** Value content: teaches, never sells; no link, no brand corner, the brand only on the last scene. */
   value?: boolean;
   /** The Arabic dialect it's written and voiced in; unset means Egyptian. */

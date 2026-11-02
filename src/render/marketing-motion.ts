@@ -173,10 +173,18 @@ function path({ s, k, B, arabic }: Ctx): Beat {
 }
 
 /** One big number counting up inside a ring. */
+/** The number a stat counts up to: only a label with one number in it («15», «1,200»); a range like «10-15» is shown as written. */
+export function statCount(label: string): number {
+  const numbers = label.match(/\d+(?:[.,]\d+)*/g) ?? [];
+  if (numbers.length !== 1) return 0;
+  const number = Number(numbers[0].replace(/,/g, ""));
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
 function stat({ s, k, B, arabic }: Ctx): Beat {
   const item = s.visual.items[0] ?? { label: s.visual.headline || "1", value: "" };
-  const number = Number(item.label.replace(/[^\d.]/g, ""));
-  const counts = Number.isFinite(number) && number > 0;
+  const number = statCount(item.label);
+  const counts = number > 0;
   const size = B.short ? 620 : 520;
   const ring = 2 * Math.PI * 46;
   const html = `<div class="statw">
@@ -536,7 +544,7 @@ export function motionCss(B: Box, arabic: boolean): string {
   .sic { position: absolute; width: 100px; height: 100px; margin: -50px 0 0 -50px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 3px solid color-mix(in srgb, var(--muted) 40%, transparent); color: var(--muted); }
   .sic svg { width: 48px; height: 48px; }
   .station.lit .sic { background: var(--accent); border-color: var(--accent); color: var(--bg); }
-  .slb { position: absolute; white-space: nowrap; font: 700 ${B.short ? 38 : 32}px var(--head); transform: translateX(-50%); }
+  .slb { position: absolute; left: 0; white-space: nowrap; font: 700 ${B.short ? 38 : 32}px var(--head); transform: translateX(-50%); }
   .slb.above { bottom: 66px; } .slb.below { top: 66px; }
 
   /* stat */

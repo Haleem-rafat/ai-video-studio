@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { cleanError, loadEnv } from "../config.ts";
 import { projectDir } from "../project.ts";
 import { withProgress } from "../progress.ts";
 import { appendUsage, collectUsage, STUDIO_LEDGER, type UsageEntry } from "../usage.ts";
@@ -66,6 +67,7 @@ export function enqueue(label: string, work: Work, projectId?: string, usageTarg
   jobs.set(job.id, job);
 
   chain = chain.then(async () => {
+    loadEnv();
     job.status = "running";
     job.startedAt = Date.now();
     const log = (message: string) => {
@@ -91,7 +93,7 @@ export function enqueue(label: string, work: Work, projectId?: string, usageTarg
     const target = (usageTarget ?? projectTarget(job))(value) ?? STUDIO_LEDGER;
     await appendUsage(target, entries).catch(() => {});
     if (error) {
-      job.error = error instanceof Error ? error.message : String(error);
+      job.error = cleanError(error);
       job.status = "failed";
       log(`failed: ${job.error}`);
     } else {

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Cairo"; src: url(../fonts/Cairo.ttf); font-weight: 200 1000; }
+  @font-face { font-family: "Inter"; src: url(../fonts/Inter.ttf); font-weight: 100 900; }
+  /* Flat vector: bold flat colour fields (no gradients), geometric shapes, a circle wipe carries every cut,
+     and every piece lands with anticipation, stretch, squash and overshoot. */
+  :root { --accent: #6c5cff; --accent2: #ff5a4e; --sun: #ffc62b; --mint: #2ee6a8; --cream: #fff6e9; --ink: #151433; --field: #fff6e9; --text: #151433; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  body { background: var(--field); color: var(--text); font-family: "Cairo", "Inter", sans-serif; position: relative; }
+
+  .wipe { position: absolute; width: 10px; height: 10px; border-radius: 50%; left: 0; top: 0; will-change: transform; }
+  .shape { position: absolute; will-change: transform; }
+  .shape.c1 { width: 170px; height: 170px; border-radius: 50%; left: -50px; top: 300px; background: var(--sun); }
+  .shape.c2 { width: 90px; height: 90px; border-radius: 50%; right: 90px; top: 250px; background: var(--accent2); }
+  .shape.r1 { width: 220px; height: 70px; border-radius: 35px; right: -60px; top: 1270px; background: var(--mint); }
+  .shape.t1 { width: 0; height: 0; left: 110px; top: 1300px; border-left: 60px solid transparent; border-right: 60px solid transparent; border-bottom: 104px solid var(--accent); }
+  .shape.ring { width: 120px; height: 120px; border-radius: 50%; right: 140px; top: 1180px; border: 22px solid var(--ink); opacity: 0.9; }
+
+  .brand { position: absolute; top: 112px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; font: 800 36px "Inter", "Cairo", sans-serif; color: var(--text); white-space: nowrap; }
+  .brand::before { content: ""; width: 26px; height: 26px; border-radius: 50%; background: var(--accent2); }
+
+  .stage { position: absolute; left: 0; right: 0; top: 280px; height: 1020px; }
+  .scene { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 46px; will-change: transform, opacity; }
+  .scene > * { transform-origin: 50% 100%; }
+
+  .title { width: 940px; text-align: center; direction: rtl; font: 900 96px/1.35 "Cairo", sans-serif; }
+  em { font-style: normal; color: var(--cream); background: var(--ink); padding: 0 18px 8px; border-radius: 22px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .chip { padding: 14px 40px 22px; border-radius: 50px; background: var(--ink); color: var(--cream); font: 800 44px "Cairo", sans-serif; direction: rtl; unicode-bidi: plaintext; }
+  .pic { width: 820px; height: 560px; border-radius: 50px; overflow: hidden; background: var(--ink); }
+  .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .point { display: grid; justify-items: center; gap: 36px; text-align: center; direction: rtl; }
+  .point .mark { width: 380px; height: 380px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--sun); font: 900 240px/1 "Cairo", "Inter", sans-serif; }
+  .point .text { max-width: 940px; font: 900 76px/1.4 "Cairo", sans-serif; }
+
+  .chat { width: 860px; padding: 40px 40px 50px; border-radius: 60px; background: var(--cream); color: var(--ink); display: flex; flex-direction: column; gap: 26px; direction: rtl; }
+  .chat .head { display: flex; align-items: center; gap: 18px; font: 800 38px "Cairo", sans-serif; }
+  .chat .head i { width: 64px; height: 64px; border-radius: 50%; background: var(--sun); }
+  .bubble { max-width: 82%; padding: 20px 36px 30px; border-radius: 44px; font: 800 52px/1.4 "Cairo", sans-serif; }
+  .bubble.you { align-self: flex-start; background: #ece3d3; border-bottom-right-radius: 12px; }
+  .bubble.them { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-left-radius: 12px; }
+
+  .steps { width: 900px; display: grid; gap: 26px; direction: rtl; }
+  .step { display: flex; align-items: center; gap: 30px; padding: 26px 40px 36px; border-radius: 50px; background: var(--cream); color: var(--ink); font: 800 54px/1.35 "Cairo", sans-serif; }
+  .step .n { flex: none; width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; font: 900 50px "Inter"; background: var(--ink); color: var(--cream); }
+  .step.on { background: var(--ink); color: var(--cream); }
+  .step.on .n { background: var(--sun); color: var(--ink); }
+
+  .quote { width: 920px; padding: 50px 56px 64px; border-radius: 56px; background: var(--cream); color: var(--ink); direction: rtl; }
+  .quote .src { font: 800 30px "Inter"; color: var(--accent2); direction: ltr; text-align: left; margin-bottom: 18px; }
+  .quote p { margin: 0; font: 800 56px/1.55 "Cairo", sans-serif; }
+  mark { color: var(--ink); background: linear-gradient(var(--sun), var(--sun)) no-repeat 100% 100% / var(--u, 0%) 100%; padding: 0 6px; border-radius: 10px; }
+
+  .stamp { padding: 30px 90px 54px; border-radius: 90px; background: var(--ink); color: var(--sun); font: 900 190px/1.1 "Cairo", "Inter", sans-serif; white-space: nowrap; }
+  .price { display: grid; justify-items: center; gap: 10px; padding: 60px 100px 76px; border-radius: 80px; background: var(--cream); color: var(--ink); }
+  .price small { font: 800 46px "Cairo", sans-serif; }
+  .price .v { font: 900 190px/1 "Inter", sans-serif; letter-spacing: -6px; direction: ltr; font-variant-numeric: tabular-nums; }
+  .bars { position: relative; display: flex; align-items: flex-end; gap: 60px; height: 700px; direction: ltr; }
+  .bar { display: grid; justify-items: center; gap: 16px; width: 220px; }
+  .bar .val { font: 900 60px "Inter"; }
+  .bar .col { width: 200px; border-radius: 100px 100px 24px 24px; background: var(--cream); transform-origin: 50% 100%; }
+  .bar.last .col { background: var(--ink); }
+  .bar .name { font: 800 38px "Cairo", sans-serif; text-align: center; direction: rtl; unicode-bidi: plaintext; }
+  .sticker { position: absolute; right: -40px; top: -70px; width: 200px; height: 200px; border-radius: 50%; display: grid; place-items: center; background: var(--accent2); color: #fff; font: 900 60px "Inter"; }
+  .specs { width: 880px; display: flex; flex-wrap: wrap; justify-content: center; gap: 24px; }
+  .spec { padding: 20px 44px 30px; border-radius: 60px; background: var(--cream); color: var(--ink); font: 800 52px "Cairo", sans-serif; direction: rtl; unicode-bidi: plaintext; }
+  .spec:nth-child(2) { background: var(--sun); } .spec:nth-child(3) { background: var(--mint); } .spec:nth-child(4) { background: var(--ink); color: var(--cream); }
+  .choice { display: flex; gap: 40px; direction: rtl; }
+  .opt { width: 420px; height: 420px; border-radius: 80px; display: grid; place-items: center; align-content: center; gap: 24px; font: 900 64px "Cairo", sans-serif; text-align: center; background: var(--cream); color: var(--ink); }
+  .opt i { font-style: normal; width: 130px; height: 130px; border-radius: 50%; display: grid; place-items: center; background: var(--sun); font: 900 70px "Inter"; }
+  .opt.b { background: var(--ink); color: var(--cream); } .opt.b i { background: var(--accent2); color: #fff; }
+
+  .follow { display: grid; justify-items: center; gap: 18px; }
+  .follow .logo { width: 300px; height: 300px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--cream); }
+  .follow .logo img { width: 74%; height: 74%; object-fit: contain; }
+  .follow .logo b { font: 900 140px "Inter"; }
+  .follow strong { font: 900 100px "Inter", "Cairo", sans-serif; }
+  .follow bdi { font: 700 40px "Inter"; opacity: 0.8; }
+  .fbtn { position: relative; width: 360px; height: 110px; border-radius: 60px; background: var(--ink); color: var(--cream); font: 900 44px "Inter"; overflow: hidden; }
+  .fbtn span { position: absolute; inset: 0; display: grid; place-items: center; }
+  .fbtn .b, .fbtn.done .a { opacity: 0; } .fbtn.done .b { opacity: 1; } .fbtn.done { background: var(--cream); color: var(--ink); }
+
+  /* the line being said */
+  .say { position: absolute; left: 60px; right: 60px; top: 1380px; height: 260px; display: flex; align-items: center; justify-content: center; }
+  .say .line { text-align: center; direction: rtl; font: 900 74px/1.4 "Cairo", sans-serif; }
+  .w { display: inline-block; transform-origin: 50% 100%; will-change: transform; }
+  .w.lat { font-family: "Inter", sans-serif; font-weight: 900; }
+  .w.key { color: var(--cream); background: var(--accent2); padding: 0 14px 6px; border-radius: 18px; }
+</style>
+</head>
+<body>
+<div class="wipe" id="wipe"></div>
+<div class="shape c1" id="s0"></div><div class="shape c2" id="s1"></div><div class="shape r1" id="s2"></div><div class="shape t1" id="s3"></div><div class="shape ring" id="s4"></div>
+<div class="brand" id="brand"></div>
+<div class="stage" id="stage"></div>
+<div class="say" id="say"></div>
+<script type="module" src="flat.js"></script>
+</body>
+</html>

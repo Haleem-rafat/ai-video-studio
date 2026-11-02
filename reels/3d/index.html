@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<script type="importmap">{ "imports": { "three": "/three/build/three.module.js" } }</script>
+<style>
+  @font-face { font-family: "Cairo"; src: url(../fonts/Cairo.ttf); font-weight: 200 1000; }
+  @font-face { font-family: "Inter"; src: url(../fonts/Inter.ttf); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(../fonts/JetBrainsMono.ttf); font-weight: 100 800; }
+  :root { --accent: #ff3b30; --gold: #f5c451; --bg: #111214; --line: rgba(255,255,255,0.12); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  body { background: var(--bg); color: #fff; font-family: "Cairo", "Inter", sans-serif; position: relative; }
+  .glow { position: absolute; left: 50%; top: 44%; width: 1500px; height: 1500px; transform: translate(-50%, -50%);
+    background: radial-gradient(closest-side, rgba(255,255,255,0.07), transparent 72%); }
+  .tint { position: absolute; left: 50%; top: 46%; width: 900px; height: 900px; transform: translate(-50%, -50%); border-radius: 50%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent 75%); opacity: 0; }
+  .dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,0.06) 1.5px, transparent 1.6px); background-size: 36px 36px; opacity: 0.6;
+    mask-image: radial-gradient(60% 45% at 50% 45%, #000, transparent); }
+  .vignette { position: absolute; inset: 0; background: radial-gradient(80% 62% at 50% 44%, transparent 45%, rgba(0,0,0,0.85) 100%); pointer-events: none; }
+  .grain { position: absolute; inset: -50px; opacity: 0.07; pointer-events: none;
+    background-image: repeating-radial-gradient(circle at 17% 31%, #fff 0 1px, transparent 1px 3px), repeating-radial-gradient(circle at 71% 63%, #fff 0 1px, transparent 1px 4px); }
+
+  /* top bar: handle + scene counter, mono like a tech overlay */
+  .top { position: absolute; left: 70px; right: 70px; top: 120px; display: flex; justify-content: space-between; font: 500 26px "JetBrains Mono", monospace; color: #8a8a8e; direction: ltr; letter-spacing: 1px; }
+  .top b { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); margin-right: 12px; box-shadow: 0 0 12px var(--accent); vertical-align: 2px; }
+
+  /* the hook headline: white with the punch phrase in gold */
+  .headline { position: absolute; left: 80px; right: 80px; top: 230px; text-align: center; direction: rtl; font: 900 70px/1.35 "Cairo", sans-serif; will-change: transform, opacity; }
+  .headline .hl { color: var(--gold); }
+  .headline .lat { font-family: "Inter", sans-serif; font-weight: 800; direction: ltr; unicode-bidi: isolate; }
+
+  .stage { position: absolute; left: 0; right: 0; top: 470px; height: 760px; perspective: 1900px; }
+  .scene { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; will-change: transform, opacity, filter; transform-style: preserve-3d; }
+
+  /* photo: a floating card that turns slowly, with a reflection and corner brackets */
+  .device { position: relative; width: 820px; height: 560px; border-radius: 26px; overflow: hidden; background: #000; border: 1px solid #2c2c30;
+    box-shadow: 0 60px 140px rgba(0,0,0,0.8), 0 0 80px color-mix(in srgb, var(--accent) 14%, transparent);
+    -webkit-box-reflect: below 18px linear-gradient(transparent 70%, rgba(255,255,255,0.12)); will-change: transform; }
+  .device img { width: 100%; height: 100%; object-fit: cover; display: block; will-change: transform; }
+  .device.tall { width: 520px; height: 640px; }
+  .brk { position: absolute; width: 60px; height: 60px; border-color: rgba(255,255,255,0.55); border-style: solid; border-width: 0; }
+  .brk.a { left: -24px; top: -24px; border-left-width: 3px; border-top-width: 3px; } .brk.b { right: -24px; top: -24px; border-right-width: 3px; border-top-width: 3px; }
+  .brk.c { left: -24px; bottom: -24px; border-left-width: 3px; border-bottom-width: 3px; } .brk.d { right: -24px; bottom: -24px; border-right-width: 3px; border-bottom-width: 3px; }
+  .scan { position: absolute; left: 0; right: 0; height: 120px; background: linear-gradient(transparent, color-mix(in srgb, var(--accent) 30%, transparent), transparent); mix-blend-mode: screen; }
+  .tag { position: absolute; padding: 10px 18px 12px; border: 1px solid rgba(255,255,255,0.25); border-radius: 10px; background: rgba(18,18,20,0.85);
+    font: 600 28px "JetBrains Mono", "Cairo", monospace; color: #e8e8e8; unicode-bidi: plaintext; white-space: nowrap; }
+  .tag::before { content: "◉ "; color: var(--accent); }
+
+  /* layers: an exploded stack, the layer being explained lights up */
+  .stack { position: relative; width: 600px; height: 600px; margin-right: 260px; transform-style: preserve-3d; transform: rotateX(60deg) rotateZ(-38deg); }
+  .slab { position: absolute; left: 60px; top: 110px; width: 480px; height: 380px; border-radius: 22px; border: 2px solid rgba(255,255,255,0.22);
+    background: linear-gradient(135deg, rgba(60,62,70,0.92), rgba(24,25,30,0.92)); box-shadow: 0 0 0 1px rgba(0,0,0,0.4); will-change: transform; }
+  .slab::after { content: ""; position: absolute; inset: 18px; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.12); }
+  .slab.on { border-color: var(--accent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 45%, #222), color-mix(in srgb, var(--accent) 18%, #111));
+    box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .labels { position: absolute; inset: 0; pointer-events: none; }
+  .labels .tag { right: 40px; }
+
+  /* quote: a press line with its punch phrase marked */
+  .quote { width: 900px; padding: 46px 52px 54px; border-radius: 30px; background: #18191c; border: 1px solid #2c2d31; direction: rtl; box-shadow: 0 40px 120px rgba(0,0,0,0.7); }
+  .quote .src { font: 600 26px "JetBrains Mono", monospace; color: #8a8a8e; direction: ltr; text-align: left; margin-bottom: 24px; }
+  .quote .src::before { content: "■ "; color: var(--accent); }
+  .quote p { margin: 0; font: 700 50px/1.55 "Cairo", "Inter", sans-serif; color: #d9d9dc; }
+  .quote mark { color: #fff; background: linear-gradient(var(--accent), var(--accent)) no-repeat 100% 92% / var(--u, 0%) 10px; padding: 0 4px; }
+
+  /* stamp, price, bars, specs, choice */
+  .stamp { padding: 10px 56px 26px; border: 10px solid var(--accent); border-radius: 22px; color: var(--accent); font: 900 150px/1.2 "Cairo", "Inter", sans-serif;
+    text-shadow: 0 0 40px color-mix(in srgb, var(--accent) 40%, transparent); will-change: transform; white-space: nowrap; }
+  .price { position: relative; display: grid; justify-items: center; gap: 10px; padding: 70px 90px 60px; border-radius: 40px 40px 40px 40px; background: linear-gradient(160deg, #222327, #141416);
+    border: 2px solid #34353a; box-shadow: 0 50px 120px rgba(0,0,0,0.75); }
+  .price::before { content: ""; position: absolute; top: 26px; left: 50%; width: 28px; height: 28px; margin-left: -14px; border-radius: 50%; background: var(--bg); border: 2px solid #3a3b40; }
+  .price .v { font: 900 170px/1 "Inter", sans-serif; letter-spacing: -6px; direction: ltr; font-variant-numeric: tabular-nums; }
+  .price .l { font: 700 44px "Cairo", "Inter", sans-serif; color: #a0a0a5; direction: rtl; }
+  .bars { display: flex; align-items: flex-end; gap: 70px; height: 640px; direction: ltr; }
+  .bar { display: grid; justify-items: center; gap: 14px; width: 220px; }
+  .bar .val { font: 900 58px "Inter", sans-serif; letter-spacing: -1px; }
+  .bar .col { width: 200px; border-radius: 18px 18px 6px 6px; background: linear-gradient(#55575e, #2b2c31); will-change: height; }
+  .bar.last .col { background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 45%, #111)); box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .bar .name { font: 700 34px "Cairo", "Inter", sans-serif; color: #b0b0b5; text-align: center; direction: rtl; }
+  .bars { position: relative; }
+  .spec, .opt, .bar .name, .tag, .label { unicode-bidi: plaintext; }
+  .delta { position: absolute; right: -90px; top: -120px; padding: 12px 30px; border-radius: 16px; background: var(--accent); font: 900 64px "Inter", sans-serif; transform: rotate(8deg); direction: ltr; }
+  .specs { display: grid; gap: 26px; width: 820px; }
+  .spec { padding: 26px 40px 32px; border-radius: 24px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); font: 800 52px "Cairo", "Inter", sans-serif;
+    direction: rtl; display: flex; align-items: center; gap: 22px; will-change: transform, opacity; }
+  .spec::before { content: ""; width: 18px; height: 18px; border-radius: 4px; background: var(--accent); flex: none; transform: rotate(45deg); }
+  .choice { display: flex; gap: 40px; direction: rtl; }
+  .opt { width: 400px; height: 400px; border-radius: 36px; display: grid; place-items: center; align-content: center; gap: 20px; background: #1a1b1e; border: 2px solid #33343a;
+    font: 900 64px "Cairo", "Inter", sans-serif; text-align: center; will-change: transform; }
+  .opt i { font-style: normal; font-size: 120px; line-height: 1; }
+  .opt.b { border-color: var(--accent); }
+
+  /* follow card */
+  .follow { display: flex; align-items: center; gap: 30px; padding: 34px 40px; width: 900px; border-radius: 40px; background: #1a1b1e; border: 1px solid #333; direction: ltr; box-shadow: 0 50px 120px rgba(0,0,0,0.7); }
+  .follow .logo { width: 150px; height: 150px; border-radius: 50%; overflow: hidden; border: 4px solid var(--accent); display: grid; place-items: center; background: #000; flex: none; }
+  .follow .logo { position: relative; }
+  .follow .logo img { width: 100%; height: 100%; object-fit: cover; }
+  .follow .logo.face img { position: absolute; width: 240%; height: auto; left: -70%; top: -25%; }
+  .follow .logo b { font: 900 70px "Inter"; }
+  .follow .who { flex: 1; display: grid; gap: 4px; }
+  .follow strong { font: 900 48px "Cairo", "Inter", sans-serif; }
+  .follow bdi { font: 500 32px "JetBrains Mono", monospace; color: #9a9a9f; }
+  .follow .fbtn { position: relative; width: 250px; height: 84px; border-radius: 42px; background: var(--accent); font: 800 32px "Inter"; overflow: hidden; }
+  .follow .fbtn span { position: absolute; inset: 0; display: grid; place-items: center; }
+  .follow .fbtn.done { background: #2c2d31; }
+
+  /* the word being said: one big word, the key word in the accent */
+  .label { position: absolute; left: 80px; right: 80px; top: 1262px; text-align: center; direction: rtl; font: 600 30px "Cairo", "JetBrains Mono", sans-serif; color: #8d8d92; will-change: opacity; }
+  .word { position: absolute; left: 40px; right: 40px; top: 1300px; height: 220px; display: flex; align-items: center; justify-content: center; text-align: center;
+    font: 900 150px/1.2 "Cairo", sans-serif; direction: rtl; will-change: transform, opacity, filter; text-shadow: 0 10px 40px rgba(0,0,0,0.6); white-space: nowrap; }
+  .word.lat { font-family: "Inter", sans-serif; font-weight: 900; letter-spacing: -4px; direction: ltr; }
+  .word.key { color: var(--gold); }
+  .rule { position: absolute; left: 50%; top: 1540px; width: 240px; height: 4px; margin-left: -120px; border-radius: 2px; background: rgba(255,255,255,0.12); overflow: hidden; }
+  .rule i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+  /* 3D: the canvas sits under the words; tags and the read-out are drawn over it */
+  .headline, .label, .word, .rule, .top { z-index: 3; }
+  .tag.lit { border-color: var(--accent); color: #fff; box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 50%, transparent); }
+  .tag.lit::before { color: var(--accent); }
+  .readout { position: absolute; left: 90px; right: 90px; top: 790px; display: flex; justify-content: space-between; direction: ltr;
+    font: 600 34px "JetBrains Mono", monospace; color: #8a9a96; }
+  .readout .hot { color: #ffd36b; text-shadow: 0 0 16px rgba(255,211,107,0.6); }
+  .glow { background: radial-gradient(closest-side, rgba(92,225,198,0.08), transparent 72%); }
+
+  /* phone: the year and name, and the real photo beside the 3D model */
+  .ptitle { position: absolute; left: 560px; top: 30px; display: grid; gap: 0; direction: ltr; }
+  .ptitle b { font: 900 110px/1 "Inter", sans-serif; letter-spacing: -4px; color: var(--gold); }
+  .ptitle span { font: 800 54px/1.1 "Inter", sans-serif; letter-spacing: -1px; }
+  .pcard { position: absolute; left: 600px; top: 250px; width: 430px; height: 300px; margin: 0; border-radius: 22px; overflow: hidden; background: #000;
+    border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 30px 80px rgba(0,0,0,0.7); }
+  .pcard img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pcard figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 14px; font: 500 16px "JetBrains Mono", monospace; color: #cfd3d6;
+    background: linear-gradient(transparent, rgba(0,0,0,0.85)); direction: ltr; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* timeline: every year, the one being told lit */
+  .tline { position: absolute; left: 40px; right: 40px; top: 880px; display: flex; justify-content: space-between; direction: ltr; }
+  .tline span { display: grid; justify-items: center; gap: 8px; font: 600 15px "JetBrains Mono", monospace; color: #5d6b67; }
+  .tline i { width: 12px; height: 12px; border-radius: 50%; background: #2c3532; }
+  .tline .past { color: #9fb3ad; } .tline .past i { background: #5ce1c6; }
+  .tline .on { color: var(--gold); transform: scale(1.5); } .tline .on i { background: var(--gold); box-shadow: 0 0 18px var(--gold); }
+  .ttitle { position: absolute; left: 0; right: 0; top: 800px; text-align: center; font: 900 76px "Inter", sans-serif; letter-spacing: -2px; direction: ltr; }
+
+  /* 16:9: a long YouTube video */
+  html.wide, html.wide body { width: 1920px; height: 1080px; }
+  .wide .top { top: 40px; left: 80px; right: 80px; }
+  .wide .headline { top: 92px; left: 300px; right: 300px; font-size: 62px; }
+  .wide .glow { top: 42%; }
+  .wide .stage { top: 120px; height: 660px; }
+  .wide .label { top: 806px; }
+  .wide .word { top: 836px; height: 170px; }
+  .wide .rule { top: 1030px; }
+  .wide .readout { top: 690px; left: 460px; right: 460px; }
+  .wide .ptitle { left: 1060px; top: 150px; }
+  .wide .ptitle b { font-size: 150px; }
+  .wide .ptitle span { font-size: 70px; }
+  .wide .pcard { left: 1060px; top: 400px; width: 680px; height: 360px; }
+  .wide .tline { left: 120px; right: 120px; top: 740px; }
+  .wide .tline span { font-size: 22px; }
+  .wide .specs { transform: scale(0.86); }
+  .wide .ttitle { top: 640px; font-size: 64px; }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<div class="tint" id="tint"></div>
+<div class="dots"></div>
+<div class="top"><span id="handle"></span><span id="count"></span></div>
+<div class="headline" id="headline"></div>
+<div class="stage" id="stage"></div>
+<div class="vignette"></div>
+<div class="label" id="label"></div>
+<div class="word" id="word"></div>
+<div class="rule"><i id="rule"></i></div>
+<div class="grain" id="grain"></div>
+<script type="module" src="3d.js"></script>
+</body>
+</html>

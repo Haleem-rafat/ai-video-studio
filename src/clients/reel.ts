@@ -3,7 +3,8 @@ import { cp } from "node:fs/promises";
 import { join } from "node:path";
 
 import { MARKETING_OWNER, MARKETING_STYLE } from "../pipeline.ts";
-import { writeMarketing } from "../marketing/write.ts";
+import { bestStory, planStories, SHAPE_IDS, type StoryShape } from "../marketing/story.ts";
+import { DIRECTION, missesDirection, writeMarketing } from "../marketing/write.ts";
 import { newProjectId, projectDir, saveProject } from "../project.ts";
 import type { MarketingBrief, Project } from "../types.ts";
 import { prepareSpeech, proofread } from "./arabic.ts";
@@ -57,6 +58,9 @@ export function reelBrief(client: Client, idea: Idea, sell = true): MarketingBri
       .join("\n"),
   };
 }
+
+/** The scenes that show the product, which a value reel never uses (writeMarketing turns them into kinetic). */
+const VALUE_HIDES = ["page", "booking", "traffic", "dashboard", "sting", "showcase"];
 
 /** The idea as the script the marketing writer follows. */
 export function reelScript(idea: Idea): string {
@@ -114,8 +118,39 @@ export async function createReel(
   // Reels take turns between creative and bold, and between the narrators of the brief's voice; some styles set their own.
   const creativity = style?.creativity ?? nextCreativity(history);
   const voice = nextVoice(history, brief.voice === "female" ? "female" : "male");
+  // The story is planned before a word is written: two options from the idea, the stronger hook kept, never the shape of the last two reels.
+  const showcases = sell && client.brand.shots.some((shot) => !shot.id.startsWith("page-"));
+  const avoid = history.filter((made) => (made.kind === "reel" || made.kind === "video") && made.shape).slice(0, 2).map((made) => made.shape as StoryShape).filter((shape) => SHAPE_IDS.includes(shape));
+  const check = (beats: string[]) => {
+    const problems = [
+      missesDirection(beats, creativity, showcases),
+      ...reelStyleProblems(beats, reelStyle),
+      ...(sell ? [] : beats.filter((beat) => VALUE_HIDES.includes(beat)).map((beat) => `a value reel never shows the product: no ${beat} scene`)),
+    ].filter(Boolean);
+    return problems.length ? problems.join("; ") : null;
+  };
+  const story = bestStory(
+    await planStories(
+      {
+        brand: client.brand,
+        brief,
+        language: client.language,
+        format: "short",
+        creativity,
+        direction: DIRECTION[creativity],
+        check,
+        avoid,
+        showcases,
+        context: `THE IDEA this reel is made from (keep its topic and its audience; the hook may change): angle ${idea.angle}, goal ${idea.goal}. Hook idea: «${idea.hook}» (one of each option's five hooks is this line word for word, scored like the rest). Outline: ${idea.outline.join(" / ")}.\n${brief.notes}`,
+      },
+      log,
+    ),
+  );
+  log(`story: kept ${story.shape}, «${story.hook}»`);
+  // The idea's own hook and beats gave way to the story's.
+  const offStory = (notes: string) => notes.split("\n").filter((line) => !line.startsWith("Say the hook in the first 2 seconds:") && !line.startsWith("Beats: ")).join("\n");
   const write = (notes: string) =>
-    writeMarketing({ brand: client.brand, brief: { ...brief, notes }, script: reelScript(idea), language: client.language, format: "short", creativity, value: !sell, ...(dialect ? { arabic: dialectLanguage(dialect) } : {}) }, log);
+    writeMarketing({ brand: client.brand, brief: { ...brief, notes: offStory(notes) }, script: reelScript(idea), language: client.language, format: "short", creativity, value: !sell, story, ...(dialect ? { arabic: dialectLanguage(dialect) } : {}) }, log);
   let draft = await write(brief.notes);
   const beatsOf = (scenes: typeof draft.scenes) => scenes.map((scene) => (scene.visual as { beat?: string }).beat ?? "");
   // The message too: a value reel never pitches; an ad never tours the same features as an earlier reel.
@@ -170,6 +205,7 @@ export async function createReel(
       ...(style && style.id !== "classic" ? { reelStyle: style.id } : {}),
       ...(sell ? {} : { value: true }),
       ...(dialect ? { dialect } : {}),
+      story: { shape: story.shape, hook: story.hook },
       // The art director stays clear of the styles and pictures this client already used.
       artAvoid: {
         styles: history.filter((made) => (made.kind === "reel" || made.kind === "video") && made.artStyle).map((made) => made.artStyle!),

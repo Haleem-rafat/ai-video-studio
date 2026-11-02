@@ -12,14 +12,21 @@ import { cn } from "@/lib/utils";
 
 type When = "now" | "next" | "pick";
 
+/** What gets published: a video project, or anything shaped like one (a reel). */
+export type PublishTarget = Pick<ProjectState, "id" | "channel" | "title" | "description" | "tags" | "hasVideo" | "youtube">;
+
+type PublishOptions = { privacy: Privacy; publishAt?: string; force: boolean };
+
 type Props = {
-  project: ProjectState;
+  project: PublishTarget;
   channel: Channel | undefined;
-  /** Every project, to find the next day this channel has nothing scheduled. */
-  projects: ProjectSummary[];
+  /** Every project (and reel), to find the next day this channel has nothing scheduled. */
+  projects: Pick<ProjectSummary, "channel" | "youtube">[];
   busy: boolean;
   /** Saves pending edits, then starts the job. */
   run: (start: () => Promise<Job>) => Promise<void>;
+  /** Starts the upload; a project's own upload unless given. */
+  publish?: (options: PublishOptions) => Promise<Job>;
 };
 
 const PRIVACY: { value: Privacy; label: string; hint: string }[] = [
@@ -36,7 +43,7 @@ const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.g
  * Framecast's daily drip, by hand: the first day from today on which this
  * channel has nothing scheduled yet, at the chosen time of day.
  */
-function nextFreeDay(projects: ProjectSummary[], channel: string, time: string): Date {
+function nextFreeDay(projects: Pick<ProjectSummary, "channel" | "youtube">[], channel: string, time: string): Date {
   const [hours, minutes] = time.split(":").map(Number);
   const taken = projects.filter((p) => p.channel === channel && p.youtube?.scheduledFor).map((p) => new Date(p.youtube!.scheduledFor!));
   const day = new Date();
@@ -47,7 +54,7 @@ function nextFreeDay(projects: ProjectSummary[], channel: string, time: string):
 }
 
 /** "Scheduled Tue 15 Oct, 17:00" / "Public" — what the header button says once uploaded. */
-export function youtubeState(youtube: NonNullable<ProjectState["youtube"]>): string {
+export function youtubeState(youtube: NonNullable<PublishTarget["youtube"]>): string {
   if (youtube.scheduledFor && Date.parse(youtube.scheduledFor) > Date.now()) {
     return `Scheduled ${new Date(youtube.scheduledFor).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
   }
@@ -55,7 +62,7 @@ export function youtubeState(youtube: NonNullable<ProjectState["youtube"]>): str
   return youtube.privacy[0].toUpperCase() + youtube.privacy.slice(1);
 }
 
-export function PublishDialog({ project, channel, projects, busy, run }: Props) {
+export function PublishDialog({ project, channel, projects, busy, run, publish = (options) => api.publish(project.id, options) }: Props) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<YouTubeStatus | null>(null);
   const [when, setWhen] = useState<When>("now");
@@ -90,7 +97,7 @@ export function PublishDialog({ project, channel, projects, busy, run }: Props) 
   const upload = async () => {
     setError("");
     try {
-      await run(() => api.publish(project.id, { privacy, publishAt: publishAt?.toISOString(), force: Boolean(uploaded) }));
+      await run(() => publish({ privacy, publishAt: publishAt?.toISOString(), force: Boolean(uploaded) }));
       setOpen(false);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));

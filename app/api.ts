@@ -8,6 +8,10 @@ import type { Library, LibraryItem } from "../src/clients/library.ts";
 import type { Knowledge } from "../src/clients/knowledge.ts";
 import type { Promo } from "../src/promo/store.ts";
 import type { PromoOptions } from "../src/promo/record.ts";
+import type { CounterIcon, Expression, KineticKind, KineticReel, NewsReel, NewsStat, Pose, ProofReel, Reel, ReelOptions, ReelStyle, RpgReel, StoryKind, StoryReel, PhoneModel } from "../src/reels/store.ts";
+export type { CounterIcon, Expression, KineticKind, KineticReel, NewsReel, NewsStat, Pose, ProofReel, Reel, ReelOptions, ReelStyle, RpgReel, StoryKind, StoryReel, PhoneModel };
+/** A reel with whether its voice still matches its lines, its AI cost so far (US dollars), and each line's spoken take (a file in its folder, or null). */
+export type ReelState = Reel & { voiceCurrent: boolean; cost: number; takes: (string | null)[] };
 import type { ProfileView } from "../src/clients/profile.ts";
 import type { AnswerError, Purpose, Value } from "../src/clients/questionnaire.ts";
 import type { Preview as ChatPreview } from "../src/clients/client-prompt.ts";
@@ -120,8 +124,9 @@ export const api = {
   marketingSessions: () => call<Session[]>("GET", "/api/marketing"),
   startMarketing: (input: { url: string; language: "en" | "ar"; format: FormatId | "both"; creativity: Creativity; script: string }) => call<{ session: Session; job: Job }>("POST", "/api/marketing", input),
   marketingSession: (id: string) => call<Session>("GET", `/api/marketing/${id}`),
-  editMarketing: (id: string, edits: { brief?: Partial<MarketingBrief>; script?: string; colors?: Record<string, string> }) => call<Session>("PUT", `/api/marketing/${id}`, edits),
+  editMarketing: (id: string, edits: { brief?: Partial<MarketingBrief>; script?: string; colors?: Record<string, string>; story?: number | null; hook?: string }) => call<Session>("PUT", `/api/marketing/${id}`, edits),
   sendMarketing: (id: string, text: string) => call<Session>("POST", `/api/marketing/${id}/messages`, { text }),
+  planStories: (id: string) => call<Job>("POST", `/api/marketing/${id}/stories`),
   createMarketing: (id: string) => call<Job>("POST", `/api/marketing/${id}/create`),
   clients: () => call<Client[]>("GET", "/api/clients"),
   client: (id: string) => call<Client>("GET", `/api/clients/${id}`),
@@ -182,6 +187,23 @@ export const api = {
   promoMusic: () => call<{ file: string; seconds: number }[]>("GET", "/api/promos/music"),
   deletePromo: (id: string) => call<{ deleted: string[] }>("DELETE", `/api/promos/${id}`),
   deleteFailedPromos: () => call<{ deleted: string[] }>("DELETE", "/api/promos/failed"),
+  reels: () => call<ReelState[]>("GET", "/api/reels"),
+  reel: (id: string) => call<ReelState>("GET", `/api/reels/${id}`),
+  /** `owner` is a channel id, or "client:<id>" for a marketing client's reel. */
+  createReel: (owner: string, style: ReelStyle, topic: string, shape: "tall" | "wide" = "tall") =>
+    call<Job & { reelId: string }>("POST", "/api/reels", { ...(owner.startsWith("client:") ? { client: owner.slice(7) } : { channel: owner }), style, topic, shape }),
+  saveReel: (id: string, edits: Partial<Reel>) => call<ReelState>("PUT", `/api/reels/${id}`, edits),
+  deleteReel: (id: string) => call<{ deleted: string[] }>("DELETE", `/api/reels/${id}`),
+  reelAction: (id: string, action: "write" | "voice" | "preview" | "render") => call<Job>("POST", `/api/reels/${id}/${action}`),
+  reelUsage: (id: string) => call<ProjectUsage>("GET", `/api/reels/${id}/usage`),
+  publishReel: (id: string, options: { privacy: Privacy; publishAt?: string; force?: boolean }) => call<Job>("POST", `/api/reels/${id}/publish`, options),
+  /** A picture or clip for the news scenes, sent as it is. */
+  addReelMedia: async (id: string, file: File) => {
+    const response = await fetch(`/api/reels/${id}/media?name=${encodeURIComponent(file.name)}`, { method: "POST", body: file });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? `Upload failed (${response.status})`);
+    return data as ReelState;
+  },
   makePromo: (url: string, options?: PromoOptions) => call<Job & { promoId: string }>("POST", "/api/promos", { url, ...options }),
   editPost: (id: string, postId: string, edits: { slides?: Slide[]; caption?: string; hashtags?: string[]; design?: DesignId }) => call<Job>("PUT", `/api/clients/${id}/posts/${postId}`, edits),
   post: (id: string, postId: string) => call<Post>("GET", `/api/clients/${id}/posts/${postId}`),
@@ -241,6 +263,9 @@ export const clientPromptUrl = (id: string, lang: "en" | "ar") => `/api/clients/
 
 /** A client's questionnaire as a file to send them. */
 export const profileExportUrl = (id: string, format: "docx" | "pdf" | "json", lang: "en" | "ar") => `/api/clients/${id}/profile/export?format=${format}&lang=${lang}`;
+
+/** A reel's file (a picture, a still, its video); `version` makes the browser fetch it again after a new render. */
+export const reelFileUrl = (reel: string, file: string, version?: string) => `/reel-files/${reel}/${file}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
 
 /** A website promo's video; `version` makes the browser fetch it again after its music changes. */
 export const promoFileUrl = (promo: string, file: string, version?: string) => `/promo-files/${promo}/${file}${version ? `?v=${encodeURIComponent(version)}` : ""}`;

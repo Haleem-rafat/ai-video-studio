@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Cairo"; src: url(../fonts/Cairo.ttf); font-weight: 200 1000; }
+  @font-face { font-family: "Inter"; src: url(../fonts/Inter.ttf); font-weight: 100 900; }
+  @font-face { font-family: "JetBrains Mono"; src: url(../fonts/JetBrainsMono.ttf); font-weight: 100 800; }
+  :root { --accent: #ff3b30; --sel: #3b82f6; --ink: #fff; --dim: #8a8a8e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  body { background: #06070b; color: #fff; font-family: "Cairo", "Inter", sans-serif; position: relative; }
+
+  /* two sets: a dark stage under a spotlight, and light grid paper */
+  .dark, .paper { position: absolute; inset: 0; will-change: opacity; }
+  .dark { background: #06070b; }
+  .dark .cone { position: absolute; left: 50%; top: -200px; width: 1300px; height: 1700px; transform: translateX(-50%);
+    background: conic-gradient(from 180deg at 50% 0%, transparent 160deg, rgba(110,130,255,0.20) 172deg, rgba(150,165,255,0.30) 180deg, rgba(110,130,255,0.20) 188deg, transparent 200deg);
+    filter: blur(30px); mix-blend-mode: screen; }
+  .dark .floor { position: absolute; left: 50%; top: 1180px; width: 1000px; height: 240px; transform: translateX(-50%); border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(120,140,255,0.28), transparent); }
+  .dark .stripes { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 120px); }
+  .paper { background: #f2f2ee; background-image: linear-gradient(rgba(0,0,0,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.055) 1px, transparent 1px);
+    background-size: 54px 54px; background-position: center; opacity: 0; }
+  .grain { position: absolute; inset: -50px; opacity: 0.05; pointer-events: none;
+    background-image: repeating-radial-gradient(circle at 17% 31%, #888 0 1px, transparent 1px 3px), repeating-radial-gradient(circle at 71% 63%, #888 0 1px, transparent 1px 4px); }
+
+  /* the line being said, its key word selected like text in an editor */
+  .say { position: absolute; left: 70px; right: 70px; top: 200px; min-height: 300px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+    direction: rtl; text-align: center; gap: 6px 20px; font: 800 70px/1.35 "Cairo", sans-serif; color: var(--dim); }
+  .say .w { display: inline-block; white-space: pre; will-change: transform, opacity; }
+  .say .hi { color: var(--ink); }
+  .say .lat { font-family: "Inter", sans-serif; letter-spacing: -1px; direction: ltr; }
+  .sel { position: relative; display: inline-block; padding: 0 16px 6px; color: var(--ink); background: color-mix(in srgb, var(--sel) 26%, transparent);
+    outline: 3px solid var(--sel); border-radius: 4px; }
+  .sel i { position: absolute; width: 14px; height: 14px; background: #fff; border: 3px solid var(--sel); border-radius: 50%; }
+  .sel i:nth-child(1) { left: -9px; top: -9px; } .sel i:nth-child(2) { right: -9px; bottom: -9px; }
+
+  .stage { position: absolute; left: 0; right: 0; top: 540px; height: 900px; perspective: 1800px; }
+  .scene { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px; will-change: transform, opacity, filter; }
+
+  /* hook / photo: the product under the spotlight */
+  .hero { position: relative; width: 900px; height: 620px; display: grid; place-items: center; }
+  .hero img { max-width: 900px; max-height: 620px; object-fit: contain; border-radius: 28px; box-shadow: 0 60px 140px rgba(0,0,0,0.85), 0 0 120px rgba(120,140,255,0.18); will-change: transform; }
+  .chip { padding: 12px 26px 16px; border-radius: 999px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.22); font: 700 32px "Cairo", "Inter", sans-serif; direction: rtl; }
+  .paper .chip, .scene.light .chip { background: #fff; border-color: #d4d4d0; color: #111; }
+
+  /* quote: an article card with the phrase highlighted, its pull quote below in red */
+  .article { width: 920px; padding: 40px 48px 46px; border-radius: 26px; background: #fff; color: #222; border: 1px solid #dcdcd6; box-shadow: 0 30px 80px rgba(0,0,0,0.12); direction: rtl; }
+  .article.night { background: #0d0e12; color: #c8c8cc; border-color: #2a2b30; box-shadow: 0 30px 80px rgba(0,0,0,0.6); }
+  .article .src { display: flex; align-items: center; gap: 14px; font: 700 26px "Inter", "Cairo", sans-serif; color: #777; margin-bottom: 18px; direction: ltr; }
+  .article .src b { width: 40px; height: 40px; border-radius: 10px; background: #111; color: #fff; display: grid; place-items: center; font: 900 22px "Inter"; }
+  .article p { margin: 0; font: 600 42px/1.6 "Cairo", "Inter", sans-serif; }
+  .article mark { color: inherit; background: linear-gradient(color-mix(in srgb, var(--sel) 35%, transparent), color-mix(in srgb, var(--sel) 35%, transparent)) no-repeat 100% 50% / var(--u, 0%) 100%; padding: 2px 4px; border-radius: 4px; }
+  .pull { font: 900 92px/1.15 "Cairo", "Inter", sans-serif; color: var(--accent); text-align: center; direction: rtl; transform: rotate(-3deg); will-change: transform, opacity; }
+
+  /* stamp */
+  .stamp { padding: 6px 48px 22px; border: 9px solid var(--accent); border-radius: 18px; color: var(--accent); font: 900 160px/1.15 "Cairo", "Inter", sans-serif; letter-spacing: 2px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent); white-space: nowrap; will-change: transform; text-shadow: 0 0 30px color-mix(in srgb, var(--accent) 50%, transparent); }
+
+  /* price: big number in a box */
+  .pricebox { position: relative; padding: 30px 70px 44px; border-radius: 30px; background: color-mix(in srgb, var(--sel) 22%, #0a0b10); border: 4px solid var(--sel);
+    font: 900 190px/1 "Inter", sans-serif; letter-spacing: -6px; direction: ltr; font-variant-numeric: tabular-nums; box-shadow: 0 0 120px color-mix(in srgb, var(--sel) 35%, transparent); }
+  .pricebox small { position: absolute; left: 50%; top: -34px; transform: translateX(-50%); padding: 8px 24px 12px; border-radius: 12px; background: #fff; color: #111; font: 800 30px "Cairo", "Inter", sans-serif; letter-spacing: 0; white-space: nowrap; direction: rtl; }
+
+  /* bars on paper */
+  .chart { position: relative; display: flex; align-items: flex-end; gap: 70px; height: 700px; direction: ltr; }
+  .bar { display: grid; justify-items: center; gap: 14px; width: 240px; }
+  .bar .val { font: 900 62px "Inter", sans-serif; color: #111; letter-spacing: -1px; }
+  .bar .col { width: 230px; border-radius: 14px 14px 4px 4px; background: #c9c9cf; will-change: height; }
+  .bar.last .col { background: linear-gradient(#5b8cff, var(--sel)); }
+  .bar .name { font: 700 34px "Cairo", "Inter", sans-serif; color: #444; text-align: center; direction: rtl; }
+  .sticker { position: absolute; right: -80px; top: -80px; padding: 10px 28px 16px; border-radius: 18px; background: var(--accent); color: #fff; font: 900 66px "Inter"; transform: rotate(10deg); box-shadow: 0 16px 30px rgba(0,0,0,0.2); }
+
+  /* specs, layers, choice on paper */
+  .pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 24px; width: 940px; direction: rtl; }
+  .pill { padding: 18px 36px 24px; border-radius: 999px; background: #fff; border: 2px solid #d4d4d0; color: #111; font: 800 46px "Cairo", "Inter", sans-serif; box-shadow: 0 10px 24px rgba(0,0,0,0.06); will-change: transform, opacity; }
+  .pill:nth-child(odd) { border-color: var(--sel); color: var(--sel); }
+  .layers { display: grid; gap: 18px; width: 820px; }
+  .layer { padding: 26px 34px 30px; border-radius: 20px; background: #fff; border: 2px solid #d4d4d0; color: #111; font: 800 44px "Cairo", "Inter", sans-serif; direction: rtl; display: flex; justify-content: space-between; align-items: center; will-change: transform, opacity; }
+  .layer span { font: 600 26px "JetBrains Mono", monospace; color: #999; direction: ltr; }
+  .layer.on { border-color: var(--sel); background: color-mix(in srgb, var(--sel) 10%, #fff); box-shadow: 0 0 0 6px color-mix(in srgb, var(--sel) 18%, transparent); }
+  .choice { display: flex; gap: 40px; direction: rtl; }
+  .opt { width: 400px; height: 360px; border-radius: 30px; background: #fff; border: 2px solid #d4d4d0; color: #111; display: grid; place-items: center; align-content: center; gap: 18px; font: 900 60px "Cairo", "Inter", sans-serif; text-align: center; will-change: transform; }
+  .opt i { font-style: normal; font-size: 110px; line-height: 1; }
+  .opt.b { border-color: var(--accent); }
+  .ask { font: 800 44px "Cairo", sans-serif; color: #555; direction: rtl; }
+
+  /* follow */
+  .follow { display: flex; align-items: center; gap: 30px; padding: 34px 40px; width: 900px; border-radius: 40px; background: #12131a; border: 1px solid #2c2e3a; direction: ltr;
+    box-shadow: 0 0 120px rgba(110,130,255,0.25); }
+  .follow .logo { width: 150px; height: 150px; border-radius: 50%; overflow: hidden; border: 4px solid var(--accent); display: grid; place-items: center; background: #000; flex: none; }
+  .follow .logo { position: relative; }
+  .follow .logo img { width: 100%; height: 100%; object-fit: cover; }
+  .follow .logo.face img { position: absolute; width: 240%; height: auto; left: -70%; top: -25%; }
+  .follow .logo b { font: 900 70px "Inter"; }
+  .follow .who { flex: 1; display: grid; gap: 4px; }
+  .follow strong { font: 900 48px "Cairo", "Inter", sans-serif; }
+  .follow bdi { font: 500 32px "JetBrains Mono", monospace; color: #9a9aa5; }
+  .follow .fbtn { position: relative; width: 250px; height: 84px; border-radius: 42px; background: var(--accent); font: 800 32px "Inter"; overflow: hidden; }
+  .follow .fbtn span { position: absolute; inset: 0; display: grid; place-items: center; }
+  .follow .fbtn.done { background: #2c2d36; }
+  .pulse { width: 900px; height: 120px; }
+  .pulse path { fill: none; stroke: var(--sel); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+
+  .pill, .layer, .opt, .chip, .bar .name, .pricebox small { unicode-bidi: plaintext; }
+  .handle { position: absolute; left: 0; right: 0; top: 1530px; text-align: center; font: 600 28px "JetBrains Mono", monospace; color: var(--dim); direction: ltr; }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="dark" id="dark"><div class="cone" id="cone"></div><div class="floor"></div><div class="stripes"></div></div>
+<div class="paper" id="paper"></div>
+<div class="say" id="say"></div>
+<div class="stage" id="stage"></div>
+<div class="handle" id="handle"></div>
+<div class="grain" id="grain"></div>
+<div class="flash" id="flash"></div>
+<script type="module" src="editorial.js"></script>
+</body>
+</html>

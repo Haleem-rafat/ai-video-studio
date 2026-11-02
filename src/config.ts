@@ -1,19 +1,51 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseEnv, stripVTControlCharacters } from "node:util";
 
 import type { FormatId } from "./types.ts";
 
 export const ROOT = join(import.meta.dirname, "..");
 export const OUTPUT_DIR = join(ROOT, "output");
 
-if (existsSync(join(ROOT, ".env"))) process.loadEnvFile(join(ROOT, ".env"));
+const ENV_PATHS = [join(ROOT, ".env"), join(ROOT, ".env.local")];
+const envMtimes = new Map<string, number>();
+const fromEnvFile = new Set<string>();
+
+/** Loads .env and .env.local when they first appear or change on disk, updating keys that came from them or were unset. */
+export function loadEnv(): void {
+  const changed = ENV_PATHS.some((path) => existsSync(path) && statSync(path).mtimeMs !== envMtimes.get(path));
+  if (!changed) return;
+  for (const path of ENV_PATHS) {
+    if (!existsSync(path)) continue;
+    envMtimes.set(path, statSync(path).mtimeMs);
+    for (const [key, value] of Object.entries(parseEnv(readFileSync(path, "utf8")))) {
+      if (!process.env[key] || fromEnvFile.has(key)) {
+        process.env[key] = value;
+        fromEnvFile.add(key);
+      }
+    }
+  }
+}
+
+loadEnv();
 
 export const LLM_URL = process.env.LLM_URL ?? "http://127.0.0.1:8080";
 
 export function requireEnv(name: string): string {
+  loadEnv();
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is not set. Add it to ${join(ROOT, ".env")}`);
+  if (!value) throw new Error(`${name} is not set. Add it to ${ENV_PATHS[0]}`);
   return value;
+}
+
+/** Strips ANSI codes and clarifies when AI Gateway rejects an AI_GATEWAY_API_KEY that is already set in .env. */
+export function cleanError(error: unknown): string {
+  const raw = stripVTControlCharacters(error instanceof Error ? error.message : String(error)).trim();
+  const key = process.env.AI_GATEWAY_API_KEY?.trim();
+  if (key && raw.includes("Unauthenticated request to AI Gateway")) {
+    return `AI Gateway rejected AI_GATEWAY_API_KEY (${key.slice(0, 6)}…${key.slice(-4)}) with 401 Unauthorized — the key in .env is invalid, revoked, or expired. Create a new key in Vercel → AI Gateway → API Keys and update .env.`;
+  }
+  return raw;
 }
 
 export type MascotKind = "robot" | "coin" | "bear";

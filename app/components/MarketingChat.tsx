@@ -2,6 +2,7 @@ import { CheckIcon, CircleIcon, Columns2Icon, GlobeIcon, Loader2Icon, MegaphoneI
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { api, sessionUrl, type Creativity, type FormatId, type Job, type MarketingBrief, type Session } from "../api.ts";
+import type { StoryShape } from "../../src/marketing/story.ts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -215,6 +216,105 @@ const BRIEF_ROWS: { key: keyof MarketingBrief | "cta"; label: string; show: (bri
   { key: "captions", label: "Subtitles", show: (b) => (b.captions === null ? "" : b.captions ? "On" : "Off") },
 ];
 
+/** Shown on the story cards; story.ts holds what each shape means for the writer. */
+const SHAPE_LABELS: Record<StoryShape, { en: string; ar: string }> = {
+  mystery: { en: "Mystery", ar: "لغز" },
+  "before-after": { en: "Before → after", ar: "قبل وبعد" },
+  myth: { en: "Myth vs truth", ar: "خرافة وحقيقة" },
+  detail: { en: "The detail nobody sees", ar: "التفصيلة المنسية" },
+  countdown: { en: "Countdown", ar: "عد تنازلي" },
+  stakes: { en: "Stakes", ar: "التمن" },
+  day: { en: "A day in the life", ar: "يوم في حياته" },
+  dialogue: { en: "Conversation", ar: "محادثة" },
+};
+
+/**
+ * The two planned stories: the client picks one (and may swap its opening
+ * line) before anything is written, voiced or rendered.
+ */
+function StoryPicker({ session, onChange, onError }: { session: Session; onChange: (next: Session) => void; onError: (message: string) => void }) {
+  const [hook, setHook] = useState("");
+  const save = async (edits: { story?: number; hook?: string }) => {
+    try {
+      onChange(await api.editMarketing(session.id, edits));
+    } catch (failure) {
+      onError(failure instanceof Error ? failure.message : String(failure));
+    }
+  };
+  return (
+    <div className="grid gap-2">
+      {session.stories!.map((story, index) => {
+        const picked = session.story === index;
+        const label = SHAPE_LABELS[story.shape];
+        return (
+          <div
+            key={index}
+            role="button"
+            tabIndex={0}
+            onClick={() => !picked && save({ story: index })}
+            onKeyDown={(event) => event.key === "Enter" && !picked && save({ story: index })}
+            className={cn("grid gap-2 rounded-xl border p-3 text-left transition-colors", picked ? "border-primary ring-1 ring-primary" : "cursor-pointer hover:bg-muted/50")}
+          >
+            <div className="flex items-center gap-2">
+              {picked ? <CheckIcon className="size-4 text-primary" /> : <CircleIcon className="size-4 text-muted-foreground/50" />}
+              <Badge variant="outline">{session.language === "ar" ? label.ar : label.en}</Badge>
+              <span className="ml-auto font-mono text-[11px] text-muted-foreground">{story.beats.length} scenes</span>
+            </div>
+            <p dir="auto" className="text-xs text-muted-foreground">
+              {story.idea}
+            </p>
+            <p dir="auto" className="text-sm font-semibold">
+              «{story.hook}»
+            </p>
+            <ol className="grid gap-0.5 text-[11px] text-muted-foreground">
+              {story.beats.map((beat, i) => (
+                <li key={i} className="flex gap-1.5">
+                  <span className="w-28 shrink-0 font-mono">
+                    {i + 1}. {beat.job} · {beat.beat}
+                  </span>
+                  <span dir="auto" className="min-w-0 flex-1">
+                    {beat.takeaway}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            {picked && (
+              <div className="grid gap-1.5 border-t pt-2" onClick={(event) => event.stopPropagation()}>
+                <span className="text-[11px] text-muted-foreground">Opening line (scored, best first)</span>
+                {story.hooks.map((option) => (
+                  <button
+                    key={option.text}
+                    type="button"
+                    onClick={() => save({ hook: option.text })}
+                    className={cn("flex items-start gap-2 rounded-md border px-2 py-1 text-left text-xs", option.text === story.hook ? "border-primary bg-primary/10" : "hover:bg-muted/60")}
+                  >
+                    <span className="w-7 shrink-0 font-mono text-muted-foreground">{option.score}</span>
+                    <span dir="auto" className="min-w-0 flex-1">
+                      {option.text}
+                    </span>
+                  </button>
+                ))}
+                <form
+                  className="flex gap-1.5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (hook.trim()) save({ hook }).then(() => setHook(""));
+                  }}
+                >
+                  <Input dir="auto" value={hook} onChange={(event) => setHook(event.target.value)} placeholder="Or the client's own opening line" className="h-8 text-xs" />
+                  <Button type="submit" size="sm" variant="outline" disabled={!hook.trim()}>
+                    Use
+                  </Button>
+                </form>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** The chat with the producer, beside the brand it read and the brief it is filling. */
 function Chat({ id, jobs }: { id: string; jobs: Job[] }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -226,6 +326,7 @@ function Chat({ id, jobs }: { id: string; jobs: Job[] }) {
   const reading = jobs.find((job) => job.label.startsWith("Read website") && (job.status === "running" || job.status === "queued"));
   const writingJobs = jobs.filter((job) => job.label.startsWith("Write script") && job.label.includes("marketing") && (job.status === "running" || job.status === "queued"));
   const writing = writingJobs[0];
+  const planning = jobs.find((job) => job.label.startsWith("Plan story") && (job.status === "running" || job.status === "queued"));
 
   useEffect(() => {
     let stopped = false;
@@ -233,13 +334,13 @@ function Chat({ id, jobs }: { id: string; jobs: Job[] }) {
     load();
     // While the website is read or the script written, the session changes on the server.
     const timer = setInterval(() => {
-      if (!stopped && (session?.status === "reading" || session?.status === "writing" || reading || writing)) load();
+      if (!stopped && (session?.status === "reading" || session?.status === "writing" || reading || writing || planning)) load();
     }, 1500);
     return () => {
       stopped = true;
       clearInterval(timer);
     };
-  }, [id, session?.status, Boolean(reading), Boolean(writing)]);
+  }, [id, session?.status, Boolean(reading), Boolean(writing), Boolean(planning)]);
 
   useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [session?.messages.length, sending]);
 
@@ -264,6 +365,9 @@ function Chat({ id, jobs }: { id: string; jobs: Job[] }) {
   const last = session.messages.at(-1);
   const options = !sending && last?.role === "assistant" ? (last.options ?? []) : [];
   const ready = session.status !== "reading" && session.missing.length === 0;
+  // The client approves a story before anything is written, unless the script's voice-over is already approved copy.
+  const needsStory = !session.scripted;
+  const storyPicked = !needsStory || session.story !== undefined;
   const rtl = session.language === "ar";
 
   return (
@@ -407,10 +511,32 @@ function Chat({ id, jobs }: { id: string; jobs: Job[] }) {
             })}
           </div>
 
-          <Field label={ready ? "Everything's ready" : "The chat fills the brief; answer its questions"}>
+          {ready && needsStory && (
+            <Field label={session.stories?.length ? "Pick a story for the client to approve" : "Plan the story before the video is written"}>
+              {session.stories?.length ? <StoryPicker session={session} onChange={setSession} onError={setError} /> : null}
+              <Button
+                variant={session.stories?.length ? "outline" : "default"}
+                disabled={Boolean(planning) || Boolean(writing)}
+                onClick={async () => {
+                  setError("");
+                  try {
+                    await api.planStories(id);
+                  } catch (failure) {
+                    setError(failure instanceof Error ? failure.message : String(failure));
+                  }
+                }}
+              >
+                {planning ? <Loader2Icon className="animate-spin" /> : session.stories?.length ? <RotateCcwIcon /> : <SparklesIcon />}
+                {planning ? "Planning two stories…" : session.stories?.length ? "Plan two new stories" : "Plan the story (2 options)"}
+              </Button>
+              {planning && <JobProgress job={planning} />}
+            </Field>
+          )}
+
+          <Field label={!ready ? "The chat fills the brief; answer its questions" : storyPicked ? "Everything's ready" : "Pick a story first"}>
             <Button
               size="lg"
-              disabled={!ready || Boolean(writing) || session.status === "writing"}
+              disabled={!ready || !storyPicked || Boolean(planning) || Boolean(writing) || session.status === "writing"}
               onClick={async () => {
                 setError("");
                 try {

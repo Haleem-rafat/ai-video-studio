@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Cairo"; src: url(../fonts/Cairo.ttf); font-weight: 200 1000; }
+  @font-face { font-family: "Inter"; src: url(../fonts/Inter.ttf); font-weight: 100 900; }
+  @font-face { font-family: "Amiri"; src: url(../fonts/Amiri-BoldItalic.ttf); font-weight: 700; font-style: italic; }
+  @font-face { font-family: "Instrument Serif"; src: url(../fonts/InstrumentSerif-Italic.ttf); font-style: italic; }
+  :root { --accent: #ff3b30; --grey: #8a8a8a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  body { background: #000; color: #fff; font-family: "Cairo", "Inter", sans-serif; position: relative; }
+  .grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 72px 72px; background-position: center; }
+  .glow { position: absolute; left: 50%; top: 46%; width: 1400px; height: 1400px; transform: translate(-50%, -50%);
+    background: radial-gradient(closest-side, rgba(255,255,255,0.075), transparent 70%); }
+  .vignette { position: absolute; inset: 0; background: radial-gradient(75% 60% at 50% 45%, transparent 40%, rgba(0,0,0,0.85) 100%); pointer-events: none; }
+  .float { position: absolute; width: 300px; height: 190px; border-radius: 26px; background: linear-gradient(150deg, #262626, #121212); border: 1px solid #2c2c2c;
+    filter: blur(9px); opacity: 0.38; will-change: transform; }
+  .float::after { content: ""; position: absolute; left: 24px; right: 90px; top: 30px; height: 18px; border-radius: 9px; background: #3a3a3a; box-shadow: 0 40px 0 #303030, 0 80px 0 #2a2a2a; }
+
+  /* ---- kinetic headline: the line being said ---- */
+  .say { position: absolute; left: 70px; right: 70px; top: 250px; min-height: 400px; display: flex; align-items: center; justify-content: center;
+    direction: rtl; text-align: center; flex-wrap: wrap; gap: 4px 22px; font-weight: 800; font-size: 78px; line-height: 1.3; color: var(--grey); }
+  .say.big { top: 560px; font-size: 96px; }
+  .say .w { display: inline-block; white-space: pre; will-change: transform, opacity; }
+  .say .hi { color: #fff; font-weight: 900; }
+  .say .lat { font-family: "Inter", sans-serif; font-weight: 800; letter-spacing: -1px; direction: ltr; }
+  .sel { position: relative; display: inline-block; padding: 0 22px 8px; color: #fff; font-weight: 700; font-style: italic;
+    background: color-mix(in srgb, var(--accent) 16%, transparent); outline: 3px solid var(--accent); outline-offset: 0; }
+  .sel.ar { font-family: "Amiri", serif; font-size: 1.08em; }
+  .sel.lat { font-family: "Instrument Serif", serif; font-weight: 400; font-size: 1.2em; letter-spacing: 0; direction: ltr; }
+  .sel i { position: absolute; width: 16px; height: 16px; background: #fff; border: 3px solid var(--accent); }
+  .sel i:nth-child(1) { left: -9px; top: -9px; } .sel i:nth-child(2) { right: -9px; top: -9px; }
+  .sel i:nth-child(3) { left: -9px; bottom: -9px; } .sel i:nth-child(4) { right: -9px; bottom: -9px; }
+
+  /* ---- mockups ---- */
+  .stage { position: absolute; left: 0; right: 0; top: 700px; height: 860px; perspective: 1800px; }
+  .scene { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; will-change: transform, opacity, filter; }
+  .card { position: relative; background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 34px; box-shadow: 0 50px 120px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.03); overflow: hidden; }
+  .chat { width: 900px; height: 760px; display: flex; flex-direction: column; }
+  .chat header, .dm header { height: 96px; display: flex; align-items: center; gap: 18px; padding: 0 30px; border-bottom: 1px solid #222; direction: rtl; font: 700 32px "Cairo", sans-serif; }
+  .chat header b { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+  .msgs { flex: 1; padding: 30px; display: flex; flex-direction: column; gap: 22px; direction: rtl; justify-content: flex-end; }
+  .msg { max-width: 76%; padding: 20px 28px 24px; border-radius: 30px; font: 700 34px/1.45 "Cairo", sans-serif; will-change: transform, opacity; }
+  .msg.you { align-self: flex-start; background: var(--accent); color: #fff; border-bottom-right-radius: 8px; }
+  .msg.reply { align-self: flex-end; background: #1f1f1f; color: #eaeaea; border-bottom-left-radius: 8px; }
+  .has-btn .msgs { padding-bottom: 140px; }
+  .dm.has-btn footer { margin-bottom: 120px; }
+  .typing { align-self: flex-end; display: flex; gap: 10px; padding: 22px 28px; border-radius: 30px; background: #1f1f1f; }
+  .typing i { width: 14px; height: 14px; border-radius: 50%; background: #8a8a8a; }
+  .dm { width: 620px; height: 820px; border-radius: 54px; display: flex; flex-direction: column; }
+  .dm header .avatar { width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #ffb347); display: grid; place-items: center; font: 900 28px "Inter"; }
+  .dm footer { height: 104px; margin: 0 22px 22px; border-radius: 52px; border: 1px solid #333; display: flex; align-items: center; padding: 0 30px; color: #777; font: 600 28px "Cairo"; direction: rtl; }
+  .dm .msg { font-size: 30px; }
+  .link { align-self: flex-start; width: 74%; border-radius: 26px; overflow: hidden; background: #1f1f1f; border: 1px solid #2e2e2e; }
+  .link div { height: 150px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, #000), #111); }
+  .link p { margin: 0; padding: 16px 22px 20px; font: 700 28px "Cairo"; direction: rtl; }
+  .browser { width: 960px; height: 760px; background: #fff; }
+  .browser .bar { height: 64px; background: #e9e9eb; display: flex; align-items: center; gap: 12px; padding: 0 24px; direction: ltr; border-bottom: 1px solid #d2d2d6; }
+  .browser .bar i { width: 17px; height: 17px; border-radius: 50%; }
+  .browser .bar i:nth-child(1) { background: #ff5f57; } .browser .bar i:nth-child(2) { background: #febc2e; } .browser .bar i:nth-child(3) { background: #28c840; }
+  .browser .url { margin-left: 20px; flex: 1; height: 40px; border-radius: 10px; background: #fff; color: #444; font: 500 22px "Inter"; display: flex; align-items: center; padding: 0 16px; white-space: nowrap; overflow: hidden; }
+  .shot { position: absolute; left: 0; right: 0; top: 64px; bottom: 0; overflow: hidden; }
+  .shot img { width: 100%; display: block; transform-origin: 50% 0; will-change: transform; }
+  .shot.fit img { height: 100%; object-fit: cover; transform-origin: 50% 50%; }
+  .phone { width: 430px; height: 860px; border-radius: 70px; border: 14px solid #1c1c1e; background: #000; }
+  .phone .shot { top: 0; }
+  .phone::before { content: ""; position: absolute; z-index: 2; left: 50%; top: 18px; width: 130px; height: 38px; border-radius: 20px; background: #000; transform: translateX(-50%); }
+  .counter { display: grid; justify-items: center; gap: 18px; }
+  .counter svg { width: 110px; height: 110px; stroke: var(--accent); }
+  .digits { display: flex; direction: ltr; font: 900 230px/1 "Inter", sans-serif; letter-spacing: -8px; height: 240px; overflow: hidden; }
+  .digits { align-items: flex-start; font-variant-numeric: tabular-nums; }
+  .digits .col { display: flex; flex-direction: column; flex: none; will-change: transform; }
+  .digits .col span, .digits .fix { height: 240px; display: block; flex: none; }
+  .counter p { margin: 0; font: 700 50px "Cairo", "Inter"; color: var(--grey); direction: rtl; }
+  .tiles { width: 940px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; direction: rtl; }
+  .tile { height: 220px; border-radius: 28px; background: #121212; border: 1px solid #2a2a2a; display: grid; place-items: center; padding: 20px; text-align: center;
+    font: 800 38px/1.35 "Cairo", "Inter"; will-change: transform, opacity; }
+  .tile::before { content: ""; display: block; width: 44px; height: 6px; border-radius: 3px; background: var(--accent); margin: 0 auto 6px; }
+  .btn { position: absolute; z-index: 3; left: 50%; bottom: 40px; transform: translateX(-50%); padding: 16px 44px 22px; border-radius: 999px; background: var(--accent); color: #fff;
+    font: 800 34px "Cairo", "Inter"; white-space: nowrap; box-shadow: 0 16px 40px rgba(0,0,0,0.5); }
+  .cursor { position: absolute; z-index: 10; width: 56px; height: 56px; left: 0; top: 0; will-change: transform; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)); }
+  .ripple { position: absolute; z-index: 9; width: 30px; height: 30px; border-radius: 50%; border: 4px solid #fff; left: 0; top: 0; opacity: 0; }
+  .handle { position: absolute; left: 50%; bottom: 330px; transform: translateX(-50%); font: 600 30px "Inter"; color: #6a6a6a; direction: ltr; }
+</style>
+</head>
+<body>
+<div class="grid"></div>
+<div class="glow"></div>
+<div id="floats"></div>
+<div class="vignette"></div>
+<div class="say" id="say"></div>
+<div class="stage" id="stage"></div>
+<div class="ripple" id="ripple"></div>
+<svg class="cursor" id="cursor" viewBox="0 0 28 28"><path d="M5 2.5v20.2l5.2-5 3.4 8 3.3-1.4-3.4-7.9h7.2z" fill="#000" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
+<div class="handle" id="handle"></div>
+<script type="module" src="kinetic.js"></script>
+</body>
+</html>

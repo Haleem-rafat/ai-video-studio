@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { OUTPUT_DIR, ROOT } from "../config.ts";
 import type { Creativity, FormatId, MarketingBrief, SiteBrand } from "../types.ts";
+import type { StoryOption } from "./story.ts";
 
 const CHAT_MODEL = "anthropic/claude-sonnet-5.5";
 
@@ -33,6 +34,11 @@ export type Session = {
   brief: MarketingBrief;
   messages: ChatMessage[];
   missing: string[];
+  /** Two planned stories (story.ts) and the one the client picked; the video is written from the pick. */
+  stories?: StoryOption[];
+  story?: number;
+  /** Not saved: the video speaks the script's approved voice-over word for word, so the script is its story. */
+  scripted?: boolean;
   projectId?: string;
   error?: string;
   createdAt: string;
@@ -75,6 +81,7 @@ export async function saveSession(session: Session): Promise<void> {
   await mkdir(dir, { recursive: true });
   session.updatedAt = new Date().toISOString();
   session.missing = missingOf(session.brief);
+  delete session.scripted;
   await writeFile(join(dir, "session.json.tmp"), JSON.stringify(session, null, 2));
   await rename(join(dir, "session.json.tmp"), join(dir, "session.json"));
 }

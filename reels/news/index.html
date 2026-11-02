@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Cairo"; src: url(../fonts/Cairo.ttf); font-weight: 200 1000; }
+  /* Navy defaults; a channel's brand (R.brand) replaces them in news.js. */
+  :root { --red: #ff4d4d; --card: #13264d; --line: #2a4580; --gray: #9fb0d0; --green: #3ddc84; --bg1: #0b1b3a; --bg2: #0a1430;
+    --glow: rgba(74, 120, 255, 0.22); --logo-bg: #0f2147; --text: #fff; --handle: #c9d3ea; --small: "Cairo"; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  body { background: linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%); font-family: "Cairo", sans-serif; color: var(--text); position: relative; }
+  .glow { position: absolute; left: 50%; top: 520px; width: 1300px; height: 1000px; transform: translate(-50%, -50%);
+    background: radial-gradient(closest-side, var(--glow), transparent 70%); pointer-events: none; }
+
+  header { position: absolute; top: 64px; left: 48px; right: 48px; height: 100px; display: flex; align-items: center; justify-content: space-between; direction: ltr; }
+  .me { display: flex; align-items: center; gap: 20px; }
+  .logo { width: 84px; height: 84px; border-radius: 22px; border: 4px solid var(--green); display: grid; place-items: center;
+    font-weight: 900; font-size: 46px; background: var(--logo-bg); color: var(--text); }
+  .handle { font-size: 32px; color: var(--handle); font-weight: 600; direction: ltr; font-family: var(--small), "Cairo", sans-serif; }
+  .news { display: flex; align-items: center; gap: 18px; }
+  .breaking { height: 76px; padding: 0 26px 0 22px; border-radius: 20px; background: var(--red); display: flex; align-items: center; gap: 14px;
+    font-weight: 900; font-size: 40px; direction: rtl; }
+  .breaking svg { width: 40px; height: 40px; }
+  .company { width: 76px; height: 76px; border-radius: 20px; background: #fff; color: #000; display: grid; place-items: center;
+    font: 54px -apple-system, "SF Pro Display", sans-serif; line-height: 1; padding-bottom: 8px; }
+  .company img { width: 70%; height: 70%; object-fit: contain; }
+  .company.named { width: auto; padding: 0 20px 4px; font: 800 30px "Cairo", sans-serif; }
+
+  .scene { position: absolute; inset: 0; will-change: transform, opacity; }
+  .media { position: absolute; top: 200px; left: 48px; width: 984px; height: 640px; border-radius: 28px; overflow: hidden; background: #000;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06); }
+  .media img, .media video { width: 100%; height: 100%; object-fit: cover; transform-origin: 50% 50%; display: block; }
+  .credit { position: absolute; bottom: 22px; right: 22px; padding: 6px 18px; border-radius: 999px; background: rgba(0, 0, 0, 0.62);
+    font-size: 22px; color: #dfe6f5; direction: rtl; font-weight: 600; }
+
+  .headline { position: absolute; top: 872px; left: 48px; right: 48px; direction: rtl; text-align: right; font-weight: 900;
+    font-size: 64px; line-height: 1.34; }
+  .headline span { display: inline-block; white-space: pre; }
+  .headline { word-spacing: 0.08em; }
+  .headline .hot { color: var(--red); }
+
+  .stats { position: absolute; top: 1100px; left: 48px; right: 48px; display: flex; gap: 20px; direction: rtl; }
+  .stat { flex: 1; background: var(--card); border: 2px solid var(--line); border-radius: 26px; padding: 18px 24px 20px; text-align: right; }
+  .stat small { display: block; font-size: 24px; color: var(--gray); font-weight: 600; font-family: var(--small), "Cairo", sans-serif; }
+  .stat b { display: block; font-size: 52px; font-weight: 900; line-height: 1.25; margin: 4px 0 2px; white-space: nowrap; }
+  .stat em { display: block; font-style: normal; font-size: 22px; color: var(--gray); font-family: var(--small), "Cairo", sans-serif; }
+
+  .source { position: absolute; top: 1330px; left: 48px; right: 48px; direction: rtl; text-align: right; font-size: 26px; color: var(--gray); font-weight: 600; font-family: var(--small), "Cairo", sans-serif; }
+  .source i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--red); margin: 0 14px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<header>
+  <div class="me"><div class="logo" id="initial"></div><div class="handle" id="handle"></div></div>
+  <div class="news">
+    <div class="breaking" id="breaking">
+      <svg viewBox="0 0 24 24" fill="#fff"><path d="M12 6a6 6 0 0 0-6 6v5h12v-5a6 6 0 0 0-6-6zm-8 13h16v2H4zM11 1h2v3h-2zM3.5 4.9l1.4-1.4 2.1 2.1-1.4 1.4zm13.1.7 2.1-2.1 1.4 1.4-2.1 2.1zM1 11h3v2H1zm19 0h3v2h-3z"/></svg>
+      <span>عاجل</span>
+    </div>
+    <div class="company" id="company"></div>
+  </div>
+</header>
+<div id="scenes"></div>
+<script type="module" src="news.js"></script>
+</body>
+</html>

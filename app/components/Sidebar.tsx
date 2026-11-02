@@ -1,4 +1,4 @@
-import { ClapperboardIcon, MegaphoneIcon, MonitorIcon, MonitorSmartphoneIcon, PlusIcon, SearchIcon, SmartphoneIcon } from "lucide-react";
+import { ClapperboardIcon, FilmIcon, MegaphoneIcon, MonitorIcon, MonitorSmartphoneIcon, PlusIcon, SearchIcon, SmartphoneIcon } from "lucide-react";
 
 
 import { useState } from "react";
@@ -40,10 +40,13 @@ type Props = {
   /** Whether the website promos page is open. */
   promos: boolean;
   onPromos: () => void;
+  /** Whether the reels page is open. */
+  reels: boolean;
+  onReels: () => void;
   footer: React.ReactNode;
 };
 
-export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, marketing, onMarketing, clients, openClient, onOpenClient, promos, onPromos, footer }: Props) {
+export function AppSidebar({ projects, channels, selected, onSelect, openChannel, onOpenChannel, onChannelCreated, marketing, onMarketing, clients, openClient, onOpenClient, promos, onPromos, reels, onReels, footer }: Props) {
   const channelOf = (id: string) => channels.find((channel) => channel.id === id);
   // Marketing videos are made for clients, not for a YouTube channel: they get their own list.
   const [search, setSearch] = useState("");
@@ -134,9 +137,15 @@ export function AppSidebar({ projects, channels, selected, onSelect, openChannel
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={selected === null && openChannel === null && !marketing && !openClient && !promos} tooltip="New video" onClick={() => onSelect(null)}>
+                <SidebarMenuButton isActive={selected === null && openChannel === null && !marketing && !openClient && !promos && !reels} tooltip="New video" onClick={() => onSelect(null)}>
                   <PlusIcon />
                   <span>New video</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={reels} tooltip="Reels" onClick={onReels}>
+                  <FilmIcon />
+                  <span>Reels</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>

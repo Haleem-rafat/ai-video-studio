@@ -20,9 +20,19 @@ const STEP_NAMES: Record<string, string> = {
   brand: "Channel style",
   local: "Bonsai (this Mac)",
   render: "Rendering (this Mac)",
+  media: "Press pictures",
 };
 
 const KIND_NAMES = { text: "Text", speech: "Voice", transcription: "Listening", image: "Image", local: "Local", render: "Render" } as const;
+
+/** What a model used when it isn't counted in tokens: voice characters, audio seconds or pictures. */
+function usedBy(entries: ProjectUsage["entries"], model: string): string {
+  const mine = entries.filter((entry) => entry.model === model);
+  const characters = mine.reduce((sum, entry) => sum + (entry.characters ?? 0), 0);
+  const seconds = mine.reduce((sum, entry) => sum + (entry.audioSeconds ?? 0), 0);
+  const images = mine.reduce((sum, entry) => sum + (entry.images ?? 0), 0);
+  return [characters && `${characters.toLocaleString()} chars`, seconds && `${Math.round(seconds)}s audio`, images && `${images} pictures`].filter(Boolean).join(" · ") || "—";
+}
 
 const tokens = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 const minutes = (ms: number) => (ms >= 60_000 ? `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s` : `${Math.round(ms / 1000)}s`);
@@ -38,13 +48,14 @@ function Stat({ label, value, detail }: { label: string; value: string; detail?:
 }
 
 /** What this video cost: the total, by step, by model, and every AI call. */
-export function CostPanel({ projectId, version }: { projectId: string; version: number }) {
+/** `reelId` shows a reel's costs instead of a project's. */
+export function CostPanel({ projectId, reelId, version }: { projectId?: string; reelId?: string; version: number | string }) {
   const [usage, setUsage] = useState<ProjectUsage | null>(null);
   const [showCalls, setShowCalls] = useState(false);
 
   useEffect(() => {
-    api.usage(projectId).then(setUsage, () => setUsage({ entries: [], summary: { cost: 0, estimated: 0, calls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, characters: 0, audioSeconds: 0, images: 0, renderMs: 0, localMs: 0, bySteps: [], byModels: [] } }));
-  }, [projectId, version]);
+    (reelId ? api.reelUsage(reelId) : api.usage(projectId!)).then(setUsage, () => setUsage({ entries: [], summary: { cost: 0, estimated: 0, calls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, characters: 0, audioSeconds: 0, images: 0, renderMs: 0, localMs: 0, bySteps: [], byModels: [] } }));
+  }, [projectId, reelId, version]);
 
   if (!usage) return <div className="flex flex-1 items-center justify-center"><Loader2Icon className="size-5 animate-spin text-muted-foreground" /></div>;
 
@@ -95,7 +106,7 @@ export function CostPanel({ projectId, version }: { projectId: string; version: 
                   <th className="px-3 py-1.5 text-left font-medium">Model</th>
                   <th className="px-2 py-1.5 text-left font-medium">For</th>
                   <th className="px-2 py-1.5 text-right font-medium">Calls</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Tokens</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Used</th>
                   <th className="px-3 py-1.5 text-right font-medium">Cost</th>
                 </tr>
               </thead>
@@ -105,7 +116,7 @@ export function CostPanel({ projectId, version }: { projectId: string; version: 
                     <td className="px-3 py-1.5 font-mono">{model.model}</td>
                     <td className="px-2 py-1.5 text-muted-foreground">{KIND_NAMES[model.kind]}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{model.calls}</td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{model.inputTokens || model.outputTokens ? `${tokens(model.inputTokens)} / ${tokens(model.outputTokens)}` : "—"}</td>
+                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{model.inputTokens || model.outputTokens ? `${tokens(model.inputTokens)} / ${tokens(model.outputTokens)}` : usedBy(usage.entries, model.model)}</td>
                     <td className="px-3 py-1.5 text-right font-mono tabular-nums">{formatCost(model.cost)}</td>
                   </tr>
                 ))}

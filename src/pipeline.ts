@@ -29,8 +29,9 @@ import { buildArena } from "./render/arena.ts";
 import { buildProsCons } from "./render/proscons.ts";
 import { renderThumbnail } from "./render/thumbnail.ts";
 import { buildMarketing } from "./render/marketing.ts";
-import { loadSession, saveSession, sessionDir } from "./marketing/session.ts";
-import { writeMarketing } from "./marketing/write.ts";
+import { listSessions, loadSession, saveSession, sessionDir, type Session } from "./marketing/session.ts";
+import { planStories } from "./marketing/story.ts";
+import { DIRECTION, missesDirection, voiceOver, writeMarketing } from "./marketing/write.ts";
 import { directArt, drawArt } from "./marketing/art.ts";
 import { reportProgress } from "./progress.ts";
 import { stillMoments } from "./media/motion.ts";
@@ -80,6 +81,31 @@ export function channelOf(project: Pick<Project, "channel" | "marketing">): Chan
   };
 }
 
+/** A finished brief's two story options, planned before anything is written; the shapes this brand's last videos used are left out. */
+export async function planMarketingStories(sessionId: string, log: Log = console.log): Promise<Session> {
+  const session = await loadSession(sessionId);
+  if (!session.brand) throw new Error("The website hasn't been read yet");
+  if (session.missing.length) throw new Error(`The brief still needs: ${session.missing.join(", ")}`);
+  if (isScripted(session)) throw new Error("This video speaks the script's approved voice-over word for word, so the script is its story.");
+  const creativity = session.creativity ?? "faithful";
+  const host = new URL(session.url).host;
+  const avoid = (await listSessions())
+    .filter((other) => other.id !== session.id && other.story !== undefined && other.stories && new URL(other.url).host === host)
+    .slice(0, 2)
+    .map((other) => other.stories![other.story!].shape);
+  const showcases = session.brand.shots.some((shot) => !shot.id.startsWith("page-"));
+  session.stories = await planStories(
+    { brand: session.brand, brief: session.brief, language: session.language, format: session.format === "long" ? "long" : "short", creativity, direction: DIRECTION[creativity], check: (beats) => missesDirection(beats, creativity, showcases), avoid, showcases },
+    log,
+  );
+  delete session.story;
+  await saveSession(session);
+  return session;
+}
+
+/** A faithful video with approved voice-over follows its script word for word: no story to plan. */
+export const isScripted = (session: Pick<Session, "creativity" | "script">) => (session.creativity ?? "faithful") === "faithful" && voiceOver(session.script).length > 0;
+
 /** Step 1 for a marketing video: written from a finished chat; the website's screenshots move into the project. */
 export async function createMarketing(sessionId: string, log: Log = console.log, only?: FormatId): Promise<Project> {
   const session = await loadSession(sessionId);
@@ -91,7 +117,8 @@ export async function createMarketing(sessionId: string, log: Log = console.log,
     const { brand, brief, language } = session;
     const format: FormatId = only ?? (session.format === "long" ? "long" : "short");
     const creativity = session.creativity ?? "faithful";
-    const draft = await writeMarketing({ brand, brief, script: session.script, language, format, creativity }, log);
+    const story = session.story !== undefined ? session.stories?.[session.story] : undefined;
+    const draft = await writeMarketing({ brand, brief, script: session.script, language, format, creativity, story }, log);
     const now = new Date().toISOString();
     const project: Project = {
       id: newProjectId(MARKETING_OWNER, format, `${brand.name} marketing`),
@@ -110,6 +137,7 @@ export async function createMarketing(sessionId: string, log: Log = console.log,
         narrator: { voice: MARKETING_VOICES[brief.voice || "male"], style: MARKETING_STYLE[language] },
         captions: Boolean(brief.captions),
         post: { caption: draft.caption, hashtags: draft.hashtags },
+        ...(story ? { story: { shape: story.shape, hook: story.hook } } : {}),
       },
       scenes: draft.scenes,
       createdAt: now,

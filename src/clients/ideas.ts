@@ -148,7 +148,16 @@ RULES
 - Hooks stop the scroll: a pain the audience recognises, a surprising number, a bold claim or a direct question. Under 120 characters.
 - Carousels are infographic: each outline line is one slide (cover first, call to action last). Reels: each line is a scene; the hook is said in the first 2 seconds.`;
 
-  const write = (extra = "") => generateText({ telemetry: { functionId: "ideas" }, model: WRITER_MODEL, output: Output.object({ schema: IDEAS }), prompt: prompt + extra });
+  const write = async (extra = "") => {
+    for (const model of [WRITER_MODEL, "openai/gpt-5", "google/gemini-2.5-flash"]) {
+      try {
+        return await generateText({ telemetry: { functionId: "ideas" }, model, output: Output.object({ schema: IDEAS }), prompt: prompt + extra });
+      } catch (error) {
+        if (!(error instanceof Error && /Free tier users do not have access/i.test(error.message)) || model === "google/gemini-2.5-flash") throw error;
+      }
+    }
+    throw new Error("No writer model available");
+  };
   log(`ideas: writing 5 ideas for ${client.name} ...`);
   let { output } = await write();
   const problems = batchProblems(output.ideas, pastHooks, made, client, planned);
